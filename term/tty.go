@@ -32,6 +32,7 @@ func Open(tool string) (*Term, error) {
 	t := &Term{
 		In:       cr,
 		Out:      f,
+		file:     f,
 		Name:     fmt.Sprintf("%s-%d", tool, os.Getpid()),
 		TermType: os.Getenv("TERM"),
 		size: func() Size {

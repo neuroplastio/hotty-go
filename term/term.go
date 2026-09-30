@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -67,6 +68,7 @@ type Term struct {
 
 	size  func() Size
 	known *Known
+	file  *os.File // natively, /dev/tty (File)
 	raw   func() (restore func(), err error)
 	close func() error
 
@@ -118,6 +120,15 @@ func (t *Term) Surfaces() []string {
 	defer t.mu.Unlock()
 	return append([]string(nil), t.surfaces...)
 }
+
+// File is the terminal's own file natively (/dev/tty, what Open opened),
+// and nil in the browser. A full-screen Bubble Tea program takes it as both
+// its input and its output (tea.WithInput, tea.WithOutput), so that Bubble
+// Tea finds a terminal on both sides: it sets raw mode and learns the size
+// itself, and writes CR LF where raw mode no longer maps LF (In alone is not
+// a terminal to it, and it would count on ONLCR). The file belongs to the
+// Term: Close closes it.
+func (t *Term) File() *os.File { return t.file }
 
 // Size is the terminal's size in cells, or 80×24 when it cannot be told.
 func (t *Term) Size() Size {
