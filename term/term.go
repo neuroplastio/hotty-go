@@ -177,17 +177,24 @@ func (t *Term) Caps() hotty.Caps {
 	return t.caps
 }
 
-// How long Detect waits: for any answer at all, and, after the terminal's
-// DA1 (which every terminal sends), for a HOTTY reply that may still be on
-// its way (sdk/host does the same).
+// How long Detect waits: for any answer at all; after the terminal's DA1
+// (which every terminal sends), for a HOTTY reply that may still be on its
+// way (sdk/host does the same); and after a host's reply, for the DA1 behind
+// it.
 const (
 	detectTimeout = 1500 * time.Millisecond
 	afterDA1      = 150 * time.Millisecond
+	afterReply    = 300 * time.Millisecond
 )
 
 // Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and
 // reports the answer; later calls return the first answer. A terminal that
 // answers neither the query nor DA1 within 1.5 s is not a host.
+//
+// A host's reply comes before its answer to DA1, and Detect waits for that
+// too, so that nothing is left for whoever reads the terminal next: once the
+// terminal is out of raw mode, a late answer is echoed and read by the shell
+// as typing ("62;52;c" at the prompt).
 func (t *Term) Detect(ctx context.Context) bool {
 	t.mu.Lock()
 	if t.detected {
@@ -214,33 +221,37 @@ func (t *Term) Detect(ctx context.Context) bool {
 	}
 	deadline := time.NewTimer(detectTimeout)
 	defer deadline.Stop()
+	// Until the host replies, a DA1 ends the wait after a moment. After the
+	// reply, the DA1 behind it ends the wait at once.
 	var fence <-chan time.Time
+	native, caps := false, hotty.Caps{}
+	defer func() { t.setDetected(native, caps) }()
 	for {
 		select {
 		case <-ctx.Done():
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case <-deadline.C:
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case <-fence:
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case ev, ok := <-evc:
 			if !ok {
-				t.setDetected(false, hotty.Caps{})
-				return false
+				return native
 			}
 			switch ev := ev.(type) {
 			case Message:
-				if r, ok := ev.Reply(); ok {
-					if caps, ok := r.Caps(); ok {
-						t.setDetected(true, caps)
-						return true
+				if r, ok := ev.Reply(); ok && !native {
+					if c, ok := r.Caps(); ok {
+						native, caps = true, c
+						fence = time.After(afterReply)
+						continue
 					}
 				}
 				t.keep(ev)
 			case uv.PrimaryDeviceAttributesEvent:
+				if native {
+					return true
+				}
 				if fence == nil {
 					fence = time.After(afterDA1)
 				}
