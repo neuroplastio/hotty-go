@@ -296,10 +296,12 @@ body { overflow: hidden; }
 .ask input[type=checkbox], .ask input[type=radio] {
   position: absolute; left: 0; top: calc(var(--row) / 2 - 8px); width: 16px; height: 16px; margin: 0; opacity: 0; cursor: pointer;
 }
+/* The ✓ is always there, in the colour of what is behind it: Blitz does not
+   draw text that turns from transparent to a colour. */
 .ask .mark {
   flex: none; box-sizing: border-box; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid var(--edge, #4a4a5e); border-radius: 4px;
-  font-size: 11px; line-height: 1; font-weight: 700; color: transparent;
+  border: 1.5px solid var(--edge, #4a4a5e); border-radius: 4px; background: var(--well, #0b0b10);
+  font-size: 11px; line-height: 1; font-weight: 700; color: var(--well, #0b0b10);
 }
 .ask .mark.dot { border-radius: 50%; }
 .ask input:checked + .mark { background: var(--accent, #9d90ff); border-color: var(--accent, #9d90ff); color: var(--paper, #12121a); }
