@@ -72,6 +72,8 @@ type Term struct {
 
 	mu       sync.Mutex
 	surfaces []string
+	sizes    chan Size // Sizes, made on first use
+	closed   bool
 	started  bool
 	evc      chan Event
 	backlog  []Event
@@ -153,6 +155,10 @@ func (t *Term) Close() error {
 	t.cancel = nil
 	closeFn := t.close
 	t.close = nil
+	if !t.closed && t.sizes != nil {
+		close(t.sizes)
+	}
+	t.closed = true
 	t.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -161,6 +167,68 @@ func (t *Term) Close() error {
 		return closeFn()
 	}
 	return nil
+}
+
+// OnClose adds fn to what Close does, after what it did already: the web
+// shell releases the process's hold on the terminal's input there, so that
+// a reader left blocked on In gets io.EOF instead of the next command's keys.
+func (t *Term) OnClose(fn func() error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	prev := t.close
+	t.close = func() error {
+		var err error
+		if prev != nil {
+			err = prev()
+		}
+		if e := fn(); err == nil {
+			err = e
+		}
+		return err
+	}
+}
+
+// Sizes delivers the terminal's size each time it changes, from the first
+// call on, for a Bubble Tea program on this Term, which needs a
+// tea.WindowSizeMsg to redraw:
+//
+//	go func() {
+//		for s := range t.Sizes() {
+//			prog.Send(tea.WindowSizeMsg{Width: s.Cols, Height: s.Rows})
+//		}
+//	}()
+//
+// Only the latest size waits to be taken. The channel closes on Close. In
+// the browser the web shell reports every resize of the page (Resized);
+// natively nothing does, since Bubble Tea hears SIGWINCH on a real
+// terminal itself.
+func (t *Term) Sizes() <-chan Size {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sizes == nil {
+		t.sizes = make(chan Size, 1)
+		if t.closed {
+			close(t.sizes)
+		}
+	}
+	return t.sizes
+}
+
+// Resized tells the Term its terminal is now s: what the web shell calls for
+// every terminal of the foreground job when the page resizes. It never
+// blocks; Sizes delivers it. Size reports the new size either way, from the
+// size function the Term was made with.
+func (t *Term) Resized(s Size) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sizes == nil || t.closed {
+		return
+	}
+	select {
+	case <-t.sizes: // an older size nobody took
+	default:
+	}
+	t.sizes <- s
 }
 
 // Native reports what Detect found: true for a HOTTY host.
@@ -177,17 +245,24 @@ func (t *Term) Caps() hotty.Caps {
 	return t.caps
 }
 
-// How long Detect waits: for any answer at all, and, after the terminal's
-// DA1 (which every terminal sends), for a HOTTY reply that may still be on
-// its way (sdk/host does the same).
+// How long Detect waits: for any answer at all; after the terminal's DA1
+// (which every terminal sends), for a HOTTY reply that may still be on its
+// way (sdk/host does the same); and after a host's reply, for the DA1 behind
+// it.
 const (
 	detectTimeout = 1500 * time.Millisecond
 	afterDA1      = 150 * time.Millisecond
+	afterReply    = 300 * time.Millisecond
 )
 
 // Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and
 // reports the answer; later calls return the first answer. A terminal that
 // answers neither the query nor DA1 within 1.5 s is not a host.
+//
+// A host's reply comes before its answer to DA1, and Detect waits for that
+// too, so that nothing is left for whoever reads the terminal next: once the
+// terminal is out of raw mode, a late answer is echoed and read by the shell
+// as typing ("62;52;c" at the prompt).
 func (t *Term) Detect(ctx context.Context) bool {
 	t.mu.Lock()
 	if t.detected {
@@ -214,33 +289,37 @@ func (t *Term) Detect(ctx context.Context) bool {
 	}
 	deadline := time.NewTimer(detectTimeout)
 	defer deadline.Stop()
+	// Until the host replies, a DA1 ends the wait after a moment. After the
+	// reply, the DA1 behind it ends the wait at once.
 	var fence <-chan time.Time
+	native, caps := false, hotty.Caps{}
+	defer func() { t.setDetected(native, caps) }()
 	for {
 		select {
 		case <-ctx.Done():
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case <-deadline.C:
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case <-fence:
-			t.setDetected(false, hotty.Caps{})
-			return false
+			return native
 		case ev, ok := <-evc:
 			if !ok {
-				t.setDetected(false, hotty.Caps{})
-				return false
+				return native
 			}
 			switch ev := ev.(type) {
 			case Message:
-				if r, ok := ev.Reply(); ok {
-					if caps, ok := r.Caps(); ok {
-						t.setDetected(true, caps)
-						return true
+				if r, ok := ev.Reply(); ok && !native {
+					if c, ok := r.Caps(); ok {
+						native, caps = true, c
+						fence = time.After(afterReply)
+						continue
 					}
 				}
 				t.keep(ev)
 			case uv.PrimaryDeviceAttributesEvent:
+				if native {
+					return true
+				}
 				if fence == nil {
 					fence = time.After(afterDA1)
 				}
