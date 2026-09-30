@@ -72,6 +72,8 @@ type Term struct {
 
 	mu       sync.Mutex
 	surfaces []string
+	sizes    chan Size // Sizes, made on first use
+	closed   bool
 	started  bool
 	evc      chan Event
 	backlog  []Event
@@ -153,6 +155,10 @@ func (t *Term) Close() error {
 	t.cancel = nil
 	closeFn := t.close
 	t.close = nil
+	if !t.closed && t.sizes != nil {
+		close(t.sizes)
+	}
+	t.closed = true
 	t.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -161,6 +167,68 @@ func (t *Term) Close() error {
 		return closeFn()
 	}
 	return nil
+}
+
+// OnClose adds fn to what Close does, after what it did already: the web
+// shell releases the process's hold on the terminal's input there, so that
+// a reader left blocked on In gets io.EOF instead of the next command's keys.
+func (t *Term) OnClose(fn func() error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	prev := t.close
+	t.close = func() error {
+		var err error
+		if prev != nil {
+			err = prev()
+		}
+		if e := fn(); err == nil {
+			err = e
+		}
+		return err
+	}
+}
+
+// Sizes delivers the terminal's size each time it changes, from the first
+// call on, for a Bubble Tea program on this Term, which needs a
+// tea.WindowSizeMsg to redraw:
+//
+//	go func() {
+//		for s := range t.Sizes() {
+//			prog.Send(tea.WindowSizeMsg{Width: s.Cols, Height: s.Rows})
+//		}
+//	}()
+//
+// Only the latest size waits to be taken. The channel closes on Close. In
+// the browser the web shell reports every resize of the page (Resized);
+// natively nothing does, since Bubble Tea hears SIGWINCH on a real
+// terminal itself.
+func (t *Term) Sizes() <-chan Size {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sizes == nil {
+		t.sizes = make(chan Size, 1)
+		if t.closed {
+			close(t.sizes)
+		}
+	}
+	return t.sizes
+}
+
+// Resized tells the Term its terminal is now s: what the web shell calls for
+// every terminal of the foreground job when the page resizes. It never
+// blocks; Sizes delivers it. Size reports the new size either way, from the
+// size function the Term was made with.
+func (t *Term) Resized(s Size) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sizes == nil || t.closed {
+		return
+	}
+	select {
+	case <-t.sizes: // an older size nobody took
+	default:
+	}
+	t.sizes <- s
 }
 
 // Native reports what Detect found: true for a HOTTY host.
