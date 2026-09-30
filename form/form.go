@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -80,7 +81,11 @@ func Parse(b []byte) (*Spec, error) {
 	}
 	for i := range s.Fields {
 		if n, ok := s.Fields[i].Default.(json.Number); ok {
-			s.Fields[i].Default = string(n)
+			f, err := n.Float64()
+			if err != nil {
+				return nil, fmt.Errorf("form: field %d: %v", i+1, err)
+			}
+			s.Fields[i].Default = f
 		}
 	}
 	if err := s.Check(); err != nil {
@@ -184,7 +189,7 @@ func (f Field) Start() string {
 		}
 		return d
 	case float64:
-		return strings.TrimSuffix(strings.TrimRight(fmt.Sprintf("%f", d), "0"), ".")
+		return strconv.FormatFloat(d, 'f', -1, 64)
 	case int:
 		return fmt.Sprint(d)
 	}

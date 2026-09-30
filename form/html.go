@@ -157,6 +157,15 @@ func (s *Spec) HTML(hint string) string {
 	return b.String()
 }
 
+// The marks drawn for a checkbox and a radio button, after the control
+// itself, which is transparent above them (CSS): every host then draws the
+// same, in the page's colours, and the control still takes clicks, focus
+// and keys.
+const (
+	CheckMark = `<span class="mark">✓</span>`
+	RadioMark = `<span class="mark dot"></span>`
+)
+
 // Kbd is a key hint, for a button: dim, after its label.
 func Kbd(key string) string {
 	if key == "" {
@@ -178,7 +187,7 @@ func (s *Spec) field(b *strings.Builder, i int, f Field) {
 		if f.Start() == "true" {
 			checked = " checked"
 		}
-		fmt.Fprintf(b, `<label class="check"><input type="checkbox" id="%s" name="%s" value="true"%s><span>%s</span></label>%s</div>`,
+		fmt.Fprintf(b, `<label class="check"><input type="checkbox" id="%s" name="%s" value="true"%s>`+CheckMark+`<span>%s</span></label>%s</div>`,
 			id, esc(f.Name), checked, esc(f.Title()), problem)
 		return
 	}
@@ -217,7 +226,7 @@ func (s *Spec) field(b *strings.Builder, i int, f Field) {
 			if o == f.Start() {
 				checked = " checked"
 			}
-			fmt.Fprintf(b, `<label class="opt"><input type="radio" id="%s" name="%s" value="%s"%s><span>%s</span></label>`,
+			fmt.Fprintf(b, `<label class="opt"><input type="radio" id="%s" name="%s" value="%s"%s>`+RadioMark+`<span>%s</span></label>`,
 				OptionID(i, j), esc(f.Name), esc(o), checked, esc(o))
 		}
 		b.WriteString(`</div>`)
@@ -271,22 +280,33 @@ body { overflow: hidden; }
 .ask .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ask .problem { flex: none; color: var(--bad, #f07a7a); font-size: 12px; white-space: nowrap; }
 .ask .line { display: flex; gap: 8px; height: calc(var(--row) * 1.5); align-items: stretch; }
-.ask input:not([type=checkbox]):not([type=radio]), .ask textarea {
+.ask .line input, .ask textarea {
   flex: 1; min-width: 0; box-sizing: border-box; margin: 0;
   font: inherit; font-size: 13px; color: var(--ink, #d7d7e0);
   background: var(--well, #0b0b10); border: 1px solid var(--edge, #3a3a4c); border-radius: 6px;
   padding: 0 8px; outline: none; caret-color: var(--accent, #9d90ff);
 }
-.ask input:not([type=checkbox]):not([type=radio]) { height: calc(var(--row) * 1.5); line-height: calc(var(--row) * 1.5 - 2px); }
+.ask .line input { height: calc(var(--row) * 1.5); line-height: calc(var(--row) * 1.5 - 2px); }
 .ask textarea { height: calc(var(--row) * 3.5); padding: calc(var(--row) * .25 - 1px) 8px; line-height: var(--row); resize: none; }
 .ask input::placeholder, .ask textarea::placeholder { color: var(--dim, #8b90a0); opacity: .7; }
-.ask input:focus, .ask textarea:focus { border-color: var(--accent, #9d90ff); }
-.ask .bad input, .ask .bad textarea { border-color: var(--bad, #f07a7a); }
+.ask .line input:focus, .ask .field textarea:focus { border-color: var(--accent, #9d90ff); }
+.ask .bad .line input, .ask .bad textarea { border-color: var(--bad, #f07a7a); }
+/* A password is not echoed, as in a terminal: not every host masks one. */
+.ask .line input[type=password] { color: transparent; }
 .ask input[type=checkbox], .ask input[type=radio] {
-  width: 14px; height: 14px; margin: 0; flex: none; accent-color: var(--accent, #9d90ff);
+  position: absolute; left: 0; top: calc(var(--row) / 2 - 8px); width: 16px; height: 16px; margin: 0; opacity: 0; cursor: pointer;
 }
-.ask input[type=checkbox]:focus, .ask input[type=radio]:focus { outline: 2px solid var(--accent, #9d90ff); outline-offset: 2px; }
-.ask .check, .ask .opt { display: flex; align-items: center; gap: 8px; height: var(--row); white-space: nowrap; overflow: hidden; cursor: pointer; }
+.ask .mark {
+  flex: none; box-sizing: border-box; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--edge, #4a4a5e); border-radius: 4px;
+  font-size: 11px; line-height: 1; font-weight: 700; color: transparent;
+}
+.ask .mark.dot { border-radius: 50%; }
+.ask input:checked + .mark { background: var(--accent, #9d90ff); border-color: var(--accent, #9d90ff); color: var(--paper, #12121a); }
+.ask input[type=radio]:checked + .mark { background: transparent; border: 4.5px solid var(--accent, #9d90ff); }
+.ask input:focus + .mark { border-color: var(--accent, #9d90ff); }
+.ask input:focus ~ span:last-child { color: var(--accent, #9d90ff); }
+.ask .check, .ask .opt { position: relative; display: flex; align-items: center; gap: 8px; height: var(--row); white-space: nowrap; overflow: hidden; cursor: pointer; }
 .ask .k-checkbox { flex-direction: row; align-items: center; gap: 8px; }
 .ask .k-checkbox .check { flex: 1; min-width: 0; }
 .ask .opts.row { display: flex; gap: 18px; height: calc(var(--row) * 1.5); align-items: center; }
