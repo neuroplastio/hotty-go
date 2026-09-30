@@ -173,14 +173,15 @@ func cssPx(v string) float64 {
 const MaxImageRows = 30
 
 // Fit is the cells an image of w×h CSS pixels takes: its own size, made
-// smaller to fit cols columns and MaxImageRows rows, never larger.
+// smaller to fit the width and MaxImageRows rows (fewer on a short
+// screen), never larger.
 func (o *Options) Fit(w, h int) (cols, rows int) {
 	cw, ch := o.cell()
 	if w <= 0 || h <= 0 {
-		return min(o.cols(), 40), 10
+		return min(o.cols(), 40), min(10, o.imageRows())
 	}
 	c, r := float64(w)/cw, float64(h)/ch
-	s := math.Min(1, math.Min(float64(o.cols())/c, MaxImageRows/r))
+	s := math.Min(1, math.Min(float64(o.cols())/c, float64(o.imageRows())/r))
 	return max(1, int(math.Ceil(c*s-0.01))), max(1, int(math.Ceil(r*s-0.01)))
 }
 

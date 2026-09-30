@@ -152,9 +152,6 @@ func (t *Table) ColumnWidths(cols, pad int) []int {
 	return w
 }
 
-// csvChunk is how many rows a block of a table holds.
-const csvChunk = 250
-
 // Doc is the table as a document: blocks of rows with the header on top of
 // each, in columns sized to their values, numeric ones right-aligned, and
 // every other row shaded. The last block says how many rows were left out.
@@ -187,14 +184,16 @@ func (t *Table) Doc(o Options) *Doc {
 		b.WriteString("</tr></thead>")
 		return b.String()
 	}()
-	for start := 0; start < len(t.Rows) || start == 0; start += csvChunk {
-		end := min(start+csvChunk, len(t.Rows))
+	// A block of rows fills a page, with its header and the line after.
+	chunk := max(4, o.PageRows()-4)
+	for start := 0; start < len(t.Rows) || start == 0; start += chunk {
+		end := min(start+chunk, len(t.Rows))
 		var b strings.Builder
 		fmt.Fprintf(&b, `<table class="csv" style="width:calc(%d * var(--doc-col))">`, total)
 		b.WriteString(colgroup.String() + head + "<tbody>")
 		for r := start; r < end; r++ {
 			if r%2 == 1 {
-				b.WriteString(`<tr class="alt">`)
+				b.WriteString(`<tr class="shade">`)
 			} else {
 				b.WriteString("<tr>")
 			}

@@ -18,10 +18,11 @@ func Text(src []byte, o Options) *Doc {
 	s = strings.TrimSuffix(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 	all := strings.Split(s, "\n")
 	cols := max(1, o.cols()-2)
+	chunk := min(textChunk, o.PageRows()-1)
 	d := &Doc{CSS: "main.doc { padding-bottom: 0; }"}
 	for len(all) > 0 {
 		n, rows := 0, 0
-		for n < len(all) && (n == 0 || rows < textChunk) {
+		for n < len(all) && (n == 0 || rows+monoRows(all[n:n+1], cols) <= chunk) {
 			rows += monoRows(all[n:n+1], cols)
 			n++
 		}

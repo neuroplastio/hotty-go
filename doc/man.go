@@ -333,6 +333,9 @@ func tidy(n *xhtml.Node) {
 		switch c.Type {
 		case xhtml.TextNode:
 			c.Data = spaces.ReplaceAllString(c.Data, " ")
+			if p := c.PrevSibling; p != nil && p.DataAtom == atom.Br {
+				c.Data = strings.TrimLeft(c.Data, " ") // a line starts after a break
+			}
 		case xhtml.ElementNode:
 			tidy(c)
 			switch c.DataAtom {

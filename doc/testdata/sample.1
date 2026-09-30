@@ -1,0 +1,39 @@
+.TH SAMPLE 1 2026-10-01 "hotty-demo" "Tests"
+.SH NAME
+sample \- a page to test the clean-up
+.SH SYNOPSIS
+.B sample
+.RB [ \-v ]
+.I file
+.SH DESCRIPTION
+.B sample
+reads
+.I file
+as
+.BR cat (1)
+does, and writes it as printf(3) would.
+Options:
+.TP
+.B \-v
+Say more.
+.TP
+.BR \-\-width " \fIn\fR"
+Lay it out
+.I n
+columns wide.
+.IP
+A second paragraph of the same option.
+.SS Exit status
+.TP
+.B 0
+It worked.
+.TP
+.B 1
+It did not.
+.SH SEE ALSO
+.BR ls (1),
+.BR hotty\-demo (1)
+.PP
+.UR https://github.com/neuroplastio/hotty
+The protocol
+.UE

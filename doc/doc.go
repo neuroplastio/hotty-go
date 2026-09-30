@@ -80,6 +80,12 @@ type Options struct {
 	// ResPrefix makes resource ids unique to the program: two runs never
 	// share one. It is the start of every id, as in "showhot-4121-img1".
 	ResPrefix string
+	// Screen is the terminal's height in rows, 0 if unknown. Pages and
+	// images are made to fit it (PageRows), so that a surface placed
+	// inline is never taller than the screen: a host may not show one that
+	// is whole (hotty-blitz's polyfill draws it with Unicode placeholders,
+	// reserved by moving the cursor, which stops at the screen's edges).
+	Screen int
 
 	res int // resources named so far
 }
@@ -97,6 +103,24 @@ func (o *Options) cell() (w, h float64) {
 		return 9, 18
 	}
 	return w, h
+}
+
+// PageRows is how many rows a surface aims for (Pages): Target, or less
+// to fit the screen.
+func (o *Options) PageRows() int {
+	if o.Screen > 0 {
+		return min(Target, max(8, o.Screen-3))
+	}
+	return Target
+}
+
+// imageRows is the tallest an image is shown: MaxImageRows, or less to fit
+// the screen.
+func (o *Options) imageRows() int {
+	if o.Screen > 0 {
+		return min(MaxImageRows, max(4, o.Screen-4))
+	}
+	return MaxImageRows
 }
 
 // resID names a new resource.

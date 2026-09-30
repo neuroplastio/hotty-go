@@ -2,6 +2,7 @@ package doc
 
 import (
 	"bytes"
+	"fmt"
 	"html"
 	"regexp"
 	"strings"
@@ -37,16 +38,69 @@ func Markdown(src []byte, o Options) *Doc {
 	root := md.Parser().Parse(gtext.NewReader(src))
 	prepare(root, src)
 	d := &Doc{}
+	if n := o.imageRows(); n < MaxImageRows {
+		d.CSS = fmt.Sprintf("main.doc img { max-height: calc(%d * var(--doc-row)); }", n)
+	}
 	cols := o.cols()
+	page := o.PageRows()
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
+		rows := mdRows(n, src, cols) + 1
+		if rows > page && isCode(n) {
+			// A long listing, cut in parts that each fit a page.
+			d.Blocks = append(d.Blocks, r.codeParts(n, src, max(10, cols-4), page-2)...)
+			continue
+		}
 		var b bytes.Buffer
 		r.res = nil
 		if err := md.Renderer().Render(&b, src, n); err != nil {
 			continue
 		}
-		d.Blocks = append(d.Blocks, Block{HTML: Inert(b.String()), Rows: mdRows(n, src, cols) + 1, Res: r.res})
+		// The images it shows, at the size they are shown.
+		for _, res := range r.res {
+			if info, ok := ImageInfo(res.Data, ""); ok {
+				_, h := o.Fit(info.W, info.H)
+				rows += h
+			}
+		}
+		d.Blocks = append(d.Blocks, Block{HTML: Inert(b.String()), Rows: rows, Res: r.res})
 	}
 	return d
+}
+
+func isCode(n ast.Node) bool {
+	switch n.(type) {
+	case *ast.FencedCodeBlock, *ast.CodeBlock:
+		return true
+	}
+	return false
+}
+
+// codeParts is a code block as several blocks of at most rows rows each,
+// drawn as one listing.
+func (r *mdRenderer) codeParts(n ast.Node, src []byte, cols, rows int) []Block {
+	lang := ""
+	if f, ok := n.(*ast.FencedCodeBlock); ok {
+		lang = string(f.Language(src))
+	}
+	all := strings.Split(strings.TrimRight(lines(n, src), "\n"), "\n")
+	var out []Block
+	for len(all) > 0 {
+		k, h := 0, 0
+		for k < len(all) && (k == 0 || h+monoRows(all[k:k+1], cols) <= rows) {
+			h += monoRows(all[k:k+1], cols)
+			k++
+		}
+		class := "code"
+		if len(out) > 0 {
+			class += " after"
+		}
+		if k < len(all) {
+			class += " before"
+		}
+		out = append(out, Block{HTML: r.codeHTML(lang, strings.Join(all[:k], "\n"), class), Rows: h + 2})
+		all = all[k:]
+	}
+	return out
 }
 
 var calloutMark = regexp.MustCompile(`^\[!([A-Za-z]+)\]\s*$`)
@@ -187,19 +241,26 @@ func (r *mdRenderer) code(w util.BufWriter, src []byte, node ast.Node, entering 
 	if f, ok := node.(*ast.FencedCodeBlock); ok {
 		lang = string(f.Language(src))
 	}
-	code := strings.TrimRight(lines(node, src), "\n")
-	_, _ = w.WriteString(`<pre class="code"`)
-	if lang != "" {
-		_, _ = w.WriteString(` data-lang="` + html.EscapeString(lang) + `"`)
-	}
-	_, _ = w.WriteString("><code>")
-	if h, ok := r.highlight(lang, code); ok {
-		_, _ = w.WriteString(h)
-	} else {
-		_, _ = w.WriteString(html.EscapeString(code))
-	}
-	_, _ = w.WriteString("</code></pre>")
+	_, _ = w.WriteString(r.codeHTML(lang, strings.TrimRight(lines(node, src), "\n"), "code"))
 	return ast.WalkSkipChildren, nil
+}
+
+// codeHTML is a listing: <pre>, highlighted where Highlight knows the
+// language.
+func (r *mdRenderer) codeHTML(lang, code, class string) string {
+	var b strings.Builder
+	b.WriteString(`<pre class="` + class + `"`)
+	if lang != "" {
+		b.WriteString(` data-lang="` + html.EscapeString(lang) + `"`)
+	}
+	b.WriteString("><code>")
+	if h, ok := r.highlight(lang, code); ok {
+		b.WriteString(h)
+	} else {
+		b.WriteString(html.EscapeString(code))
+	}
+	b.WriteString("</code></pre>")
+	return b.String()
 }
 
 func (r *mdRenderer) highlight(lang, code string) (string, bool) {
@@ -279,10 +340,12 @@ func mdRows(n ast.Node, src []byte, cols int) int {
 		}
 		return textRows(len(plain(n, src)), cols)
 	case *ast.Paragraph, *ast.TextBlock:
+		// Images read are counted as they are rendered (Markdown); one that
+		// is not is a line of text.
 		rows := textRows(len([]rune(plain(n, src))), cols)
 		_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
 			if _, ok := c.(*ast.Image); ok && entering {
-				rows += MaxImageRows
+				rows++
 			}
 			return ast.WalkContinue, nil
 		})
