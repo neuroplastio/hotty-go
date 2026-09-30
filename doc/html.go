@@ -2,8 +2,6 @@ package doc
 
 import (
 	"bytes"
-	"mime"
-	"path"
 	"strconv"
 	"strings"
 
@@ -519,24 +517,4 @@ func Paragraphs(src []byte) []Para {
 	walk(root)
 	flush()
 	return out
-}
-
-// typeByExt is a file's MIME type by its extension, for resources.
-func typeByExt(name string) string {
-	switch strings.ToLower(path.Ext(name)) {
-	case ".svg":
-		return "image/svg+xml"
-	case ".webp":
-		return "image/webp"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	}
-	if t := mime.TypeByExtension(path.Ext(name)); t != "" {
-		return t
-	}
-	return "application/octet-stream"
 }

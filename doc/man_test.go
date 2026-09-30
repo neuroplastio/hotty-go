@@ -194,6 +194,9 @@ func TestManBlocks(t *testing.T) {
 	if len(blocks) < 4 || blocks[0].Section != 0 || !blocks[0].First || blocks[1].Section != 1 || !blocks[1].First || blocks[2].First {
 		t.Fatalf("blocks %+v", blocks)
 	}
+	if !strings.HasPrefix(blocks[1].Text, "OPTIONS\nIntro.\n-x\nAn option") {
+		t.Errorf("the block's text %q", blocks[1].Text)
+	}
 	if !strings.HasPrefix(blocks[1].HTML, "<h2>OPTIONS</h2><p>Intro.</p><dl><dt>") {
 		t.Errorf("the section's first block %q", blocks[1].HTML[:60])
 	}

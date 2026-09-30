@@ -33,8 +33,8 @@ type Block struct {
 	// Res are the resources the block refers to as cid:<id>, to be sent
 	// before it (hotty.Res).
 	Res []Resource
-	// Text is the block's text, for a program that also draws it in cells.
-	// Only some converters set it (Man).
+	// Text is the block's text, a paragraph a line, for a program that
+	// also draws it in cells. Only ManPage.Blocks sets it.
 	Text string
 }
 

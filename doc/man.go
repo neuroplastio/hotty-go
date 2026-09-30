@@ -860,7 +860,11 @@ func (m *ManPage) Blocks(o Options, target int) []ManBlock {
 				cur.WriteString("</dl>")
 				inDL = false
 			}
-			out = append(out, ManBlock{Block: Block{HTML: cur.String(), Rows: rows}, Section: si, First: first})
+			var text []string
+			for _, p := range Paragraphs([]byte("<body>" + cur.String() + "</body>")) {
+				text = append(text, p.Text)
+			}
+			out = append(out, ManBlock{Block: Block{HTML: cur.String(), Rows: rows, Text: strings.Join(text, "\n")}, Section: si, First: first})
 			cur.Reset()
 			rows, first = 0, false
 		}
