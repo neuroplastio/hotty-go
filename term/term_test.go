@@ -45,7 +45,7 @@ func TestDetectHost(t *testing.T) {
 	f := newFake(nil)
 	go func() {
 		f.readQuery(t)
-		_, _ = io.WriteString(f.answer, "x"+capsReply()+"\x1b[?62;22c")
+		_, _ = io.WriteString(f.answer, "x"+capsReply()+"\x1b[?62;22c"+"y")
 	}()
 	if !f.t.Detect(context.Background()) {
 		t.Fatal("a host that answers the query is native")
@@ -53,10 +53,30 @@ func TestDetectHost(t *testing.T) {
 	if got := f.t.Caps().Limits["surfaces"]; got != 64 {
 		t.Errorf("caps: surfaces %d", got)
 	}
-	// The key typed before the answer is not lost.
-	ev := <-f.t.Events(context.Background())
-	if k, ok := ev.(uv.KeyPressEvent); !ok || k.String() != "x" {
-		t.Errorf("first event %#v, want the key x", ev)
+	// The key typed before the answer is not lost, and the DA1 answer
+	// behind the host's is taken: the next event is the key after it.
+	evs := f.t.Events(context.Background())
+	for _, want := range []string{"x", "y"} {
+		ev := <-evs
+		if k, ok := ev.(uv.KeyPressEvent); !ok || k.String() != want {
+			t.Errorf("event %#v, want the key %s", ev, want)
+		}
+	}
+}
+
+func TestDetectHostNoDA1(t *testing.T) {
+	// A host whose DA1 answer never comes is still a host, after a moment.
+	f := newFake(nil)
+	go func() {
+		f.readQuery(t)
+		_, _ = io.WriteString(f.answer, capsReply())
+	}()
+	start := time.Now()
+	if !f.t.Detect(context.Background()) {
+		t.Fatal("a host that answers the query is native")
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("waited %v for a DA1 that never came", d)
 	}
 }
 
