@@ -214,8 +214,10 @@ func TestTicks(t *testing.T) {
 			t.Errorf("%+v: %s, want %s", c.a, got, c.want)
 		}
 	}
-	if d := (Axis{Step: 0.25}).Decimals(); d != 2 {
-		t.Errorf("decimals of 0.25: %d", d)
+	for step, want := range map[float64]int{0.25: 2, 2.5: 1, 25: 0, 0.1: 1, 5e-7: 7} {
+		if d := (Axis{Step: step}).Decimals(); d != want {
+			t.Errorf("decimals of %v: %d, want %d", step, d, want)
+		}
 	}
 }
 

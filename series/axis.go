@@ -30,10 +30,10 @@ func (a Axis) Frac(v float64) float64 {
 func (a Axis) Decimals() int { return decimals(a.Step) }
 
 func decimals(step float64) int {
-	if step <= 0 || step >= 1 {
+	if step <= 0 || math.IsNaN(step) || math.IsInf(step, 0) {
 		return 0
 	}
-	for d := 1; d < 12; d++ {
+	for d := 0; d < 12; d++ {
 		p := math.Pow(10, float64(d))
 		if math.Abs(step*p-math.Round(step*p)) < 1e-6*step*p {
 			return d
