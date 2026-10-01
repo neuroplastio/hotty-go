@@ -13,7 +13,7 @@ import (
 func on(h *hottytest.Host) (env, *strings.Builder) {
 	var out strings.Builder
 	return env{stdout: h, stderr: &out, tty: true,
-		open: func() (*term.Term, error) { return term.New(h, h, "progress", nil, nil), nil }}, &out
+		open: func() (*term.Term, error) { return h.Term("progress"), nil }}, &out
 }
 
 func TestBar(t *testing.T) {

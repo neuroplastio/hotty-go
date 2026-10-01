@@ -15,14 +15,15 @@ Package hottytest is a HOTTY host that runs inside a test. The program under tes
 
 ```go
 h := hottytest.New(t)
-tm := term.New(h, h, "tool", h.TermSize, nil) // or tea.WithInput(h), …
-run(tm)                                       // the program under test
+run(h.Term("tool"))              // the program under test; or tea.WithInput(h), …
 card := h.Surface("tool-card")
-card.TextOf("status")                         // what it shows
-h.Click("tool-card", "retry")                 // what the user does
+card.TextOf("status")            // what it shows
+h.Click("tool-card", "retry")    // what the user does
 ```
 
 The host keeps every surface's document as the program's commands leave it, with the patch operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors. It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows).
+
+A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
 It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. Text keeps the cells the program printed (Screen).
 
@@ -46,6 +47,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
   - [`func (h *Host) Errors() []string`](#Host.Errors)
+  - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
   - [`func (h *Host) Fill(surface, id, text string) error`](#Host.Fill)
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
   - [`func (h *Host) Opened() []string`](#Host.Opened)
@@ -58,6 +60,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Submit(surface, id string) error`](#Host.Submit)
   - [`func (h *Host) Surface(name string) *Surface`](#Host.Surface)
   - [`func (h *Host) Surfaces() []*Surface`](#Host.Surfaces)
+  - [`func (h *Host) Term(name string) *term.Term`](#Host.Term)
   - [`func (h *Host) TermSize() (cols, rows int)`](#Host.TermSize)
   - [`func (h *Host) Type(keys string)`](#Host.Type)
   - [`func (h *Host) Write(p []byte) (int, error)`](#Host.Write)
@@ -223,6 +226,14 @@ func (h *Host) Errors() []string
 
 Errors are the protocol errors the program made, as the test was told of them.
 
+### <a id="Host.Events"></a>func (*Host) Events
+
+```go
+func (h *Host) Events() []hotty.Event
+```
+
+Events are the events the host sent the program, in order: what the user's actions reported.
+
 ### <a id="Host.Fill"></a>func (*Host) Fill
 
 ```go
@@ -293,7 +304,7 @@ Resource is a resource the program stored (SPEC §7.1).
 func (h *Host) Screen() string
 ```
 
-Screen is the cells the program printed, a line a row, without colours: what is left after carriage returns, cursor moves and erases. Surfaces are not drawn in it; the rows a placement covered are blank.
+Screen is the cells the program printed, a line a row, without colours: what is left after carriage returns, cursor moves, erases and scrolls. It is the main screen, its scrollback first, or the alternate screen while the program has it on. Surfaces are not drawn in it; the rows a placement covered are blank.
 
 ### <a id="Host.Submit"></a>func (*Host) Submit
 
@@ -319,17 +330,21 @@ func (h *Host) Surfaces() []*Surface
 
 Surfaces are the surfaces there are, in the order they were created.
 
+### <a id="Host.Term"></a>func (*Host) Term
+
+```go
+func (h *Host) Term(name string) *term.Term
+```
+
+Term is a term.Term on the host, for a program named name: its surfaces are name-…, without the process id term.Open adds.
+
 ### <a id="Host.TermSize"></a>func (*Host) TermSize
 
 ```go
 func (h *Host) TermSize() (cols, rows int)
 ```
 
-TermSize is the terminal's size, as term.New wants it:
-
-```go
-term.New(h, h, "tool", func() term.Size { c, r := h.TermSize(); return term.Size{Cols: c, Rows: r} }, nil)
-```
+TermSize is the terminal's size (Size).
 
 ### <a id="Host.Type"></a>func (*Host) Type
 
@@ -420,7 +435,7 @@ Surface is one surface the program made: its document, as the program's commands
 func (s *Surface) At() (col, row int)
 ```
 
-At is the screen cell of the placement's top-left corner: the cursor's, when the program placed it.
+At is the cell of the placement's top-left corner: the cursor's, when the program placed it. row is a line of Screen, the scrollback's included, of the screen it was placed on.
 
 ### <a id="Surface.Attr"></a>func (*Surface) Attr
 
@@ -492,7 +507,7 @@ Placement is the surface's last placement, as the program sent it; Rows is the r
 func (s *Surface) Text() string
 ```
 
-Text is the text of the document's body, its runs of whitespace made one space: what a reader sees, roughly.
+Text is the text of the document's body as a reader sees it, roughly: block elements apart, runs of whitespace one space, styles and scripts left out.
 
 ### <a id="Surface.TextOf"></a>func (*Surface) TextOf
 
