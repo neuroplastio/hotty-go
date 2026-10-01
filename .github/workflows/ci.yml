@@ -1,3 +1,13 @@
+# CI: make check, and the conformance vectors being the spec's.
+#
+# It runs on yaga, on the runner infra's runner/compose.yaml registers to this
+# repository: hotty-go is private until it is published, and the org's free
+# minutes are for public repositories. The runner keeps its home between
+# jobs, Go's module and build caches with it, so there is no cache step.
+#
+# When hotty-go goes public, both jobs go back to ubuntu-latest (with
+# actions/cache) and infra's hotty-go runner is removed: on a public
+# repository, a pull request from anyone would run its code on yaga.
 name: ci
 
 on:
@@ -12,29 +22,24 @@ permissions:
 jobs:
   check:
     name: make check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, yaga]
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}
-          restore-keys: go-${{ runner.os }}-
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
       - run: make check
 
   vectors:
     name: the conformance vectors are the spec's
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, yaga]
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: neuroplastio/hotty
           path: .hotty
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
       - name: testdata/conformance/vectors.json is neuroplastio/hotty's
         run: |
           if ! cmp -s .hotty/conformance/vectors.json testdata/conformance/vectors.json; then
