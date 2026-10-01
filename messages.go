@@ -16,6 +16,12 @@ const (
 	EventFocus  = "focus"  // the surface took the keyboard
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
+
+	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
+	// events (Caps.Drags), EventDrag stands for all three.
+	EventDragStart = "dragstart" // the primary button pressed on the element
+	EventDrag      = "drag"      // the element under the pointer changed
+	EventDragEnd   = "dragend"   // the button released, or the drag cut short
 )
 
 // Event is what the user did in a surface (SPEC §9).
@@ -86,6 +92,47 @@ func (e Event) Size() (w, h float64, ok bool) {
 		return 0, 0, false
 	}
 	return *d.W, *d.H, true
+}
+
+// Drag is where a drag's pointer is, and the modifier keys held
+// (SPEC §9.1).
+type Drag struct {
+	// Col and Row are the surface's cell under the pointer, from 0 at its
+	// top left (not its window's). They go on past its edges: negative
+	// above it and to its left, its size or more below and to its right.
+	Col, Row int
+	// Keys are the modifier keys held: "shift", "ctrl", "alt" and "meta",
+	// in that order.
+	Keys []string
+}
+
+// Has reports whether a modifier key was held: "shift", "ctrl", "alt" or
+// "meta".
+func (d Drag) Has(key string) bool {
+	for _, k := range d.Keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// Drag is a dragstart, drag or dragend event's detail; ok is false for any
+// other event.
+func (e Event) Drag() (Drag, bool) {
+	switch e.Kind {
+	case EventDragStart, EventDrag, EventDragEnd:
+	default:
+		return Drag{}, false
+	}
+	var d struct {
+		C, R *int
+		Keys []string
+	}
+	if json.Unmarshal(e.Detail, &d) != nil || d.C == nil || d.R == nil {
+		return Drag{}, false
+	}
+	return Drag{Col: *d.C, Row: *d.R, Keys: d.Keys}, true
 }
 
 // Fields is a submit event's detail: the form's fields by name. A value
@@ -261,6 +308,19 @@ func (c Caps) Sends(kind string) bool {
 	}
 	for _, k := range c.Events {
 		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// Drags reports whether the host sends drags (SPEC §9.1): drag in its
+// events, which stands for dragstart, drag and dragend. Unlike Sends, a
+// host that lists no kinds is taken not to, since drags came after the
+// first hosts: a program offers another way to do what its drags do.
+func (c Caps) Drags() bool {
+	for _, k := range c.Events {
+		if k == EventDrag {
 			return true
 		}
 	}

@@ -48,6 +48,10 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
+  - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
+  - [`func (h *Host) DragMove(id string, c, r int, keys ...string) error`](#Host.DragMove)
+  - [`func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error`](#Host.DragStart)
+  - [`func (h *Host) Dragging() bool`](#Host.Dragging)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
   - [`func (h *Host) Errors() []string`](#Host.Errors)
   - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
@@ -91,7 +95,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 
 ## <a id="pkg-variables"></a>Variables
 
-<a id="ErrNotHost"></a><a id="ErrNoSurface"></a><a id="ErrNoElement"></a><a id="ErrDetached"></a><a id="ErrNotPlaced"></a><a id="ErrNoPress"></a><a id="ErrNotControl"></a><a id="ErrNoReport"></a>
+<a id="ErrNotHost"></a><a id="ErrNoSurface"></a><a id="ErrNoElement"></a><a id="ErrDetached"></a><a id="ErrNotPlaced"></a><a id="ErrNoPress"></a><a id="ErrNotControl"></a><a id="ErrNoReport"></a><a id="ErrNoDrag"></a><a id="ErrDragging"></a>
 
 ```go
 var (
@@ -103,6 +107,8 @@ var (
 	ErrNoPress    = errors.New("hottytest: the placement did not ask for presses (Placement.Press)")
 	ErrNotControl = errors.New("hottytest: the element is not a control that takes this")
 	ErrNoReport   = errors.New("hottytest: nothing with an id reports this click")
+	ErrNoDrag     = errors.New("hottytest: no drag is in progress")
+	ErrDragging   = errors.New("hottytest: a drag is already in progress")
 )
 ```
 
@@ -236,6 +242,40 @@ func (h *Host) Cursor() (col, row int, shown bool)
 ```
 
 Cursor is where the cursor is, and whether it is on show (DECTCEM: ESC \[ ?25 l hides it): where the program leaves it for what prints next. row is a line of Screen, as a placement's (Surface.At).
+
+### <a id="Host.DragEnd"></a>func (*Host) DragEnd
+
+```go
+func (h *Host) DragEnd(id string, c, r int, keys ...string) error
+```
+
+DragEnd releases the button of the drag in progress over the element with an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its t as DragMove's. A drag that ends on the element it began on is also that element's click, after dragend, if it reports clicks.
+
+### <a id="Host.DragMove"></a>func (*Host) DragMove
+
+```go
+func (h *Host) DragMove(id string, c, r int, keys ...string) error
+```
+
+DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: the nearest one with an id and drag in its data-on, from it outward, or empty; while that is empty, when the cell changes instead.
+
+### <a id="Host.DragStart"></a>func (*Host) DragStart
+
+```go
+func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error
+```
+
+DragStart presses a mouse's primary button on the element with an id and starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier keys held ("shift", "ctrl", "alt", "meta"). The press is a press like any other: press first, if the placement asks for presses; then dragstart, from the nearest element from it outward with drag in its data-on; then the keyboard, as a click moves it. ErrNoReport, and no drag, if no element opts in or the one that does has no id.
+
+The host lays nothing out, so a test names what is under the pointer: DragMove for each element or cell crossed, then DragEnd.
+
+### <a id="Host.Dragging"></a>func (*Host) Dragging
+
+```go
+func (h *Host) Dragging() bool
+```
+
+Dragging reports whether a drag is in progress.
 
 ### <a id="Host.Emit"></a>func (*Host) Emit
 

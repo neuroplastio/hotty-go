@@ -752,6 +752,77 @@ func TestPressAndEmit(t *testing.T) {
 	expect(t, sent(h), "ev press t=b", "ev focus t=", "ev click t=b")
 }
 
+// A drag (SPEC §9.1): dragstart, drag each time the element under the
+// pointer changes (or, over none, the cell), dragend, and a click only
+// where it began.
+func TestDrag(t *testing.T) {
+	h := New(t)
+	grid := `<div id=g><i id=a data-on="click drag">a</i><i id=b data-on=drag>b</i><span id=gap>-</span>` +
+		`<i data-on=drag>no id</i><input id=f></div>`
+	send(h, hotty.Doc("g", grid), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2, Press: true}))
+	sent(h)
+	if err := h.DragStart("g", "a", 0, 0, "ctrl", "shift"); err != nil {
+		t.Fatal(err)
+	}
+	_ = h.DragMove("a", 1, 0)   // the same element: nothing
+	_ = h.DragMove("b", 2, 0)   // another: drag
+	_ = h.DragMove("gap", 3, 0) // none: drag with no target
+	_ = h.DragMove("", 3, 0)    // none, the same cell: nothing
+	_ = h.DragMove("", 3, -1)   // none, another cell
+	_ = h.DragEnd("b", 2, 1, "shift")
+	expect(t, sent(h),
+		"ev press t=a",
+		`ev dragstart t=a {"c":0,"keys":["shift","ctrl"],"r":0}`,
+		`ev drag t=b {"c":2,"keys":[],"r":0}`,
+		`ev drag t= {"c":3,"keys":[],"r":0}`,
+		`ev drag t= {"c":3,"keys":[],"r":-1}`,
+		`ev dragend t=b {"c":2,"keys":["shift"],"r":1}`)
+	if h.Dragging() {
+		t.Error("still dragging")
+	}
+
+	// Ending where it began is that element's click too.
+	_ = h.DragStart("g", "a", 0, 0)
+	_ = h.DragEnd("a", 0, 0)
+	expect(t, sent(h), "ev press t=a", `ev dragstart t=a {"c":0,"keys":[],"r":0}`, `ev dragend t=a {"c":0,"keys":[],"r":0}`, "ev click t=a")
+
+	// Nothing that opts in, or one with no id: a press, and no drag.
+	if err := h.DragStart("g", "gap", 0, 0); !errors.Is(err, ErrNoReport) || h.Dragging() {
+		t.Errorf("a drag on what does not opt in: %v", err)
+	}
+	expect(t, sent(h), "ev press t=gap")
+	if err := h.DragMove("", 0, 0); !errors.Is(err, ErrNoDrag) {
+		t.Errorf("a move with no drag: %v", err)
+	}
+
+	// The press takes the keyboard from the field, after dragstart.
+	_ = h.Fill("g", "f", "x")
+	sent(h)
+	_ = h.DragStart("g", "b", 1, 0)
+	if err := h.DragStart("g", "a", 0, 0); !errors.Is(err, ErrDragging) {
+		t.Errorf("a second drag: %v", err)
+	}
+	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"keys":[],"r":0}`, `ev change t=f {"value":"x"}`, "ev blur t=")
+
+	// A new document or a hide cuts it short at the last cell; a detach or
+	// a delete ends it with nothing.
+	_ = h.DragMove("", 4, 1)
+	sent(h)
+	send(h, hotty.Doc("g", grid))
+	expect(t, sent(h), `ev dragend t= {"c":4,"keys":[],"r":1}`)
+	send(h, hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2}))
+	_ = h.DragStart("g", "b", 1, 0)
+	send(h, hotty.Hide("g"))
+	expect(t, sent(h), `ev dragstart t=b {"c":1,"keys":[],"r":0}`, `ev dragend t= {"c":1,"keys":[],"r":0}`)
+	send(h, hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2}))
+	_ = h.DragStart("g", "b", 1, 0)
+	send(h, hotty.Detach("g"))
+	if h.Dragging() {
+		t.Error("a detach leaves no drag")
+	}
+	expect(t, sent(h), `ev dragstart t=b {"c":1,"keys":[],"r":0}`)
+}
+
 func TestReplies(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("x", "<p id=p>p</p>", hotty.N(1)), hotty.SetText("x", "p", "q", hotty.Q(hotty.ReplyAlways)))

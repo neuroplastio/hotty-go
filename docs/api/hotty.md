@@ -58,6 +58,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func ValidName(s string) bool`](#ValidName)
 - [`type Caps`](#Caps)
   - [`func (c Caps) CellCSS() (w, h float64)`](#Caps.CellCSS)
+  - [`func (c Caps) Drags() bool`](#Caps.Drags)
   - [`func (c Caps) Light() bool`](#Caps.Light)
   - [`func (c Caps) Sends(kind string) bool`](#Caps.Sends)
   - [`func (c Caps) Supports(op Op) bool`](#Caps.Supports)
@@ -66,10 +67,13 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (c Control) With(k, v string) Control`](#Control.With)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
+- [`type Drag`](#Drag)
+  - [`func (d Drag) Has(key string) bool`](#Drag.Has)
 - [`type Error`](#Error)
   - [`func (e *Error) Error() string`](#Error.Error)
 - [`type Event`](#Event)
   - [`func (e Event) Checked() (checked, ok bool)`](#Event.Checked)
+  - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
   - [`func (e Event) Fields() map[string]string`](#Event.Fields)
   - [`func (e Event) Link() (href, url string, ok bool)`](#Event.Link)
   - [`func (e Event) Size() (w, h float64, ok bool)`](#Event.Size)
@@ -112,7 +116,7 @@ const (
 )
 ```
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
@@ -124,6 +128,12 @@ const (
 	EventFocus  = "focus"  // the surface took the keyboard
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
+
+	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
+	// events (Caps.Drags), EventDrag stands for all three.
+	EventDragStart = "dragstart" // the primary button pressed on the element
+	EventDrag      = "drag"      // the element under the pointer changed
+	EventDragEnd   = "dragend"   // the button released, or the drag cut short
 )
 ```
 
@@ -372,6 +382,14 @@ func (c Caps) CellCSS() (w, h float64)
 
 CellCSS is a cell's size in CSS pixels: what a document's layout and an SVG's viewBox are measured in. Before a host has said, or if it said nothing, it is a usual 9×18.
 
+### <a id="Caps.Drags"></a>func (Caps) Drags
+
+```go
+func (c Caps) Drags() bool
+```
+
+Drags reports whether the host sends drags (SPEC §9.1): drag in its events, which stands for dragstart, drag and dragend. Unlike Sends, a host that lists no kinds is taken not to, since drags came after the first hosts: a program offers another way to do what its drags do.
+
 ### <a id="Caps.Light"></a>func (Caps) Light
 
 ```go
@@ -444,6 +462,30 @@ Feed takes one complete OSC sequence, as a terminal-input parser delivers it: ES
 
 A malformed message (a control that does not parse, a payload that is not base64 or zlib) is Invalid. So is a chunked message that another message interrupts; the interrupting one is then decoded as usual, and its own result returned.
 
+## <a id="Drag"></a>type Drag
+
+```go
+type Drag struct {
+	// Col and Row are the surface's cell under the pointer, from 0 at its
+	// top left (not its window's). They go on past its edges: negative
+	// above it and to its left, its size or more below and to its right.
+	Col, Row int
+	// Keys are the modifier keys held: "shift", "ctrl", "alt" and "meta",
+	// in that order.
+	Keys []string
+}
+```
+
+Drag is where a drag's pointer is, and the modifier keys held (SPEC §9.1).
+
+### <a id="Drag.Has"></a>func (Drag) Has
+
+```go
+func (d Drag) Has(key string) bool
+```
+
+Has reports whether a modifier key was held: "shift", "ctrl", "alt" or "meta".
+
 ## <a id="Error"></a>type Error
 
 ```go
@@ -490,6 +532,14 @@ func (e Event) Checked() (checked, ok bool)
 ```
 
 Checked is a checkbox's or a radio button's state in a change event; ok is false for any other event.
+
+### <a id="Event.Drag"></a>func (Event) Drag
+
+```go
+func (e Event) Drag() (Drag, bool)
+```
+
+Drag is a dragstart, drag or dragend event's detail; ok is false for any other event.
 
 ### <a id="Event.Fields"></a>func (Event) Fields
 

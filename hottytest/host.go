@@ -60,6 +60,8 @@ var (
 	ErrNoPress    = errors.New("hottytest: the placement did not ask for presses (Placement.Press)")
 	ErrNotControl = errors.New("hottytest: the element is not a control that takes this")
 	ErrNoReport   = errors.New("hottytest: nothing with an id reports this click")
+	ErrNoDrag     = errors.New("hottytest: no drag is in progress")
+	ErrDragging   = errors.New("hottytest: a drag is already in progress")
 )
 
 // Option configures a Host.
@@ -131,7 +133,7 @@ func DefaultCaps() hotty.Caps {
 		c.Ops = append(c.Ops, string(op))
 	}
 	c.Events = []string{hotty.EventClick, hotty.EventChange, hotty.EventInput, hotty.EventSubmit,
-		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize}
+		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag}
 	return c
 }
 
@@ -163,6 +165,7 @@ type Host struct {
 	created  int
 	res      map[string]resource
 	keyboard *Surface // the surface that has the keyboard
+	drag     *drag    // the drag in progress, if any (SPEC §9.1)
 	alt      bool     // the alternate screen is on
 	commands []hotty.Message
 	replies  []hotty.Message
@@ -544,6 +547,13 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			if h.keyboard == s {
 				h.keyboard = nil
 			}
+			if h.drag != nil && h.drag.s == s {
+				if m.Get("d") == "1" {
+					h.drag = nil // detached: it reports nothing more
+				} else {
+					h.cutDrag() // a new document ends it
+				}
+			}
 			s.setDoc(string(m.Payload))
 		}
 		s.detached = m.Get("d") == "1"
@@ -556,6 +566,9 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	case "place":
 		return h.place(s, m)
 	case "hide":
+		if h.drag != nil && h.drag.s == s {
+			h.cutDrag()
+		}
 		if s.placed && h.keyboard == s {
 			h.blur(s)
 		}
@@ -584,10 +597,16 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if h.keyboard == s {
 			h.keyboard = nil
 		}
+		if h.drag != nil && h.drag.s == s {
+			h.drag = nil // it reports nothing more
+		}
 		delete(h.surfaces, name)
 	case "detach":
 		if h.keyboard == s {
 			h.keyboard = nil // back to the terminal, with no blur
+		}
+		if h.drag != nil && h.drag.s == s {
+			h.drag = nil
 		}
 		s.detached, s.keyb = true, false
 	case "focus":
@@ -889,6 +908,166 @@ func (h *Host) click(s *Surface, el *html.Node) error {
 		}
 	}
 	return nil
+}
+
+// --- drags (SPEC §9.1) ----------------------------------------------------------
+
+// drag is a drag in progress: the pointer is its surface's until the
+// release.
+type drag struct {
+	s     *Surface
+	start *html.Node // the element that opted in, where it began
+	id    string     // its id
+	t     string     // the element under the pointer, as last reported
+	c, r  int        // the cell under the pointer, as last reported
+}
+
+// DragStart presses a mouse's primary button on the element with an id and
+// starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier
+// keys held ("shift", "ctrl", "alt", "meta"). The press is a press like
+// any other: press first, if the placement asks for presses; then
+// dragstart, from the nearest element from it outward with drag in its
+// data-on; then the keyboard, as a click moves it. ErrNoReport, and no
+// drag, if no element opts in or the one that does has no id.
+//
+// The host lays nothing out, so a test names what is under the pointer:
+// DragMove for each element or cell crossed, then DragEnd.
+func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, err := h.target(surface)
+	if err != nil {
+		return err
+	}
+	el, err := h.element(s, id)
+	if err != nil {
+		return err
+	}
+	if s.detached {
+		return ErrDetached
+	}
+	if h.drag != nil {
+		return ErrDragging
+	}
+	if s.place.Press {
+		h.pressAt(s, el)
+	}
+	if on := closest(el, listens("drag")); on != nil {
+		if rid, ok := attr(on, "id"); ok {
+			h.drag = &drag{s: s, start: on, id: rid, t: rid, c: c, r: r}
+			h.event(s, hotty.EventDragStart, rid, dragDetail(c, r, keys))
+		}
+	}
+	if f := closest(el, focusable); f != nil {
+		h.takeKeyboard(s, f, true)
+	} else if h.keyboard != nil {
+		h.blur(h.keyboard)
+	}
+	if h.drag == nil {
+		return ErrNoReport
+	}
+	return nil
+}
+
+// DragMove moves the pointer of the drag in progress onto the element with
+// an id in the drag's surface, or onto none ("": a gap, another surface, the
+// cells, outside the window), at the surface's cell c, r (SPEC §9.1). It
+// reports drag when the element under the pointer changes: the nearest one
+// with an id and drag in its data-on, from it outward, or empty; while that
+// is empty, when the cell changes instead.
+func (h *Host) DragMove(id string, c, r int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	d, t, err := h.dragOver(id)
+	if err != nil {
+		return err
+	}
+	if t == d.t && (t != "" || (c == d.c && r == d.r)) {
+		return nil
+	}
+	d.t, d.c, d.r = t, c, r
+	h.event(d.s, hotty.EventDrag, t, dragDetail(c, r, keys))
+	return nil
+}
+
+// DragEnd releases the button of the drag in progress over the element with
+// an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its
+// t as DragMove's. A drag that ends on the element it began on is also
+// that element's click, after dragend, if it reports clicks.
+func (h *Host) DragEnd(id string, c, r int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	d, t, err := h.dragOver(id)
+	if err != nil {
+		return err
+	}
+	h.drag = nil
+	h.event(d.s, hotty.EventDragEnd, t, dragDetail(c, r, keys))
+	if t == d.id && reportsClick(d.start) {
+		var detail any
+		if v, ok := attr(d.start, "value"); ok {
+			detail = map[string]string{"value": v}
+		}
+		h.event(d.s, hotty.EventClick, d.id, detail)
+	}
+	return nil
+}
+
+// Dragging reports whether a drag is in progress.
+func (h *Host) Dragging() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.drag != nil
+}
+
+func (h *Host) dragOver(id string) (*drag, string, error) {
+	d := h.drag
+	if d == nil {
+		return nil, "", ErrNoDrag
+	}
+	if id == "" {
+		return d, "", nil
+	}
+	el := d.s.byID(id)
+	if el == nil {
+		return nil, "", fmt.Errorf("%w: #%s in %s", ErrNoElement, id, d.s.name)
+	}
+	t := ""
+	if on := closest(el, func(n *html.Node) bool { _, ok := attr(n, "id"); return ok && listens("drag")(n) }); on != nil {
+		t, _ = attr(on, "id")
+	}
+	return d, t, nil
+}
+
+// cutDrag ends the drag in progress early (SPEC §9.1): dragend, with no
+// target and the last cell the pointer was on.
+func (h *Host) cutDrag() {
+	d := h.drag
+	h.drag = nil
+	h.event(d.s, hotty.EventDragEnd, "", dragDetail(d.c, d.r, nil))
+}
+
+// listens reports whether an element has kind in its data-on.
+func listens(kind string) func(*html.Node) bool {
+	return func(n *html.Node) bool {
+		if n.Type != html.ElementNode {
+			return false
+		}
+		on, _ := attr(n, "data-on")
+		return slices.Contains(strings.Fields(on), kind)
+	}
+}
+
+// dragDetail is a drag event's detail: the cell, and the modifier keys in
+// the order SPEC §9.1 gives them.
+func dragDetail(c, r int, keys []string) map[string]any {
+	held := []string{}
+	for _, k := range []string{"shift", "ctrl", "alt", "meta"} {
+		if slices.Contains(keys, k) {
+			held = append(held, k)
+		}
+	}
+	return map[string]any{"c": c, "r": r, "keys": held}
 }
 
 func reportsClick(n *html.Node) bool {

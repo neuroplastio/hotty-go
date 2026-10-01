@@ -374,6 +374,21 @@ func TestEvents(t *testing.T) {
 		t.Error("a click has no size")
 	}
 
+	drag, _ := host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"keys":["shift","ctrl"]}`).Event()
+	if d, ok := drag.Drag(); !ok || d.Col != -2 || d.Row != 7 || !d.Has("shift") || !d.Has("ctrl") || d.Has("alt") {
+		t.Errorf("Drag = %+v %v", d, ok)
+	}
+	end, _ := host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"keys":[]}`).Event()
+	if d, ok := end.Drag(); !ok || d.Col != 0 || d.Row != 0 || len(d.Keys) != 0 {
+		t.Errorf("a dragend outside: %+v %v", d, ok)
+	}
+	if _, ok := button.Drag(); ok {
+		t.Error("a click is no drag")
+	}
+	if _, ok := (Event{Kind: EventDragStart, Detail: []byte(`{"r":1}`)}).Drag(); ok {
+		t.Error("a drag's detail without its column")
+	}
+
 	if _, ok := host(Control{{"a", "ok"}, {"re", "doc"}}, "").Event(); ok {
 		t.Error("a reply is not an event")
 	}
@@ -426,6 +441,10 @@ func TestCaps(t *testing.T) {
 	}
 	if !none.Supports(OpMorph) || !none.Sends(EventPress) || none.Light() {
 		t.Error("a host that lists nothing")
+	}
+	// Drags are only where a host lists them.
+	if caps.Drags() || none.Drags() || !(Caps{Events: []string{EventClick, EventDrag}}).Drags() {
+		t.Error("Drags")
 	}
 	bad, _ := host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":`).Reply()
 	if _, ok := bad.Caps(); ok {
