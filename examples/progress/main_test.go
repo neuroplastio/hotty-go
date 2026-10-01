@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 func on(h *hottytest.Host) (env, *strings.Builder) {
 	var out strings.Builder
 	return env{stdout: h, stderr: &out, tty: true,
-		open: func() (*term.Term, error) { return term.New(h, h, "progress", h.TermSize, nil), nil }}, &out
+		open: func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "progress", h.TermSize, nil), nil }}, &out
 }
 
 func TestBar(t *testing.T) {

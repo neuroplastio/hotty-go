@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/term"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 )
 
 // Deploy is what the card shows.
@@ -36,13 +36,13 @@ type Deploy struct {
 // a test from hottytest.
 type env struct {
 	stdout, stderr io.Writer
-	tty            bool                       // stdout is the terminal
-	open           func() (*term.Term, error) // the terminal, whatever the streams
+	tty            bool                            // stdout is the terminal
+	open           func() (*hottyterm.Term, error) // the terminal, whatever the streams
 }
 
 func main() {
-	e := env{stdout: os.Stdout, stderr: os.Stderr, tty: term.IsTerminal(os.Stdout),
-		open: func() (*term.Term, error) { return term.Open("card") }}
+	e := env{stdout: os.Stdout, stderr: os.Stderr, tty: hottyterm.IsTerminal(os.Stdout),
+		open: func() (*hottyterm.Term, error) { return hottyterm.Open("card") }}
 	os.Exit(run(context.Background(), os.Args[1:], e))
 }
 

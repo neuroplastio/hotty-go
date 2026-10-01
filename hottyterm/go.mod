@@ -1,6 +1,6 @@
-// term: HOTTY for a program in a terminal. A module of its own for the
+// hottyterm: HOTTY for a program in a terminal. A module of its own for the
 // terminal libraries it uses (ultraviolet).
-module github.com/neuroplastio/hotty-go/term
+module github.com/neuroplastio/hotty-go/hottyterm
 
 go 1.26.8
 

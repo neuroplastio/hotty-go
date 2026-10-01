@@ -23,22 +23,22 @@ import (
 	"time"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/term"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 )
 
 // env is the process's streams and terminal: main fills it from the OS,
 // a test from hottytest.
 type env struct {
 	stdout, stderr io.Writer
-	tty            bool                       // stdout is the terminal
-	open           func() (*term.Term, error) // the terminal, whatever the streams
+	tty            bool                            // stdout is the terminal
+	open           func() (*hottyterm.Term, error) // the terminal, whatever the streams
 }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	e := env{stdout: os.Stdout, stderr: os.Stderr, tty: term.IsTerminal(os.Stdout),
-		open: func() (*term.Term, error) { return term.Open("progress") }}
+	e := env{stdout: os.Stdout, stderr: os.Stderr, tty: hottyterm.IsTerminal(os.Stdout),
+		open: func() (*hottyterm.Term, error) { return hottyterm.Open("progress") }}
 	os.Exit(run(ctx, os.Args[1:], e))
 }
 
@@ -93,7 +93,7 @@ func run(ctx context.Context, args []string, e env) int {
 // bar is the surface: placed once, then patched.
 type bar struct {
 	ctx  context.Context
-	t    *term.Term
+	t    *hottyterm.Term
 	name string
 }
 
@@ -108,7 +108,7 @@ const page = `<style>
 </style>
 <div class="row" id="row"><span id="label">starting</span><div class="track"><div class="fill" id="fill"></div></div><span id="pct">0%</span></div>`
 
-func newBar(ctx context.Context, t *term.Term) (*bar, error) {
+func newBar(ctx context.Context, t *hottyterm.Term) (*bar, error) {
 	if err := t.LineStart(ctx); err != nil {
 		return nil, err
 	}

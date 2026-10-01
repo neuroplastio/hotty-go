@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 var args = []string{"api", "v1.4.2", "ok", "42s"}
@@ -17,7 +17,7 @@ func on(t *testing.T, h *hottytest.Host, args []string) (code int, stdout string
 	t.Helper()
 	var out, errs strings.Builder
 	e := env{stdout: &out, stderr: &errs, tty: true,
-		open: func() (*term.Term, error) { return term.New(h, h, "card", h.TermSize, nil), nil }}
+		open: func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "card", h.TermSize, nil), nil }}
 	code = run(context.Background(), args, e)
 	// What the program prints to stdout reaches the same terminal.
 	_, _ = h.Write([]byte(out.String()))
@@ -92,13 +92,13 @@ func TestRefused(t *testing.T) {
 
 func TestData(t *testing.T) {
 	var out strings.Builder
-	e := env{stdout: &out, stderr: &out, open: func() (*term.Term, error) { panic("a pipe needs no terminal") }}
+	e := env{stdout: &out, stderr: &out, open: func() (*hottyterm.Term, error) { panic("a pipe needs no terminal") }}
 	if code := run(context.Background(), args, e); code != 0 || out.String() != "service=api version=v1.4.2 status=ok took=42s\n" {
 		t.Errorf("exit %d: %q", code, out.String())
 	}
 	// A terminal on stdin but none to open: the data.
 	out.Reset()
-	e = env{stdout: &out, stderr: &out, tty: true, open: func() (*term.Term, error) { return nil, term.ErrNoTerminal }}
+	e = env{stdout: &out, stderr: &out, tty: true, open: func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }}
 	if code := run(context.Background(), args, e); code != 0 || !strings.HasPrefix(out.String(), "service=api") {
 		t.Errorf("no terminal: %d %q", code, out.String())
 	}

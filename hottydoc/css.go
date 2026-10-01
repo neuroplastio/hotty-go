@@ -1,4 +1,4 @@
-package doc
+package hottydoc
 
 // CSS styles every document this package makes. It sets text in the
 // terminal's rows (SPEC §8: --hotty-cell-h is one row) so estimates hold,

@@ -1,6 +1,6 @@
-// doc: files as HOTTY documents. A module of its own for goldmark and
+// hottydoc: files as HOTTY documents. A module of its own for goldmark and
 // x/net/html.
-module github.com/neuroplastio/hotty-go/doc
+module github.com/neuroplastio/hotty-go/hottydoc
 
 go 1.26.8
 

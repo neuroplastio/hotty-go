@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
-func opener(h *hottytest.Host) func() (*term.Term, error) {
-	return func() (*term.Term, error) { return term.New(h, h, "hello", h.TermSize, nil), nil }
+func opener(h *hottytest.Host) func() (*hottyterm.Term, error) {
+	return func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "hello", h.TermSize, nil), nil }
 }
 
 func TestHost(t *testing.T) {
@@ -39,7 +39,7 @@ func TestText(t *testing.T) {
 
 func TestNoTerminal(t *testing.T) {
 	var out, errs strings.Builder
-	open := func() (*term.Term, error) { return nil, term.ErrNoTerminal }
+	open := func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }
 	if code := run(context.Background(), &out, &errs, open); code != 0 || out.String() != "Hello.\n" {
 		t.Errorf("exit %d: %q", code, out.String())
 	}

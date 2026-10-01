@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/neuroplastio/hotty-go/form"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 const surface = "ask-form"
@@ -20,7 +20,7 @@ func start(t *testing.T, h *hottytest.Host) (wait func() (int, string)) {
 	var out, errs strings.Builder
 	done := make(chan int, 1)
 	go func() {
-		open := func() (*term.Term, error) { return term.New(h, h, "ask", h.TermSize, nil), nil }
+		open := func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "ask", h.TermSize, nil), nil }
 		done <- run(context.Background(), &out, &errs, open)
 	}()
 	return func() (int, string) {
@@ -172,7 +172,7 @@ func TestCellsDefaultsAndCancel(t *testing.T) {
 
 func TestNoTerminal(t *testing.T) {
 	var out, errs strings.Builder
-	open := func() (*term.Term, error) { return nil, term.ErrNoTerminal }
+	open := func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }
 	if code := run(context.Background(), &out, &errs, open); code != noTTY || !strings.Contains(errs.String(), "no terminal") {
 		t.Errorf("exit %d: %q", code, errs.String())
 	}

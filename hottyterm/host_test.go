@@ -1,4 +1,4 @@
-package term_test
+package hottyterm_test
 
 import (
 	"context"
@@ -10,14 +10,14 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 // open is a Term on a test host, closed when the test ends.
-func open(t *testing.T, h *hottytest.Host) *term.Term {
+func open(t *testing.T, h *hottytest.Host) *hottyterm.Term {
 	t.Helper()
-	tm := term.New(h, h, "tool-7", h.TermSize, nil)
+	tm := hottyterm.New(h, h, "tool-7", h.TermSize, nil)
 	t.Cleanup(func() { _ = tm.Close() })
 	return tm
 }
@@ -154,7 +154,7 @@ func TestEventsWhileRequesting(t *testing.T) {
 			switch ev := ev.(type) {
 			case uv.KeyPressEvent:
 				got = append(got, "key "+ev.String())
-			case term.Message:
+			case hottyterm.Message:
 				e, _ := ev.Event()
 				got = append(got, e.Kind+" "+e.Target)
 			}
@@ -181,7 +181,7 @@ func TestEventsEndWithTheInput(t *testing.T) {
 		t.Errorf("%d events before the end", n)
 	}
 	// Calls that wait return at once once the input has ended.
-	if _, err := tm.Fence(ctx(t)); !errors.Is(err, term.ErrNoAnswer) {
+	if _, err := tm.Fence(ctx(t)); !errors.Is(err, hottyterm.ErrNoAnswer) {
 		t.Errorf("Fence after the input ended: %v", err)
 	}
 }
@@ -231,12 +231,12 @@ func TestKittyGraphics(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	h := hottytest.New(t)
-	tm := term.New(h, h, "my tool.v2", nil, nil)
+	tm := hottyterm.New(h, h, "my tool.v2", nil, nil)
 	defer tm.Close()
 	if got := tm.Surface("chart #1"); got != "my_tool_v2-chart__1" || !hotty.ValidName(got) {
 		t.Errorf("Surface = %q", got)
 	}
-	if s := tm.Size(); s != (term.Size{Cols: 80, Rows: 24}) {
+	if s := tm.Size(); s != (hottyterm.Size{Cols: 80, Rows: 24}) {
 		t.Errorf("Size without a size function: %v", s)
 	}
 }

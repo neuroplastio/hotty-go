@@ -1,6 +1,6 @@
 //go:build !js
 
-package term
+package hottyterm
 
 import (
 	"fmt"

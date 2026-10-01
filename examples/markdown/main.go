@@ -4,7 +4,7 @@
 //	markdown README.md
 //	gh release view --json body -q .body | markdown
 //
-// doc.Markdown converts the file into blocks; doc.Pages groups them into
+// hottydoc.Markdown converts the file into blocks; hottydoc.Pages groups them into
 // surfaces that each fit the screen, so a host can show each whole. A
 // page's images go first, as resources (hotty.Res), and the page is sent
 // detached: its links are hyperlinks the terminal opens itself, and
@@ -28,8 +28,8 @@ import (
 	"strings"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/doc"
-	"github.com/neuroplastio/hotty-go/term"
+	"github.com/neuroplastio/hotty-go/hottydoc"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 )
 
 // env is the process's streams, files and terminal: main fills it from
@@ -37,14 +37,14 @@ import (
 type env struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
-	files          fs.FS                      // the file system, from its root or the current directory
-	tty            bool                       // stdout is the terminal
-	open           func() (*term.Term, error) // the terminal, whatever the streams
+	files          fs.FS                           // the file system, from its root or the current directory
+	tty            bool                            // stdout is the terminal
+	open           func() (*hottyterm.Term, error) // the terminal, whatever the streams
 }
 
 func main() {
 	e := env{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, files: os.DirFS("."),
-		tty: term.IsTerminal(os.Stdout), open: func() (*term.Term, error) { return term.Open("markdown") }}
+		tty: hottyterm.IsTerminal(os.Stdout), open: func() (*hottyterm.Term, error) { return hottyterm.Open("markdown") }}
 	os.Exit(run(context.Background(), os.Args[1:], e))
 }
 
@@ -58,21 +58,21 @@ func run(ctx context.Context, args []string, e env) int {
 		fmt.Fprintln(e.stderr, "markdown:", err)
 		return 1
 	}
-	o := doc.Options{ReadFile: images(files, dir)}
+	o := hottydoc.Options{ReadFile: images(files, dir)}
 
 	// Into a pipe: the text, without escape codes.
 	if !e.tty {
-		printText(e.stdout, doc.Markdown(src, o), false)
+		printText(e.stdout, hottydoc.Markdown(src, o), false)
 		return 0
 	}
 	t, err := e.open()
 	if err != nil {
-		printText(e.stdout, doc.Markdown(src, o), true) // a terminal we cannot talk to
+		printText(e.stdout, hottydoc.Markdown(src, o), true) // a terminal we cannot talk to
 		return 0
 	}
 	defer t.Close()
 	if !t.Detect(ctx) {
-		printText(e.stdout, doc.Markdown(src, o), true)
+		printText(e.stdout, hottydoc.Markdown(src, o), true)
 		return 0
 	}
 	if err := show(ctx, t, src, o); err != nil {
@@ -116,7 +116,7 @@ func images(files fs.FS, dir string) func(string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !doc.IsImage(b) && !doc.IsSVG(b) {
+		if !hottydoc.IsImage(b) && !hottydoc.IsSVG(b) {
 			return nil, errors.New(name + " is not an image")
 		}
 		return b, nil
@@ -125,19 +125,19 @@ func images(files fs.FS, dir string) func(string) ([]byte, error) {
 
 // show sends the document a page a surface, under the command line, and
 // waits for the host to take them.
-func show(ctx context.Context, t *term.Term, src []byte, o doc.Options) error {
+func show(ctx context.Context, t *hottyterm.Term, src []byte, o hottydoc.Options) error {
 	caps := t.Caps()
 	o.Cols, o.Screen = t.Size().Cols, t.Size().Rows
 	o.CellW, o.CellH = caps.CellCSS()
 	o.ResPrefix = t.Surface("res")
-	d := doc.Markdown(src, o)
+	d := hottydoc.Markdown(src, o)
 	if err := t.LineStart(ctx); err != nil {
 		return err
 	}
 	sent := map[string]bool{}
-	for i, page := range doc.Pages(d.Blocks, o.PageRows()) {
+	for i, page := range hottydoc.Pages(d.Blocks, o.PageRows()) {
 		var cmds []string
-		for _, r := range doc.Resources(page) {
+		for _, r := range hottydoc.Resources(page) {
 			if !sent[r.ID] { // the same image twice is one resource
 				cmds = append(cmds, hotty.Res(r.ID, r.Type, r.Data, hotty.Q(hotty.ReplyOnError)))
 				sent[r.ID] = true
@@ -165,7 +165,7 @@ func show(ctx context.Context, t *term.Term, src []byte, o doc.Options) error {
 
 // printText prints the document's text: a paragraph a line, a blank line
 // between blocks; with style, its headings bold.
-func printText(w io.Writer, d *doc.Doc, style bool) {
+func printText(w io.Writer, d *hottydoc.Doc, style bool) {
 	bold := func(s string) string {
 		if style {
 			return "\x1b[1m" + s + "\x1b[m"
@@ -173,7 +173,7 @@ func printText(w io.Writer, d *doc.Doc, style bool) {
 		return s
 	}
 	prev := ""
-	for _, p := range doc.Paragraphs([]byte(d.Body(d.Blocks))) {
+	for _, p := range hottydoc.Paragraphs([]byte(d.Body(d.Blocks))) {
 		// Items of a list, rows of a table and a term's definitions go
 		// together; any other paragraph after a blank line.
 		together := (p.Kind == prev && (p.Kind == "li" || p.Kind == "td")) || (prev == "dt" && p.Kind == "dd")

@@ -1,4 +1,4 @@
-// Package doc turns files into HOTTY documents: Markdown, HTML, CSV and
+// Package hottydoc turns files into HOTTY documents: Markdown, HTML, CSV and
 // TSV, JSON, images and plain text become blocks of HTML that a program
 // places as surfaces (SPEC §5), with the resources they refer to (§7.1).
 //
@@ -16,7 +16,7 @@
 //
 // The package does no I/O. What a document refers to (a Markdown file's
 // images) comes through Options.ReadFile.
-package doc
+package hottydoc
 
 import (
 	"crypto/sha256"

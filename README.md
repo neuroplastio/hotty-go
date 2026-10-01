@@ -18,7 +18,7 @@ Every program has three renditions (SPEC §14): surfaces on a host, cells on
 any other terminal, and plain data into a pipe. The examples show all three.
 
 ```go
-t, err := term.Open("hello") // the terminal, whatever stdout is
+t, err := hottyterm.Open("hello") // the terminal, whatever stdout is
 if err != nil {
 	fmt.Println("Hello.") // no terminal: a pipe, a cron job
 	return
@@ -37,7 +37,7 @@ Testing it needs no terminal:
 
 ```go
 h := hottytest.New(t)
-run(ctx, term.New(h, h, "hello", h.TermSize, nil))
+run(ctx, hottyterm.New(h, h, "hello", h.TermSize, nil))
 h.Surface("hello-hello").Text() // "Hello, HTML in the terminal."
 ```
 
@@ -52,13 +52,13 @@ of what it imports:
 | module | packages | needs |
 | --- | --- | --- |
 | `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library |
-| `github.com/neuroplastio/hotty-go/term` | `term` | ultraviolet, for the terminal's input |
+| `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
-| `github.com/neuroplastio/hotty-go/doc` | `doc` | goldmark, x/net/html |
+| `github.com/neuroplastio/hotty-go/hottydoc` | `hottydoc` | goldmark, x/net/html |
 | `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
 
 ```
-go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/term
+go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
 ```
 
 ## Packages
@@ -70,12 +70,12 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/term
 | [`blocks`](docs/api/blocks.md) | Package blocks draws bars in terminal cells with the block elements (U+2581–U+2588): a column's height in eighths of a row, as a bar chart or a histogram in text has it. |
 | [`braille`](docs/api/braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
 | [`chart`](docs/api/chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program patches as values arrive, and in cells for a terminal that is not a host (Spark). |
-| [`doc`](docs/api/doc.md) | Package doc turns files into HOTTY documents: Markdown, HTML, CSV and TSV, JSON, images and plain text become blocks of HTML that a program places as surfaces (SPEC §5), with the resources they refer to (§7.1). |
 | [`form`](docs/api/form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and patch), and what a submit event brings back, read into typed answers. |
+| [`hottydoc`](docs/api/hottydoc.md) | Package hottydoc turns files into HOTTY documents: Markdown, HTML, CSV and TSV, JSON, images and plain text become blocks of HTML that a program places as surfaces (SPEC §5), with the resources they refer to (§7.1). |
 | [`hottytea`](docs/api/hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
+| [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
 | [`series`](docs/api/series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |
-| [`term`](docs/api/term.md) | Package term is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 <!-- /docgen:packages -->
 
 ## Examples
@@ -100,7 +100,7 @@ go run ./dashboard https://example.com
 | [dashboard](examples/dashboard) | Dashboard watches HTTP endpoints, full screen: whether each is up, and its latency charted as the probes come back. | It is a Bubble Tea program, and each endpoint is a card on a surface that hottytea keeps in place as the frame changes. |
 | [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest HOTTY program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
 | [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
-| [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | doc.Markdown converts the file into blocks; doc.Pages groups them into surfaces that each fit the screen, so a host can show each whole. |
+| [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | hottydoc.Markdown converts the file into blocks; hottydoc.Pages groups them into surfaces that each fit the screen, so a host can show each whole. |
 | [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.SetVar) and text patches change the labels (hotty.SetText), a few dozen bytes each, in synchronized output so the host shows them together (SPEC §6). |
 <!-- /docgen:examples -->
 
@@ -126,7 +126,7 @@ The toolchain is in `mise.toml`: run `mise install` first.
   program that uses the SDK gets are the requirements between them, which
   `make pin REV=…` sets: before a release to a pushed commit, and for a
   release to its version (`make pin REV=v0.1.0`), committed, and then every
-  module tagged at that commit (`v0.1.0`, `term/v0.1.0`, …).
+  module tagged at that commit (`v0.1.0`, `hottyterm/v0.1.0`, …).
 - `make cover` runs the tests with coverage, prints a table by package, and
   fails when a public package is under `COVER_MIN` (85%).
 - `make docs` writes the documentation.

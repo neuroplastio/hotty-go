@@ -10,8 +10,8 @@ import (
 	"testing/fstest"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 const guide = "# Deploys\n\n" +
@@ -34,7 +34,7 @@ var files = fstest.MapFS{
 func on(h *hottytest.Host) (env, *strings.Builder) {
 	var errs strings.Builder
 	return env{stdin: strings.NewReader(""), stdout: h, stderr: &errs, files: files, tty: true,
-		open: func() (*term.Term, error) { return term.New(h, h, "markdown", h.TermSize, nil), nil }}, &errs
+		open: func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "markdown", h.TermSize, nil), nil }}, &errs
 }
 
 // resources are the resources the host was sent.
@@ -197,7 +197,7 @@ func TestPipe(t *testing.T) {
 func TestNoTerminal(t *testing.T) {
 	var out strings.Builder
 	e := env{stdin: strings.NewReader("# Hi\n"), stdout: &out, stderr: &out, files: files, tty: true,
-		open: func() (*term.Term, error) { return nil, term.ErrNoTerminal }}
+		open: func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }}
 	if code := run(context.Background(), nil, e); code != 0 || out.String() != "\x1b[1mHi\x1b[m\n" {
 		t.Errorf("exit %d: %q", code, out.String())
 	}

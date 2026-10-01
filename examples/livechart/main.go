@@ -32,8 +32,8 @@ import (
 	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/braille"
 	"github.com/neuroplastio/hotty-go/chart"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/series"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 // env is the process's streams and terminal: main fills it from the OS,
@@ -41,15 +41,15 @@ import (
 type env struct {
 	stdin          io.Reader
 	stdout, stderr io.Writer
-	tty            bool                       // stdout is the terminal
-	open           func() (*term.Term, error) // the terminal, whatever the streams
+	tty            bool                            // stdout is the terminal
+	open           func() (*hottyterm.Term, error) // the terminal, whatever the streams
 }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	e := env{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, tty: term.IsTerminal(os.Stdout),
-		open: func() (*term.Term, error) { return term.Open("livechart") }}
+	e := env{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, tty: hottyterm.IsTerminal(os.Stdout),
+		open: func() (*hottyterm.Term, error) { return hottyterm.Open("livechart") }}
 	os.Exit(run(ctx, os.Args[1:], e))
 }
 
@@ -260,7 +260,7 @@ const (
 // surface is the chart on a HOTTY host.
 type surface struct {
 	ctx        context.Context
-	t          *term.Term
+	t          *hottyterm.Term
 	name       string
 	cols, rows int
 	w, h       float64 // the plot, in CSS pixels
@@ -276,7 +276,7 @@ type surface struct {
 }
 
 // newSurface places the chart, waiting for numbers, under the command line.
-func newSurface(ctx context.Context, t *term.Term, rows int) *surface {
+func newSurface(ctx context.Context, t *hottyterm.Term, rows int) *surface {
 	cw, ch := t.Caps().CellCSS()
 	s := &surface{ctx: ctx, t: t, name: t.Surface("chart"), cols: t.Size().Cols, rows: rows,
 		ch: ch, light: t.Caps().Light(), scale: series.NewScale(), n: -1}
@@ -415,7 +415,7 @@ func (s *surface) end(d *data, summary []string) {
 		_ = s.t.Send(hotty.DocDetached(s.name, s.page(`<p class="wait">`+html.EscapeString(summary[0])+`</p>`)))
 	}
 	_ = s.t.Send(strings.Join(summary, "\r\n") + "\r\n")
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), term.FenceTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), hottyterm.FenceTimeout)
 	defer cancel()
 	_, _ = s.t.Fence(ctx)
 }
@@ -425,7 +425,7 @@ func (s *surface) end(d *data, summary []string) {
 // cells is the chart on a terminal that is not a host: braille, a legend
 // row over it, and the axis' ends in a gutter on the left.
 type cells struct {
-	t          *term.Term
+	t          *hottyterm.Term
 	cols, rows int
 	drawn      int // the rows of the last frame, to go back up over
 	scale      *series.Scale

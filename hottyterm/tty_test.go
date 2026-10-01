@@ -1,6 +1,6 @@
 //go:build linux
 
-package term_test
+package hottyterm_test
 
 import (
 	"bytes"
@@ -19,8 +19,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 // childArgs run one test of this binary again, in a child process, whose
@@ -108,7 +108,7 @@ func nativeTool() {
 		fmt.Printf("child: "+format+"\n", args...)
 		os.Exit(1)
 	}
-	tm, err := term.Open("native")
+	tm, err := hottyterm.Open("native")
 	if err != nil {
 		fail("Open: %v", err)
 	}
@@ -155,8 +155,8 @@ func nativeTool() {
 
 func TestOpenWithoutATerminal(t *testing.T) {
 	if os.Getenv("HOTTY_TERM_CHILD") == "2" {
-		_, err := term.Open("x")
-		if errors.Is(err, term.ErrNoTerminal) {
+		_, err := hottyterm.Open("x")
+		if errors.Is(err, hottyterm.ErrNoTerminal) {
 			fmt.Println("child ok")
 		} else {
 			fmt.Println("child:", err)

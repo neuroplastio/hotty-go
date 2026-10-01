@@ -3,7 +3,7 @@
 // test then looks at what the program showed, and plays the user.
 //
 //	h := hottytest.New(t)
-//	run(term.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
+//	run(hottyterm.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
 //	card := h.Surface("tool-card")
 //	card.TextOf("status")                         // what it shows
 //	h.Click("tool-card", "retry")                 // what the user does
@@ -258,7 +258,7 @@ func (h *Host) Close() error {
 // "\x03" for Ctrl-C, "\x1b" for Escape.
 func (h *Host) Type(keys string) { h.in.write(keys) }
 
-// TermSize is the terminal's size (Size), as term.New takes it.
+// TermSize is the terminal's size (Size), as hottyterm.New takes it.
 func (h *Host) TermSize() (cols, rows int) { return h.cols, h.rows }
 
 // Write is the program's output. It is parsed as it comes: HOTTY commands
@@ -382,7 +382,7 @@ func (h *Host) csi(params string, final byte) {
 }
 
 func (h *Host) str(seq string) {
-	// The kitty graphics query (term.KittyGraphics): a=q on an image id.
+	// The kitty graphics query (hottyterm.KittyGraphics): a=q on an image id.
 	if !h.kitty || !strings.HasPrefix(seq, "\x1b_G") {
 		return
 	}

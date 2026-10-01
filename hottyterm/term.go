@@ -1,12 +1,12 @@
-// Package term is HOTTY for a program that is not a full-screen Bubble Tea
-// program: a command that prints documents and exits, one that asks a
-// question, a chart that streams. A Term is the process's terminal: it
-// finds out whether the terminal is a HOTTY host, names surfaces so that
-// two runs never share one, writes commands, and reads what comes back.
+// Package hottyterm is HOTTY for a program that is not a full-screen Bubble
+// Tea program: a command that prints documents and exits, one that asks a
+// question, a chart that streams. A Term is the process's terminal: it finds
+// out whether the terminal is a HOTTY host, names surfaces so that two runs
+// never share one, writes commands, and reads what comes back.
 //
 // The order of use:
 //
-//	t, err := term.Open("mytool") // no terminal: write plain data instead
+//	t, err := hottyterm.Open("mytool") // no terminal: write plain data instead
 //	defer t.Close()
 //	if !t.Detect(ctx) {           // not a host: draw in cells
 //		...
@@ -30,7 +30,7 @@
 // exits, a program reads every reply its commands caused (Fence), and
 // leaves no surface that still reports events: it sends documents with
 // hotty.DocDetached (Print does), or detaches them (DetachAll).
-package term
+package hottyterm
 
 import (
 	"context"

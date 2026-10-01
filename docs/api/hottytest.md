@@ -15,7 +15,7 @@ Package hottytest is a HOTTY host that runs inside a test. The program under tes
 
 ```go
 h := hottytest.New(t)
-run(term.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
+run(hottyterm.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
 card := h.Surface("tool-card")
 card.TextOf("status")                         // what it shows
 h.Click("tool-card", "retry")                 // what the user does
@@ -371,7 +371,7 @@ Surfaces are the surfaces there are, in the order they were created.
 func (h *Host) TermSize() (cols, rows int)
 ```
 
-TermSize is the terminal's size (Size), as term.New takes it.
+TermSize is the terminal's size (Size), as hottyterm.New takes it.
 
 ### <a id="Host.Type"></a>func (*Host) Type
 

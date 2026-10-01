@@ -8,10 +8,10 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/neuroplastio/hotty-go v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/doc v0.0.0-00010101000000-000000000000
+	github.com/neuroplastio/hotty-go/hottydoc v0.0.0-00010101000000-000000000000
 	github.com/neuroplastio/hotty-go/hottytea v0.0.0-00010101000000-000000000000
+	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-00010101000000-000000000000
 	github.com/neuroplastio/hotty-go/hottytest v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/term v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -35,8 +35,8 @@ require (
 
 replace (
 	github.com/neuroplastio/hotty-go => ../
-	github.com/neuroplastio/hotty-go/doc => ../doc
+	github.com/neuroplastio/hotty-go/hottydoc => ../hottydoc
 	github.com/neuroplastio/hotty-go/hottytea => ../hottytea
+	github.com/neuroplastio/hotty-go/hottyterm => ../hottyterm
 	github.com/neuroplastio/hotty-go/hottytest => ../hottytest
-	github.com/neuroplastio/hotty-go/term => ../term
 )

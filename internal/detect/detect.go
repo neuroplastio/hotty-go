@@ -1,4 +1,4 @@
-// Package detect holds what term and hottytea agree on when they ask a
+// Package detect holds what hottyterm and hottytea agree on when they ask a
 // terminal whether it is a HOTTY host (SPEC §4): which reply answers the
 // query, and how long to wait for it.
 package detect

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/neuroplastio/hotty-go/chart"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 const chartName = "livechart-chart"
@@ -19,7 +19,7 @@ const chartName = "livechart-chart"
 func on(h *hottytest.Host, in io.Reader) (env, *strings.Builder) {
 	var errs strings.Builder
 	return env{stdin: in, stdout: h, stderr: &errs, tty: true,
-		open: func() (*term.Term, error) { return term.New(h, h, "livechart", h.TermSize, nil), nil }}, &errs
+		open: func() (*hottyterm.Term, error) { return hottyterm.New(h, h, "livechart", h.TermSize, nil), nil }}, &errs
 }
 
 // start runs livechart in the background; wait returns its exit status.
@@ -266,7 +266,7 @@ func TestTee(t *testing.T) {
 func TestNoTerminal(t *testing.T) {
 	var out, errs strings.Builder
 	e := env{stdin: strings.NewReader("1\n3\n"), stdout: &out, stderr: &errs,
-		open: func() (*term.Term, error) { return nil, term.ErrNoTerminal }}
+		open: func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }}
 	if code := run(context.Background(), nil, e); code != ok || out.String() != "1\n3\n" ||
 		errs.String() != "value: n=2 min=1 mean=2 max=3 last=3\n" {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
@@ -284,7 +284,7 @@ func TestNoNumbers(t *testing.T) {
 	}
 	var errs strings.Builder
 	e = env{stdin: strings.NewReader(""), stdout: io.Discard, stderr: &errs,
-		open: func() (*term.Term, error) { return nil, term.ErrNoTerminal }}
+		open: func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }}
 	if code := run(context.Background(), nil, e); code != noNumbers || !strings.Contains(errs.String(), "no numbers") {
 		t.Errorf("exit %d: %q", code, errs.String())
 	}

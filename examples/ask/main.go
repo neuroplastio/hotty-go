@@ -25,7 +25,7 @@ import (
 
 	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/form"
-	"github.com/neuroplastio/hotty-go/term"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 )
 
 // deploy is the form. form.Parse reads the same from JSON.
@@ -50,11 +50,11 @@ const (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	open := func() (*term.Term, error) { return term.Open("ask") }
+	open := func() (*hottyterm.Term, error) { return hottyterm.Open("ask") }
 	os.Exit(run(ctx, os.Stdout, os.Stderr, open))
 }
 
-func run(ctx context.Context, stdout, stderr io.Writer, open func() (*term.Term, error)) int {
+func run(ctx context.Context, stdout, stderr io.Writer, open func() (*hottyterm.Term, error)) int {
 	// The questions go to the terminal whatever stdout is: a script reads
 	// stdout, the person reads the terminal.
 	t, err := open()
@@ -87,13 +87,13 @@ func run(ctx context.Context, stdout, stderr io.Writer, open func() (*term.Term,
 
 // input is the terminal's events, read one at a time.
 type input struct {
-	evs  <-chan term.Event
+	evs  <-chan hottyterm.Event
 	done <-chan struct{}
 }
 
 // next is the next event; false when the input ends or the run is
 // cancelled.
-func (in *input) next() (term.Event, bool) {
+func (in *input) next() (hottyterm.Event, bool) {
 	select {
 	case ev, ok := <-in.evs:
 		return ev, ok
@@ -104,13 +104,13 @@ func (in *input) next() (term.Event, bool) {
 
 // quits reports the keys that cancel: Escape and Ctrl-C. In raw mode
 // Ctrl-C is a key, not a signal.
-func quits(ev term.Event) bool {
+func quits(ev hottyterm.Event) bool {
 	k, ok := ev.(uv.KeyPressEvent)
 	return ok && (k.String() == "esc" || k.String() == "ctrl+c")
 }
 
 // askSurface asks with the form as a surface.
-func askSurface(ctx context.Context, t *term.Term, in *input) *form.Answers {
+func askSurface(ctx context.Context, t *hottyterm.Term, in *input) *form.Answers {
 	_ = t.LineStart(ctx)
 	name := t.Surface("form")
 	cols := min(64, t.Size().Cols)
@@ -126,7 +126,7 @@ func askSurface(ctx context.Context, t *term.Term, in *input) *form.Answers {
 		if !more || quits(ev) {
 			break
 		}
-		m, isMsg := ev.(term.Message)
+		m, isMsg := ev.(hottyterm.Message)
 		if !isMsg {
 			continue // other keys belong to the form's controls
 		}
@@ -146,7 +146,7 @@ func askSurface(ctx context.Context, t *term.Term, in *input) *form.Answers {
 	// The form gives way to what was decided, detached: replacing a
 	// document keeps its placement (SPEC §5.1).
 	_ = t.Send(hotty.DocDetached(name, summary(answers)))
-	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), term.FenceTimeout)
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hottyterm.FenceTimeout)
 	defer cancel()
 	_, _ = t.Fence(fctx)
 	return answers
@@ -173,7 +173,7 @@ func summary(a *form.Answers) string {
 
 // askCells asks a question a line, on a terminal that is not a host. It
 // checks each answer as the form would (Field.Check), and asks again.
-func askCells(t *term.Term, in *input) *form.Answers {
+func askCells(t *hottyterm.Term, in *input) *form.Answers {
 	fields := map[string]string{}
 	for _, f := range deploy.Fields {
 		for {
@@ -224,7 +224,7 @@ func askCells(t *term.Term, in *input) *form.Answers {
 
 // readLine reads a line of keys, echoing them: Backspace deletes, Enter
 // ends it. false when the user cancels or the input ends.
-func readLine(t *term.Term, in *input) (string, bool) {
+func readLine(t *hottyterm.Term, in *input) (string, bool) {
 	var line []rune
 	for {
 		ev, more := in.next()

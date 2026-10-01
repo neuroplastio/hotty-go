@@ -13,15 +13,15 @@ import (
 	"os"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/term"
+	"github.com/neuroplastio/hotty-go/hottyterm"
 )
 
 func main() {
-	open := func() (*term.Term, error) { return term.Open("hello") }
+	open := func() (*hottyterm.Term, error) { return hottyterm.Open("hello") }
 	os.Exit(run(context.Background(), os.Stdout, os.Stderr, open))
 }
 
-func run(ctx context.Context, stdout, stderr io.Writer, open func() (*term.Term, error)) int {
+func run(ctx context.Context, stdout, stderr io.Writer, open func() (*hottyterm.Term, error)) int {
 	t, err := open()
 	if err != nil { // no terminal at all: a pipe, a cron job
 		fmt.Fprintln(stdout, "Hello.")
