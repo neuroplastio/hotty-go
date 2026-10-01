@@ -1,16 +1,27 @@
-// Package host is HOTTY for a Bubble Tea program: finding out whether the
-// terminal is a host, keeping the program's surfaces on screen, and turning
-// what comes back on the input into messages.
+// Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds
+// out whether the terminal is a HOTTY host, keeps the program's surfaces
+// on screen as its view changes, and turns what the host sends into
+// messages.
 //
-// A view declares the surfaces it wants each time the program's state
-// changes (Layout); the host sends only what changed: a document once, a
-// placement when a surface moves, a delete when it goes. Patches go out with
-// Send. Everything leaves through Flush, as one tea.Raw, so HOTTY commands
-// stay in order with Bubble Tea's frames.
+// A Session is the program's side. Its life in a program:
 //
-// A host may lose placements to what the renderer writes (watch.go), and a
-// document with them: then the host places every surface again, and sends a
-// document again when a placement reports it gone.
+//   - Init returns s.Detect(); Update hands every message to s.Update
+//     first, which answers ReadyMsg once it knows (Native or Text).
+//   - The view says which surfaces it wants where, every time (Layout).
+//     The Session sends only what changed: a document once, a placement
+//     when a surface moves, a hide or a delete when it goes.
+//   - Patches go out with Send. Everything leaves through Flush, as one
+//     tea.Raw, so HOTTY commands stay in order with Bubble Tea's frames.
+//   - What the user does in a surface arrives as EventMsg.
+//
+// Bubble Tea's renderer erases the screen and scrolls regions on its own,
+// and a host may drop placements with them. The Session reads the output
+// on its way out (Watch, WatchFile) and asks for a new layout when that
+// happens (RelayoutMsg), and sends a document again when a placement
+// reports it gone.
+//
+// In a terminal that is not a host, Mode is Text and the Session sends
+// nothing: the program draws everything in cells.
 package hottytea
 
 import (
@@ -21,9 +32,10 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/internal/detect"
 )
 
-// Counts are what the host has sent: documents, placements, hides and
+// Counts are what the Session has sent: documents, placements, hides and
 // deletes, and relayouts after the renderer erased or scrolled the screen.
 type Counts struct{ Docs, Places, Hides, Deletes, Relayouts int }
 
@@ -50,10 +62,11 @@ type ReadyMsg struct {
 type EventMsg struct{ hotty.Event }
 
 // ErrorMsg is an error the host reported for a command.
-type ErrorMsg struct{ hotty.ReplyMsg }
+type ErrorMsg struct{ hotty.Reply }
 
 // RelayoutMsg asks the program to lay its surfaces out again (Layout): the
 // screen was erased or scrolled under them, or a document went missing.
+// Render a frame; the view's next Layout puts the surfaces back.
 type RelayoutMsg struct{}
 
 // PongMsg answers a Ping: the terminal has taken everything written before
@@ -95,6 +108,10 @@ type Surface struct {
 	// (SPEC §5.2). Surfaces at the same Z stack in the order they were
 	// first sent, the later above.
 	Z int
+	// Press asks for an EventMsg of kind press wherever the user presses
+	// in the surface, on text and empty space too: a program that moves
+	// its selection to the card pressed.
+	Press bool
 	// Doc returns the document. It is called only when the document must be
 	// sent: the first time, and again after the surface was deleted.
 	Doc func() string
@@ -106,10 +123,12 @@ type placement struct {
 	cols, rows int  // the whole surface
 	win        hotty.Window
 	z          int
+	press      bool
 }
 
-// Host is the program's side of HOTTY.
-type Host struct {
+// Session is a Bubble Tea program's side of HOTTY (SPEC §2: a program's
+// connection to a host).
+type Session struct {
 	Mode Mode
 	Caps hotty.Caps
 
@@ -132,39 +151,39 @@ type Host struct {
 	Count Counts
 }
 
-// New returns a host that has not been detected yet.
-func New() *Host {
-	return &Host{placed: map[string]placement{}, hasDoc: map[string]bool{}, keep: map[string]bool{}, seen: map[string]int{}}
+// New returns a Session that has not detected the terminal yet.
+func New() *Session {
+	return &Session{placed: map[string]placement{}, hasDoc: map[string]bool{}, keep: map[string]bool{}, seen: map[string]int{}}
 }
 
 // Detect asks the terminal whether it is a host (SPEC §4).
-func (h *Host) Detect() tea.Cmd {
+func (h *Session) Detect() tea.Cmd {
 	return tea.Batch(
-		tea.Raw(hotty.Query(1)),
+		tea.Raw(hotty.Query(detect.N)),
 		// A terminal that answers neither the query nor DA1 is not a host.
-		tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg { return detectTimeoutMsg{} }),
+		tea.Tick(detect.Timeout, func(time.Time) tea.Msg { return detectTimeoutMsg{} }),
 	)
 }
 
 // Update takes the program's messages first. What is HOTTY's comes back as
 // ReadyMsg, EventMsg, ErrorMsg or RelayoutMsg; other messages come back as
 // they are. A nil message was consumed.
-func (h *Host) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
+func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 	switch m := msg.(type) {
 	case uv.UnknownOscEvent:
-		hm, complete, isHotty := h.dec.Feed(string(m))
-		if !isHotty {
+		hm, res := h.dec.Feed(string(m))
+		switch res {
+		case hotty.NotHotty:
 			return msg, nil
-		}
-		if !complete {
+		case hotty.Partial, hotty.Invalid:
 			return nil, nil
 		}
 		if r, ok := hm.Reply(); ok {
-			if caps, ok := r.Caps(); ok && h.Mode == Detecting {
+			if caps, ok := detect.Answer(r, detect.N); ok && h.Mode == Detecting {
 				h.Mode, h.Caps = Native, caps
 				return ReadyMsg{Mode: Native, Caps: caps}, nil
 			}
-			if !r.OK && r.Re == "doc" && r.Code == "EQUOTA" && h.hasDoc[r.Surface] {
+			if !r.OK && r.Re == "doc" && r.Code == hotty.EQUOTA && h.hasDoc[r.Surface] {
 				// Over the terminal's limit: it holds fewer surfaces than it
 				// has. Keep below that from now on, and lay out again.
 				h.learned = max(1, len(h.hasDoc)-1)
@@ -172,7 +191,7 @@ func (h *Host) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 				delete(h.placed, r.Surface)
 				return RelayoutMsg{}, nil
 			}
-			if !r.OK && r.Re == "place" && r.Code == "ENOENT" && h.hasDoc[r.Surface] {
+			if !r.OK && r.Re == "place" && r.Code == hotty.ENOENT && h.hasDoc[r.Surface] {
 				// The host dropped the document with its placement: send both.
 				delete(h.hasDoc, r.Surface)
 				delete(h.placed, r.Surface)
@@ -193,7 +212,7 @@ func (h *Host) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 		// anyway, in case this DA1 answers someone else's request.
 		if h.Mode == Detecting && !h.sawDA1 {
 			h.sawDA1 = true
-			return nil, tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return noHostMsg{} })
+			return nil, tea.Tick(detect.AfterDA1, func(time.Time) tea.Msg { return noHostMsg{} })
 		}
 		if h.Mode != Detecting && h.pinging {
 			h.pinging = false
@@ -237,7 +256,7 @@ func (h *Host) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 // answer, a PongMsg, says it has taken that frame and everything before it.
 // One at a time, for measuring. Without a frame within 100 ms the ping goes
 // on its own.
-func (h *Host) Ping() tea.Cmd {
+func (h *Session) Ping() tea.Cmd {
 	h.watch.mu.Lock()
 	h.watch.ping = []byte("\x1b[c")
 	h.watch.pingWant = time.Now()
@@ -252,7 +271,7 @@ func (h *Host) Ping() tea.Cmd {
 // document and a placement, a moved or scrolled one is placed again (only
 // the window inside its Clip), and one no longer wanted is hidden if it is
 // kept, or else deleted.
-func (h *Host) Layout(want []Surface) {
+func (h *Session) Layout(want []Surface) {
 	if h.Mode != Native {
 		return
 	}
@@ -286,9 +305,10 @@ func (h *Host) Layout(want []Surface) {
 			delete(h.placed, s.Name)
 		}
 		p := placement{at: at, cols: s.Rect.W, rows: s.Rect.H,
-			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z}
+			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press}
 		if old, ok := h.placed[s.Name]; !ok || old != p {
-			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y, p.cols, p.rows, p.win, p.z))
+			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y,
+				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press}))
 			h.Count.Places++
 			h.placed[s.Name] = p
 		}
@@ -315,7 +335,7 @@ const Surfaces = 48
 
 // limit is the most surfaces to have at once: the terminal's limit
 // (SPEC §13), a lower one learned from an EQUOTA, or Surfaces.
-func (h *Host) limit() int {
+func (h *Session) limit() int {
 	n := Surfaces
 	if l := h.Caps.Limits["surfaces"]; l > 0 {
 		n = min(n, l)
@@ -329,7 +349,7 @@ func (h *Host) limit() int {
 // makeRoom deletes kept surfaces, the ones seen longest ago first, until one
 // more fits the limit. Hidden surfaces count toward a terminal's limits; a
 // surface on screen, or wanted now, is never taken.
-func (h *Host) makeRoom(wanted map[string]bool) {
+func (h *Session) makeRoom(wanted map[string]bool) {
 	for len(h.hasDoc) >= h.limit() {
 		oldest, at := "", h.layouts+1
 		for name := range h.hasDoc {
@@ -351,7 +371,7 @@ func (h *Host) makeRoom(wanted map[string]bool) {
 }
 
 // Delete deletes a surface, kept or not: one that will not come back.
-func (h *Host) Delete(name string) {
+func (h *Session) Delete(name string) {
 	if h.hasDoc[name] {
 		h.Send(hotty.Del(name))
 		h.Count.Deletes++
@@ -364,18 +384,18 @@ func (h *Host) Delete(name string) {
 
 // Shown reports whether a surface's document is with the host, on screen or
 // hidden, so patches to it make sense (a hidden one stays current).
-func (h *Host) Shown(name string) bool { return h.hasDoc[name] }
+func (h *Session) Shown(name string) bool { return h.hasDoc[name] }
 
 // Send queues commands (patches, focus) for the next Flush. It does nothing
 // when the terminal is not a host.
-func (h *Host) Send(cmds ...string) {
+func (h *Session) Send(cmds ...string) {
 	if h.Mode == Native {
 		h.out = append(h.out, cmds...)
 	}
 }
 
 // Flush writes the queued commands, as one tea.Raw.
-func (h *Host) Flush() tea.Cmd {
+func (h *Session) Flush() tea.Cmd {
 	if len(h.out) == 0 {
 		return nil
 	}

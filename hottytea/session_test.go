@@ -10,14 +10,14 @@ import (
 	"github.com/neuroplastio/hotty-go"
 )
 
-// native is a host that has found a HOTTY terminal.
-func native() *Host {
+// native is a Session that has found a HOTTY terminal.
+func native() *Session {
 	h := New()
 	h.Mode = Native
 	return h
 }
 
-func flushed(h *Host) string {
+func flushed(h *Session) string {
 	s := strings.Join(h.out, "")
 	h.out = h.out[:0]
 	return s

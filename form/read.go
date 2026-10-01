@@ -184,7 +184,7 @@ func (s *Spec) NewState() *State {
 // Apply takes a change event from the form's surface, and reports whether
 // it changed a field.
 func (st *State) Apply(e hotty.Event) bool {
-	if e.Kind != "change" {
+	if e.Kind != hotty.EventChange {
 		return false
 	}
 	var d struct {

@@ -1,19 +1,46 @@
-// Package hotty speaks HOTTY (HTML Over The TTY, github.com/neuroplastio/hotty)
-// from a Go program.
+// Package hotty speaks HOTTY, HTML Over The TTY
+// (https://github.com/neuroplastio/hotty), from a Go program.
 //
-// It does no I/O. Commands are strings the program writes to its terminal
-// output, like any escape sequence; in a Bubble Tea program, through tea.Raw,
-// so they stay in order with its frames. Replies and events come back as OSC
-// sequences on the program's input (SPEC §3.6, §9); Decoder turns them into
-// messages.
+// A HOTTY host is a terminal that shows surfaces: small HTML documents
+// placed on rectangles of cells. A program sends documents, placements and
+// patches as escape sequences in its ordinary output, and hears replies and
+// the user's events on its input.
+//
+// This package is the wire, and does no I/O:
+//
+//   - The command functions (Doc, Place, Patch, …) return escape sequences
+//     as strings. Write them to the terminal like any other output; in a
+//     Bubble Tea program, through tea.Raw, so they stay in order with its
+//     frames.
+//   - A Decoder turns the OSC sequences the program reads back into
+//     Messages: replies (Message.Reply) and events (Message.Event).
+//
+// The packages beside it do the I/O: term for a command that prints and
+// exits or asks a question, hottytea for a full-screen Bubble Tea program,
+// and hottytest for testing either against a host that runs in the test.
+//
+// # Replies
+//
+// Every command asks for the replies that are usually wanted: Doc and Place
+// are answered on error (EQUOTA, ENOENT), everything else never. The
+// options change that: Q sets the quiet level, and N numbers a command and
+// asks for its reply. Replies arrive on the program's input, mixed with
+// keys. A program that exits leaves unread replies to whatever reads the
+// terminal next, a shell for instance, which reads them as typing.
+//
+// # Names and ids
+//
+// A surface name is 1 to 64 of A–Z, a–z, 0–9, '_' and '-' (SurfaceName
+// makes one). Other control values, such as element ids, may be any
+// printable ASCII but ':', ';' and '='. Encode replaces each character
+// outside those with '_', as the specification has hosts do (SPEC §3.2),
+// so a value can never end a command early or add a key to it.
 package hotty
 
 import (
 	"bytes"
 	"compress/zlib"
 	"encoding/base64"
-	"fmt"
-	"io"
 	"strconv"
 	"strings"
 )
@@ -23,6 +50,13 @@ const (
 	Number = "7279"
 	// Chunk is the most payload bytes one OSC carries (SPEC §3.4).
 	Chunk = 4096
+	// MaxSize is the most columns or rows a surface has (SPEC §5.2).
+	MaxSize = 1000
+	// MaxName is the longest a surface name is (SPEC §3.5).
+	MaxName = 64
+	// Version is the protocol version this package implements, as the
+	// capabilities report it (SPEC §4).
+	Version = "0.1"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
@@ -30,11 +64,12 @@ const (
 	compressFrom = 256
 )
 
-// Quiet says which replies the host sends (SPEC §3.5).
+// Quiet says which replies the host sends for a command (SPEC §3.5).
 type Quiet int
 
+// The quiet levels.
 const (
-	Reply        Quiet = 0 // always reply
+	ReplyAlways  Quiet = 0 // reply whatever the outcome
 	ReplyOnError Quiet = 1 // reply only on error
 	NoReply      Quiet = 2 // never reply
 )
@@ -48,36 +83,92 @@ type Control []KV
 // With returns the control with a key added.
 func (c Control) With(k, v string) Control { return append(c, KV{k, v}) }
 
-// Encode returns one command: the control and the payload, compressed when that
-// makes it smaller, base64-encoded, and split into chunks of at most Chunk
-// bytes (SPEC §3.3, §3.4).
+// Get returns a key's value, and whether the control has the key.
+func (c Control) Get(k string) (string, bool) {
+	for _, kv := range c {
+		if kv.K == k {
+			return kv.V, true
+		}
+	}
+	return "", false
+}
+
+// set changes a key's value, or adds the key.
+func (c *Control) set(k, v string) {
+	for i := range *c {
+		if (*c)[i].K == k {
+			(*c)[i].V = v
+			return
+		}
+	}
+	*c = append(*c, KV{k, v})
+}
+
+// Option changes the reply a command asks for.
+type Option func(*Control)
+
+// Q sets the command's quiet level.
+func Q(q Quiet) Option {
+	return func(c *Control) { c.set("q", strconv.Itoa(int(q))) }
+}
+
+// N numbers the command and asks for its reply whatever the outcome
+// (ReplyAlways): the reply echoes n, so the program can tell which command
+// it answers. Q after N asks for less.
+func N(n int) Option {
+	return func(c *Control) {
+		c.set("n", strconv.Itoa(n))
+		c.set("q", strconv.Itoa(int(ReplyAlways)))
+	}
+}
+
+// command encodes a command with its default quiet level and the options.
+func command(ctl Control, payload []byte, def Quiet, opts []Option) string {
+	ctl.set("q", strconv.Itoa(int(def)))
+	for _, o := range opts {
+		o(&ctl)
+	}
+	return Encode(ctl, payload)
+}
+
+// Encode returns one command: the control and the payload, compressed when
+// that makes it smaller, base64-encoded, and split into chunks of at most
+// Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; in values, each
+// character that the control's grammar does not allow becomes '_'
+// (SPEC §3.2).
 func Encode(ctl Control, payload []byte) string {
 	body := payload
+	var zipped bool
 	if len(payload) >= compressFrom {
 		var z bytes.Buffer
 		w, _ := zlib.NewWriterLevel(&z, zlib.BestSpeed)
 		_, _ = w.Write(payload)
 		_ = w.Close()
 		if z.Len() < len(payload) {
-			ctl = ctl.With("o", "z")
-			body = z.Bytes()
+			zipped, body = true, z.Bytes()
 		}
 	}
 	b64 := base64.StdEncoding.EncodeToString(body)
 
+	var control strings.Builder
 	var quiet string
-	parts := make([]string, 0, len(ctl))
-	for _, kv := range ctl {
-		parts = append(parts, kv.K+"="+kv.V)
+	for i, kv := range ctl {
+		if i > 0 {
+			control.WriteByte(':')
+		}
+		control.WriteString(kv.K + "=" + cleanValue(kv.V))
 		if kv.K == "q" {
-			quiet = kv.V
+			quiet = cleanValue(kv.V)
 		}
 	}
-	control := strings.Join(parts, ":")
+	if zipped {
+		control.WriteString(":o=z")
+	}
 
 	var b strings.Builder
 	if len(b64) <= Chunk {
-		b.WriteString(prefix + control)
+		b.WriteString(prefix)
+		b.WriteString(control.String())
 		if b64 != "" {
 			b.WriteString(";" + b64)
 		}
@@ -86,13 +177,13 @@ func Encode(ctl Control, payload []byte) string {
 	}
 	for i := 0; i < len(b64); i += Chunk {
 		end := min(i+Chunk, len(b64))
+		if i == 0 {
+			b.WriteString(prefix + control.String() + ":m=1;" + b64[i:end] + st)
+			continue
+		}
 		more := "1"
 		if end == len(b64) {
 			more = "0"
-		}
-		if i == 0 {
-			b.WriteString(prefix + control + ":m=1;" + b64[i:end] + st)
-			continue
 		}
 		b.WriteString(prefix + "m=" + more)
 		if quiet != "" {
@@ -103,260 +194,74 @@ func Encode(ctl Control, payload []byte) string {
 	return b.String()
 }
 
-func q(v Quiet) string { return strconv.Itoa(int(v)) }
-
-// --- commands (SPEC §4–§10) ---------------------------------------------------
-
-// Query asks whether the terminal is a HOTTY host, fenced by Primary Device
-// Attributes (SPEC §4): a host replies to the query before the DA1 answer
-// every terminal sends.
-func Query(n int) string {
-	return Encode(Control{{"a", "q"}, {"n", strconv.Itoa(n)}}, nil) + "\x1b[c"
+// valueByte reports whether a control value may hold c: printable ASCII
+// but ':', ';' and '=' (SPEC §3.2).
+func valueByte(c byte) bool {
+	return c >= 0x20 && c <= 0x7e && c != ':' && c != ';' && c != '='
 }
 
-// Doc creates a surface, or replaces its document. Errors come back
-// (EQUOTA: the terminal holds no more surfaces). The surface is the
-// program's, even one it had detached: it reports what the user does in it,
-// and takes the keyboard on the program's behalf (SPEC §5.5).
-func Doc(surface, html string) string {
-	return Encode(Control{{"a", "doc"}, {"s", surface}, {"q", q(ReplyOnError)}}, []byte(html))
-}
-
-// DocDetached is Doc for a document the program only shows: the surface is
-// created detached, or its document replaced and the surface detached, in
-// the one command (d=1, SPEC §5.5). It reports nothing, never takes the
-// keyboard, and its controls act disabled; hover, selection, <details> and
-// hyperlinks still work. It is what a tool prints among its output, which
-// outlives it: whatever reads the terminal after it, a shell, would read
-// the surface's events as typing. Patches, placements, Hide and Del work on
-// it as before. A host older than §5.5 ignores d=1 and makes the surface
-// the program's.
-func DocDetached(surface, html string) string {
-	return Encode(Control{{"a", "doc"}, {"s", surface}, {"d", "1"}, {"q", q(ReplyOnError)}}, []byte(html))
-}
-
-// Place places a surface at the cursor, over cols columns and rows rows (0
-// rows: auto). The host moves the cursor below it unless keepCursor.
-func Place(surface string, cols, rows int, keepCursor bool, quiet Quiet) string {
-	ctl := Control{{"a", "place"}, {"s", surface}, {"c", strconv.Itoa(cols)}}
-	if rows > 0 {
-		ctl = ctl.With("r", strconv.Itoa(rows))
-	} else {
-		ctl = ctl.With("r", "auto")
-	}
-	if keepCursor {
-		ctl = ctl.With("C", "1")
-	}
-	return Encode(ctl.With("q", q(quiet)), nil)
-}
-
-// Window is the part of a surface a placement shows, in cells from its
-// top-left corner (SPEC §5.2). The zero Window shows all of it.
-type Window struct{ X, Y, W, H int }
-
-// PlaceAt places a surface cols×rows cells, showing win of it with the
-// window's top-left corner at cell (x, y), counted from 0, above or below
-// the placements it overlaps by z (SPEC §5.2: greater above, 0 the usual),
-// and leaves the cursor where it was: the way a full-screen program lays
-// surfaces out without disturbing its own drawing. Errors come back
-// (ENOENT: the host no longer has the document).
-func PlaceAt(surface string, x, y, cols, rows int, win Window, z int) string {
-	ctl := Control{{"a", "place"}, {"s", surface}, {"c", strconv.Itoa(cols)}, {"r", strconv.Itoa(rows)}}
-	if win != (Window{}) && win != (Window{0, 0, cols, rows}) {
-		ctl = append(ctl, KV{"x", strconv.Itoa(win.X)}, KV{"y", strconv.Itoa(win.Y)},
-			KV{"w", strconv.Itoa(win.W)}, KV{"h", strconv.Itoa(win.H)})
-	}
-	if z != 0 {
-		ctl = ctl.With("z", strconv.Itoa(z))
-	}
-	return "\x1b7" + fmt.Sprintf("\x1b[%d;%dH", y+1, x+1) +
-		Encode(ctl.With("C", "1").With("q", q(ReplyOnError)), nil) + "\x1b8"
-}
-
-// Hide removes a surface's placement and keeps its document, to place it
-// again without sending it (SPEC §5.4).
-func Hide(surface string) string {
-	return Encode(Control{{"a", "hide"}, {"s", surface}, {"q", q(NoReply)}}, nil)
-}
-
-// Op is a patch operation (SPEC §6.1).
-type Op string
-
-const (
-	Morph   Op = "morph"
-	Inner   Op = "inner"
-	Replace Op = "replace"
-	Append  Op = "append"
-	Prepend Op = "prepend"
-	Before  Op = "before"
-	After   Op = "after"
-	Remove  Op = "remove"
-	Attr    Op = "attr"
-	Unattr  Op = "unattr"
-	Text    Op = "text"
-	Var     Op = "var"
-)
-
-// Patch changes one surface's document. target is an element id ("" for a
-// morph by top-level ids); key names the attribute or custom property.
-func Patch(surface string, op Op, target, key string, payload []byte) string {
-	ctl := Control{{"a", "patch"}, {"s", surface}, {"op", string(op)}}
-	if target != "" {
-		ctl = ctl.With("t", target)
-	}
-	if key != "" {
-		ctl = ctl.With("k", key)
-	}
-	return Encode(ctl.With("q", q(NoReply)), payload)
-}
-
-// SetText replaces an element's children with one text node.
-func SetText(surface, target, text string) string {
-	return Patch(surface, Text, target, "", []byte(text))
-}
-
-// SetVar sets a custom property (--name) on an element: the cheap way to
-// move a bar or a needle every frame.
-func SetVar(surface, target, name, value string) string {
-	return Patch(surface, Var, target, name, []byte(value))
-}
-
-// SetAttr sets an attribute on an element.
-func SetAttr(surface, target, name, value string) string {
-	return Patch(surface, Attr, target, name, []byte(value))
-}
-
-// MorphTo morphs an element (or, with no target, the document's elements by
-// id) into html, keeping what the user is doing in what stays.
-func MorphTo(surface, target, html string) string {
-	return Patch(surface, Morph, target, "", []byte(html))
-}
-
-// Res stores a resource that documents refer to as cid:<id> (SPEC §7).
-func Res(id, mime string, data []byte) string {
-	return Encode(Control{{"a", "res"}, {"id", id}, {"type", mime}, {"q", q(NoReply)}}, data)
-}
-
-// Del deletes a surface and its placement.
-func Del(surface string) string {
-	return Encode(Control{{"a", "del"}, {"s", surface}, {"q", q(NoReply)}}, nil)
-}
-
-// DelAll deletes every surface.
-func DelAll() string { return Encode(Control{{"a", "del"}, {"q", q(NoReply)}}, nil) }
-
-// Detach gives a surface up (SPEC §5.5): it stays on the screen as text
-// does, placed, patched and deleted as before, but sends no more events and
-// never has the keyboard; if it has it, the keyboard goes back to the
-// terminal with no blur. A program that leaves surfaces on the screen when
-// it exits detaches them first, unless it sent them with DocDetached. The
-// next Doc makes the surface the program's again. It is never answered: a
-// host older than §5.5 refuses it (EINVAL), and a reply nobody reads would
-// reach the shell as typing.
-func Detach(surface string) string {
-	return Encode(Control{{"a", "detach"}, {"s", surface}, {"q", q(NoReply)}}, nil)
-}
-
-// Focus gives a surface the keyboard, at an element if target is not empty.
-func Focus(surface, target string) string {
-	ctl := Control{{"a", "focus"}, {"s", surface}}
-	if target != "" {
-		ctl = ctl.With("t", target)
-	}
-	return Encode(ctl.With("q", q(NoReply)), nil)
-}
-
-// Blur takes the keyboard back from a surface.
-func Blur(surface string) string {
-	return Encode(Control{{"a", "blur"}, {"s", surface}, {"q", q(NoReply)}}, nil)
-}
-
-// Sync wraps commands in synchronized output (SPEC §6.3): the host shows all
-// of them or none.
-func Sync(cmds ...string) string {
-	return "\x1b[?2026h" + strings.Join(cmds, "") + "\x1b[?2026l"
-}
-
-// --- receiving ----------------------------------------------------------------
-
-// Message is one reply or event from the host.
-type Message struct {
-	Control map[string]string
-	Payload []byte
-}
-
-// Get returns a control key's value.
-func (m Message) Get(k string) string { return m.Control[k] }
-
-// Decoder turns the OSC sequences a program reads into messages, joining
-// chunked ones (SPEC §3.4).
-type Decoder struct {
-	pending *Message
-	body    strings.Builder
-}
-
-// Feed takes one complete OSC sequence, as a terminal-input parser delivers
-// it (ESC ] … ST or BEL). It reports whether seq was a HOTTY sequence, and
-// returns a message when one is complete.
-func (d *Decoder) Feed(seq string) (m Message, complete, isHotty bool) {
-	body, ok := strings.CutPrefix(seq, prefix)
-	if !ok {
-		return Message{}, false, false
-	}
-	body = strings.TrimSuffix(strings.TrimSuffix(body, st), "\x07")
-	ctlPart, payload, _ := strings.Cut(body, ";")
-	ctl := map[string]string{}
-	for _, kv := range strings.Split(ctlPart, ":") {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			ctl[k] = v
+// cleanValue replaces each character a control value may not hold with
+// '_', one for each character, not each byte.
+func cleanValue(v string) string {
+	clean := true
+	for i := 0; i < len(v); i++ {
+		if !valueByte(v[i]) {
+			clean = false
+			break
 		}
 	}
-	more := ctl["m"]
-	if d.pending != nil {
-		if len(ctl) > 2 || (len(ctl) == 2 && ctl["q"] == "") {
-			// Another message before the last chunk aborts the pending one.
-			d.pending, d.body = nil, strings.Builder{}
+	if clean {
+		return v
+	}
+	var b strings.Builder
+	for _, r := range v {
+		if r < 0x80 && valueByte(byte(r)) {
+			b.WriteRune(r)
 		} else {
-			d.body.WriteString(payload)
-			if more == "1" {
-				return Message{}, false, true
-			}
-			m := *d.pending
-			m.Payload = decode(d.body.String(), m.Control["o"])
-			d.pending, d.body = nil, strings.Builder{}
-			return m, true, true
+			b.WriteByte('_')
 		}
 	}
-	delete(ctl, "m")
-	if more == "1" {
-		d.pending = &Message{Control: ctl}
-		d.body.WriteString(payload)
-		return Message{}, false, true
-	}
-	return Message{Control: ctl, Payload: decode(payload, ctl["o"])}, true, true
+	return b.String()
 }
 
-func decode(b64, o string) []byte {
-	b64 = strings.Map(func(r rune) rune {
-		if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
-			return -1
-		}
-		return r
-	}, b64)
-	b, err := base64.StdEncoding.DecodeString(b64 + strings.Repeat("=", (4-len(b64)%4)%4))
-	if err != nil {
-		return nil
+// nameByte reports whether a surface name may hold c (SPEC §3.5).
+func nameByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-'
+}
+
+// ValidName reports whether s is a surface name a host accepts: 1 to 64 of
+// A–Z, a–z, 0–9, '_' and '-' (SPEC §3.5).
+func ValidName(s string) bool {
+	if len(s) == 0 || len(s) > MaxName {
+		return false
 	}
-	if o == "z" {
-		r, err := zlib.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return nil
+	for i := 0; i < len(s); i++ {
+		if !nameByte(s[i]) {
+			return false
 		}
-		out, err := io.ReadAll(r)
-		if err != nil {
-			return nil
-		}
-		return out
 	}
-	return b
+	return true
+}
+
+// SurfaceName makes s a valid surface name: each character a name may not
+// hold becomes '_', and the name is cut to 64 bytes. An empty s is "_".
+func SurfaceName(s string) string {
+	if ValidName(s) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len() == MaxName {
+			break
+		}
+		if r < 0x80 && nameByte(byte(r)) {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "_"
+	}
+	return b.String()
 }

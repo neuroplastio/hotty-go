@@ -173,8 +173,8 @@ func decode(t *testing.T, cmds []string) []hotty.Message {
 	var out []hotty.Message
 	var d hotty.Decoder
 	for _, c := range cmds {
-		m, complete, ok := d.Feed(c)
-		if !ok || !complete {
+		m, r := d.Feed(c)
+		if r != hotty.Complete {
 			t.Fatalf("not one command: %q", c)
 		}
 		out = append(out, m)

@@ -16,7 +16,7 @@ import (
 // region (DECSTBM with SU, SD, IL, DL, RI) moves or clips them. The renderer
 // does both on its own: a full repaint after a resize or once it learns a
 // terminal mode, a region scroll to move lines cheaply. The program never sees
-// it happen, so the host reads the output on its way out, and after such a
+// it happen, so the Session reads the output on its way out, and after such a
 // frame places every surface again.
 
 // watcher scans the output for those sequences. It keeps its parser state
@@ -31,7 +31,7 @@ type watcher struct {
 	send    func(tea.Msg)
 	pending bool
 
-	// A ping waiting for the next frame (Host.Ping), and when the last one
+	// A ping waiting for the next frame (Session.Ping), and when the last one
 	// was written.
 	ping     []byte
 	pingWant time.Time
@@ -67,7 +67,7 @@ func (w *watcher) sendPing() {
 }
 
 // scan reports whether p erases or scrolls, and sends erasedMsg once until
-// the host has handled it.
+// the Session has handled it.
 func (w *watcher) scan(p []byte) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -130,27 +130,29 @@ func (w *watcher) handled() {
 	w.mu.Unlock()
 }
 
-// Watch has the host read what the program writes: w wraps a writer, File
-// a terminal's file. Attach the program before it runs.
-func (h *Host) Watch(out io.Writer) io.Writer {
+// Watch has the Session read what the program writes: give the writer it
+// returns to Bubble Tea (tea.WithOutput). Attach the program before it
+// runs.
+func (h *Session) Watch(out io.Writer) io.Writer {
 	return writer{out, &h.watch}
 }
 
 // WatchFile is Watch for a terminal: Bubble Tea still finds a terminal
 // there (term.File), so it sizes it and sets it to raw mode.
-func (h *Host) WatchFile(f *os.File) *File {
+func (h *Session) WatchFile(f *os.File) *File {
 	return &File{f: f, w: &h.watch}
 }
 
 // Written counts every byte written to the terminal: frames and HOTTY.
-func (h *Host) Written() int {
+func (h *Session) Written() int {
 	h.watch.mu.Lock()
 	defer h.watch.mu.Unlock()
 	return h.watch.written
 }
 
-// Attach gives the host the program to tell when the screen was erased.
-func (h *Host) Attach(send func(tea.Msg)) {
+// Attach gives the Session the program to tell when the screen was erased:
+// s.Attach(prog.Send).
+func (h *Session) Attach(send func(tea.Msg)) {
 	h.watch.mu.Lock()
 	h.watch.send = send
 	h.watch.mu.Unlock()
@@ -168,7 +170,7 @@ func (x writer) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// File is a terminal whose output the host reads.
+// File is a terminal whose output the Session reads.
 type File struct {
 	f *os.File
 	w *watcher
