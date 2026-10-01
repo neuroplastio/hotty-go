@@ -540,8 +540,9 @@ func TestClick(t *testing.T) {
 	if err := h.Click("c", "plain"); !errors.Is(err, ErrNoReport) {
 		t.Errorf("a click on plain text: %v", err)
 	}
+	// A link reports its href, and its id when it has one, as hosts do.
 	_ = h.Click("c", "rel")
-	expect(t, sent(h), "ev focus t=", `ev click t= {"href":"guide","url":"https://example.com/docs/guide"}`)
+	expect(t, sent(h), "ev focus t=", `ev click t=rel {"href":"guide","url":"https://example.com/docs/guide"}`)
 	_ = h.Click("c", "web")
 	expect(t, sent(h))
 	if o := h.Opened(); len(o) != 1 || o[0] != "https://neuroplast.io" {
@@ -556,7 +557,7 @@ func TestClick(t *testing.T) {
 
 	local := shown(t, "l", `<a id=top href="#top">top</a>`)
 	_ = local.Click("l", "top")
-	expect(t, sent(local), "ev focus t=", `ev click t= {"href":"#top"}`)
+	expect(t, sent(local), "ev focus t=", `ev click t=top {"href":"#top"}`)
 
 	// So does a click on another surface, on what takes no focus: the
 	// surface that had the keyboard hears blur.

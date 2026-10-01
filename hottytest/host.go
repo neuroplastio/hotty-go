@@ -871,11 +871,13 @@ func (h *Host) click(s *Surface, el *html.Node) error {
 	}
 	if rep.DataAtom == atom.A {
 		if href, ok := attr(rep, "href"); ok {
+			// The href is the handle, and the id too when there is one.
 			detail := map[string]string{"href": href}
 			if u := s.resolve(rep); u != "" {
 				detail["url"] = u
 			}
-			h.event(s, hotty.EventClick, "", detail)
+			id, _ := attr(rep, "id")
+			h.event(s, hotty.EventClick, id, detail)
 			return nil
 		}
 	}

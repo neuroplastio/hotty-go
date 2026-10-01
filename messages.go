@@ -24,8 +24,8 @@ type Event struct {
 	// Kind is one of the Event kinds, or one this package does not know.
 	Kind string
 	// Target is the id of the element that reported; empty for focus,
-	// blur and resize, for a link (its href is in the detail), and for a
-	// press on nothing with an id.
+	// blur and resize, for a link without one (its href is in the
+	// detail), and for a press on nothing with an id.
 	Target string
 	// Detail is the event's JSON detail, if any.
 	Detail json.RawMessage
