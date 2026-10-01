@@ -9,7 +9,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-demo/sdk/hotty"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // fake is a terminal on two pipes: what the program writes, and what the

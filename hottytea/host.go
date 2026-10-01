@@ -11,7 +11,7 @@
 // A host may lose placements to what the renderer writes (watch.go), and a
 // document with them: then the host places every surface again, and sends a
 // document again when a placement reports it gone.
-package host
+package hottytea
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-demo/sdk/hotty"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // Counts are what the host has sent: documents, placements, hides and

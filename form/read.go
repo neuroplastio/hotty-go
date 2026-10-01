@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/neuroplastio/hotty-demo/sdk/hotty"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // Answers are a submitted form's values, by field name, in the spec's order:

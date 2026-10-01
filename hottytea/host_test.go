@@ -1,4 +1,4 @@
-package host
+package hottytea
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-demo/sdk/hotty"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // native is a host that has found a HOTTY terminal.

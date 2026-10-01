@@ -30,7 +30,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-demo/sdk/hotty"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // Size is the terminal's size in cells.
