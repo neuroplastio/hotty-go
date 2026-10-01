@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: make check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('go.sum', 'mise.toml') }}
+          restore-keys: go-${{ runner.os }}-
+      - run: make check
+
+  vectors:
+    name: the conformance vectors are the spec's
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: neuroplastio/hotty
+          path: .hotty
+      - uses: jdx/mise-action@v2
+      - name: testdata/conformance/vectors.json is neuroplastio/hotty's
+        run: |
+          if ! cmp -s .hotty/conformance/vectors.json testdata/conformance/vectors.json; then
+            echo "testdata/conformance/vectors.json differs from neuroplastio/hotty's: run make vectors" >&2
+            exit 1
+          fi
+      - name: the wire decodes them
+        env:
+          HOTTY_DIR: ${{ github.workspace }}/.hotty
+        run: mise x -- go test -run 'TestVectorsAreCurrent|TestWireVectors' -v .
