@@ -339,6 +339,33 @@ func TestPlacementAndCursor(t *testing.T) {
 	}
 }
 
+// The cursor: where a program leaves it, and whether it is on show
+// (DECTCEM), for the shell that prints next.
+func TestCursor(t *testing.T) {
+	h := New(t, Size(10, 5))
+	at := func(col, row int, shown bool) {
+		t.Helper()
+		if c, r, s := h.Cursor(); c != col || r != row || s != shown {
+			t.Errorf("Cursor %d,%d shown %v; want %d,%d shown %v", c, r, s, col, row, shown)
+		}
+	}
+	at(0, 0, true)
+	send(h, "ab\r\ncd\x1b[?25l")
+	at(2, 1, false)
+	// At the end of a line, before the next rune wraps, it is on the last
+	// column.
+	send(h, "\r\n0123456789")
+	at(9, 2, false)
+	// The alternate screen has a cursor of its own; the main one's comes
+	// back with it.
+	send(h, "\x1b[?1049h\x1b[3;4H")
+	at(3, 2, false)
+	send(h, "\x1b[?1049l\x1b[?25h")
+	at(9, 2, true)
+	send(h, "\x1b[?25l\x1bc")
+	at(0, 0, true)
+}
+
 func TestSurfacesAndReset(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("b", "<p>b</p>"), hotty.Doc("a", "<p>a</p>"), hotty.Doc("b", "<p>B</p>"))

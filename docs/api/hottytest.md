@@ -47,6 +47,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) ClickLink(surface, href string) error`](#Host.ClickLink)
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
+  - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
   - [`func (h *Host) Errors() []string`](#Host.Errors)
   - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
@@ -227,6 +228,14 @@ func (h *Host) Commands() []hotty.Message
 ```
 
 Commands are the HOTTY messages the program sent, in order.
+
+### <a id="Host.Cursor"></a>func (*Host) Cursor
+
+```go
+func (h *Host) Cursor() (col, row int, shown bool)
+```
+
+Cursor is where the cursor is, and whether it is on show (DECTCEM: ESC \[ ?25 l hides it): where the program leaves it for what prints next. row is a line of Screen, as a placement's (Surface.At).
 
 ### <a id="Host.Emit"></a>func (*Host) Emit
 

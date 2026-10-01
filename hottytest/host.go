@@ -157,6 +157,7 @@ type Host struct {
 	output  strings.Builder
 	scr     screen
 	main    screen // the main screen, while the alternate one is on
+	hidden  bool   // the cursor is not on show (DECTCEM)
 
 	surfaces map[string]*Surface
 	created  int
@@ -366,7 +367,7 @@ func (h *Host) altScreen(on bool) {
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
-	h.scr, h.alt = screen{cols: h.cols, rows: h.rows}, false
+	h.scr, h.alt, h.hidden = screen{cols: h.cols, rows: h.rows}, false, false
 }
 
 func (h *Host) csi(params string, final byte) {
@@ -377,6 +378,8 @@ func (h *Host) csi(params string, final byte) {
 		h.in.write(fmt.Sprintf("\x1b[%d;%dR", h.scr.row-h.scr.top+1, min(h.scr.col, h.cols-1)+1))
 	case (final == 'h' || final == 'l') && (params == "?1049" || params == "?1047" || params == "?47"):
 		h.altScreen(final == 'h')
+	case (final == 'h' || final == 'l') && params == "?25":
+		h.hidden = final == 'l'
 	case final == 'n' && params == "?6":
 		h.in.write(fmt.Sprintf("\x1b[?%d;%dR", h.scr.row-h.scr.top+1, min(h.scr.col, h.cols-1)+1))
 	default:
@@ -1230,6 +1233,15 @@ func (h *Host) Screen() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.scr.String()
+}
+
+// Cursor is where the cursor is, and whether it is on show (DECTCEM:
+// ESC [ ?25 l hides it): where the program leaves it for what prints next.
+// row is a line of Screen, as a placement's (Surface.At).
+func (h *Host) Cursor() (col, row int, shown bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return min(h.scr.col, h.cols-1), h.scr.row, !h.hidden
 }
 
 // Output is every byte the program wrote.
