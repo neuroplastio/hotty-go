@@ -70,7 +70,16 @@ go get github.com/neuroplastio/hotty-go
 ## Examples
 
 Each example is a program for one use case. It works in a HOTTY host, in
-any other terminal, and into a pipe.
+any other terminal, and into a pipe, and its tests run it in each.
+
+The examples are a module of their own (`examples/go.mod`), built against
+the SDK beside them: what they import is never the SDK's dependency. Run one
+from there:
+
+```
+cd examples
+go run ./dashboard https://example.com
+```
 
 <!-- docgen:examples -->
 | example | use case | what it shows |
@@ -98,8 +107,9 @@ no doc comment.
 
 The toolchain is in `mise.toml`: run `mise install` first.
 
-- `make check` is the gate: formatting, vet, the tests with the race
-  detector, coverage, and the documentation being current.
+- `make check` is the gate: formatting, tidy modules, vet, staticcheck,
+  the tests with the race detector, coverage, and the documentation being
+  current, in the SDK's module and the examples'.
 - `make cover` runs the tests with coverage, prints a table by package, and
   fails when a public package is under `COVER_MIN` (85%).
 - `make docs` writes the documentation.

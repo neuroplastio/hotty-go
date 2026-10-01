@@ -1,8 +1,8 @@
 #!/bin/sh
 # Coverage by package, from a profile written by go test -coverprofile, and
-# the gate: every public package (not internal, not a command or an
-# example) covers at least MIN percent of its statements. A public package
-# with no tests is 0%.
+# the gate: every public package (not internal, not a command) covers at
+# least MIN percent of its statements. A public package with no tests is 0%.
+# The examples are a module of their own, which ./... does not reach.
 #
 #   GO="mise x -- go" sh scripts/cover.sh coverage.out 85
 set -eu
@@ -24,7 +24,7 @@ table=$(awk -F'[: ]' '
 	}' "$profile" | sort)
 
 public=$($GO list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... |
-	grep -v -e '/internal/' -e '/internal$' -e '/examples/' -e '/examples$' || true)
+	grep -v -e '/internal/' -e '/internal$' || true)
 
 printf '%-48s %8s\n' package coverage
 echo "$table" | while read -r pkg pct; do
