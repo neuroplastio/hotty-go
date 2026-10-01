@@ -184,6 +184,30 @@ func TestReadAndClose(t *testing.T) {
 	}
 }
 
+// A test that hands a program its input itself, a Bubble Tea model's
+// Update say, reads what the host sent without blocking: Buffered says how
+// much there is.
+func TestBuffered(t *testing.T) {
+	h := New(t)
+	if n := h.Buffered(); n != 0 {
+		t.Fatalf("Buffered %d on a new host", n)
+	}
+	send(h, "\x1b[c")
+	h.Type("q")
+	const want = "\x1b[?62;22cq"
+	n := h.Buffered()
+	if n != len(want) {
+		t.Fatalf("Buffered %d, want %d", n, len(want))
+	}
+	buf := make([]byte, n)
+	if _, err := io.ReadFull(h, buf); err != nil || string(buf) != want {
+		t.Fatalf("read %q, %v", buf, err)
+	}
+	if n := h.Buffered(); n != 0 {
+		t.Errorf("Buffered %d once read", n)
+	}
+}
+
 func TestScreen(t *testing.T) {
 	h := New(t, Size(10, 5))
 	send(h, "hello\r\n", "50%\r", "100%\n", "a\x1b[2Db", "\n", "x\tz\n", "ab\x08c\n")

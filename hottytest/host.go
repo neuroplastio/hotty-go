@@ -234,6 +234,15 @@ func (h *Host) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// Buffered is how many bytes the host has sent that the program has not
+// read: a test that hands a program its input itself, a Bubble Tea
+// model's Update say, reads that much without blocking.
+func (h *Host) Buffered() int {
+	h.in.mu.Lock()
+	defer h.in.mu.Unlock()
+	return len(h.in.buf)
+}
+
 // Close ends the program's input: a Read gets io.EOF once it has read what
 // was sent.
 func (h *Host) Close() error {

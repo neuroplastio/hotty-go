@@ -40,6 +40,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 - [`type Host`](#Host)
   - [`func New(tb testing.TB, opts ...Option) *Host`](#New)
   - [`func (h *Host) Blur(surface string) error`](#Host.Blur)
+  - [`func (h *Host) Buffered() int`](#Host.Buffered)
   - [`func (h *Host) Check(surface, id string, on bool) error`](#Host.Check)
   - [`func (h *Host) Choose(surface, id, value string) error`](#Host.Choose)
   - [`func (h *Host) Click(surface, id string) error`](#Host.Click)
@@ -168,6 +169,14 @@ func (h *Host) Blur(surface string) error
 ```
 
 Blur takes the keyboard from a surface, as a click elsewhere does: the control being edited commits (change), then blur.
+
+### <a id="Host.Buffered"></a>func (*Host) Buffered
+
+```go
+func (h *Host) Buffered() int
+```
+
+Buffered is how many bytes the host has sent that the program has not read: a test that hands a program its input itself, a Bubble Tea model's Update say, reads that much without blocking.
 
 ### <a id="Host.Check"></a>func (*Host) Check
 
