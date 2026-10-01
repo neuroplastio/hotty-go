@@ -18,7 +18,7 @@ A Session is the program's side. Its life in a program:
 
   - Before the program runs, its output goes through the Session (Watch, or WatchFile for a terminal), and Attach gives it the program.
   - Init returns s.Detect().
-  - Update hands every message to s.Update first. What is HOTTY's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
+  - Update hands every message to s.Update first. What is HOTTY's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
   - Patches go out with Send, and leave with the next Flush, as one tea.Raw, so that HOTTY commands stay in order with Bubble Tea's frames.
 
@@ -163,6 +163,7 @@ del counter
 ## <a id="pkg-index"></a>Index
 
 - [Constants](#pkg-constants)
+- [`type AckMsg`](#AckMsg)
 - [`type Counts`](#Counts)
 - [`type ErrorMsg`](#ErrorMsg)
 - [`type EventMsg`](#EventMsg)
@@ -210,6 +211,14 @@ const DefaultLimit = 48
 ```
 
 DefaultLimit is how many surfaces a Session keeps at most, shown and hidden, unless its Limit or the terminal says fewer: a hidden surface keeps its memory in the terminal (a document, and pixels in a terminal that draws them itself).
+
+## <a id="AckMsg"></a>type AckMsg
+
+```go
+type AckMsg struct{ hotty.Reply }
+```
+
+AckMsg is the host's ok for a command the program numbered (hotty.N): the host has carried it out. Its error comes as ErrorMsg, with the same N. A reply reaches the program the way the user's keys do, in order (SPEC §3.6), so every key typed before the host carried the command out has reached the program before its AckMsg: after a numbered hotty.Focus, the keys before the AckMsg were typed while the program had the keyboard, and the ones after it go to the surface.
 
 ## <a id="Counts"></a>type Counts
 
@@ -490,7 +499,7 @@ Send queues commands (patches, focus) for the next Flush. It does nothing when t
 func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd)
 ```
 
-Update takes the program's messages first. What is HOTTY's comes back as ReadyMsg, EventMsg, ErrorMsg, RelayoutMsg or PongMsg; other messages come back as they are. A nil message was the Session's alone.
+Update takes the program's messages first. What is HOTTY's comes back as ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other messages come back as they are. A nil message was the Session's alone.
 
 ### <a id="Session.Watch"></a>func (*Session) Watch
 

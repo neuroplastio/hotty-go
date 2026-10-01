@@ -151,6 +151,27 @@ func TestMessages(t *testing.T) {
 	}
 }
 
+// The ok of a command the program numbered is the program's: AckMsg, with
+// its number. Its error is an ErrorMsg with the number too.
+func TestAck(t *testing.T) {
+	s := native()
+	ok := from(hotty.Control{{K: "a", V: "ok"}, {K: "n", V: "7"}, {K: "s", V: "field"}, {K: "re", V: "focus"}}, "")
+	msg, _ := s.Update(ok)
+	if a, isAck := msg.(AckMsg); !isAck || a.N != 7 || a.Re != "focus" || a.Surface != "field" || a.Err() != nil {
+		t.Fatalf("a numbered ok: %#v", msg)
+	}
+	refused := from(hotty.Control{{K: "a", V: "err"}, {K: "n", V: "8"}, {K: "s", V: "field"}, {K: "re", V: "focus"}},
+		`{"code":"ENOTARGET","detail":"ed"}`)
+	if e, isErr := mustMsg(s.Update(refused)).(ErrorMsg); !isErr || e.N != 8 || e.Code != hotty.ENOTARGET {
+		t.Errorf("a numbered error: %#v", e)
+	}
+	// The detection's own query is numbered: its late answer is the
+	// Session's, not an ack.
+	if msg := mustMsg(s.Update(caps("1"))); msg != nil {
+		t.Errorf("a late answer to the detection: %#v", msg)
+	}
+}
+
 func card(name string, y int) Surface {
 	return Surface{Name: name, Rect: Rect{0, y, 10, 2}, Doc: func() string { return "<p>" + name + "</p>" }}
 }

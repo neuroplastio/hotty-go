@@ -11,9 +11,10 @@
 //   - Update hands every message to s.Update first. What is HOTTY's comes
 //     back as ReadyMsg once the Session knows the terminal (Mode Native or
 //     Text), EventMsg for what the user did in a surface, ErrorMsg for a
-//     command the host refused, and RelayoutMsg when the surfaces must be
-//     placed again. Anything else comes back as it was, and nil when it
-//     was the Session's alone.
+//     command the host refused, AckMsg for the ok of a command the program
+//     numbered, and RelayoutMsg when the surfaces must be placed again.
+//     Anything else comes back as it was, and nil when it was the
+//     Session's alone.
 //   - When the program draws its frame (in Update, since View cannot
 //     return commands), it says which surfaces it wants where (Layout),
 //     and returns Flush with its commands. The Session sends only what
@@ -90,6 +91,15 @@ type EventMsg struct{ hotty.Event }
 // not handle itself (it handles EQUOTA and ENOENT for its own documents
 // and placements).
 type ErrorMsg struct{ hotty.Reply }
+
+// AckMsg is the host's ok for a command the program numbered (hotty.N):
+// the host has carried it out. Its error comes as ErrorMsg, with the same
+// N. A reply reaches the program the way the user's keys do, in order
+// (SPEC §3.6), so every key typed before the host carried the command out
+// has reached the program before its AckMsg: after a numbered hotty.Focus,
+// the keys before the AckMsg were typed while the program had the
+// keyboard, and the ones after it go to the surface.
+type AckMsg struct{ hotty.Reply }
 
 // RelayoutMsg asks the program to lay its surfaces out again: the screen
 // was erased or scrolled under them, or a document went missing. Draw a
@@ -228,8 +238,8 @@ func (h *Session) Detect() tea.Cmd {
 }
 
 // Update takes the program's messages first. What is HOTTY's comes back as
-// ReadyMsg, EventMsg, ErrorMsg, RelayoutMsg or PongMsg; other messages come
-// back as they are. A nil message was the Session's alone.
+// ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other
+// messages come back as they are. A nil message was the Session's alone.
 func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 	switch m := msg.(type) {
 	case uv.UnknownOscEvent:
@@ -313,6 +323,8 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		return ReadyMsg{Mode: Native, Caps: caps}, nil
 	}
 	switch {
+	case r.OK && r.N != 0 && r.Re != "q":
+		return AckMsg{r}, nil // a command the program numbered; queries are the Session's
 	case r.OK:
 		return nil, nil
 	case r.Re == "doc" && r.Code == hotty.EQUOTA && h.hasDoc[r.Surface]:
