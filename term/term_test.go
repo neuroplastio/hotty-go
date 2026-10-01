@@ -119,3 +119,82 @@ func TestEventsMessage(t *testing.T) {
 		t.Errorf("event %+v", e)
 	}
 }
+
+func TestSizesAndResized(t *testing.T) {
+	size := Size{100, 30}
+	tm := New(strings.NewReader(""), io.Discard, "x", func() Size { return size }, nil)
+	tm.Resized(Size{1, 1}) // nobody asked yet: dropped
+	sizes := tm.Sizes()
+	if tm.Sizes() != sizes {
+		t.Error("Sizes returns its channel again")
+	}
+	tm.Resized(Size{90, 20})
+	size = Size{120, 40}
+	tm.Resized(size) // only the latest waits
+	if got := <-sizes; got != size || tm.Size() != size {
+		t.Errorf("Sizes gave %v, Size %v", got, tm.Size())
+	}
+	_ = tm.Close()
+	tm.Resized(Size{5, 5})
+	if _, open := <-sizes; open {
+		t.Error("Sizes closes on Close")
+	}
+	closed := New(strings.NewReader(""), io.Discard, "x", nil, nil)
+	_ = closed.Close()
+	if _, open := <-closed.Sizes(); open {
+		t.Error("Sizes after Close is closed")
+	}
+}
+
+func TestOnCloseAndRaw(t *testing.T) {
+	tm := New(strings.NewReader(""), io.Discard, "x", nil, nil)
+	var order []string
+	tm.OnClose(func() error { order = append(order, "first"); return io.ErrClosedPipe })
+	tm.OnClose(func() error { order = append(order, "second"); return nil })
+	if err := tm.Close(); err != io.ErrClosedPipe || strings.Join(order, ",") != "first,second" {
+		t.Errorf("Close: %v %v", err, order)
+	}
+	if err := tm.Close(); err != nil || len(order) != 2 {
+		t.Errorf("Close twice: %v %v", err, order)
+	}
+	restore, err := tm.Raw()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore()
+	if tm.File() != nil {
+		t.Error("a Term made with New has no file")
+	}
+	// Events after Close is closed at once.
+	if _, open := <-tm.Events(context.Background()); open {
+		t.Error("Events after Close")
+	}
+}
+
+func TestDetectTimesOut(t *testing.T) {
+	// A terminal that answers nothing: Detect gives up with the context.
+	inR, _ := io.Pipe()
+	tm := New(inR, io.Discard, "x", nil, nil)
+	defer tm.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if tm.Detect(ctx) || tm.Native() {
+		t.Error("silence is not a host")
+	}
+	// The answer stands.
+	if tm.Detect(context.Background()) {
+		t.Error("Detect asks once")
+	}
+}
+
+func TestDetectIgnoresAnotherNumber(t *testing.T) {
+	f := newFake(nil)
+	go func() {
+		f.readQuery(t)
+		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, []byte(`{"v":"0.1"}`))
+		_, _ = io.WriteString(f.answer, other+"\x1b[?62;22c")
+	}()
+	if f.t.Detect(context.Background()) {
+		t.Error("a reply to someone else's query is not this one's answer")
+	}
+}

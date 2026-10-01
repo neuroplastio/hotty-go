@@ -99,11 +99,12 @@ type Term struct {
 	// TermType is $TERM, for decoding keys.
 	TermType string
 
-	size  func() Size
-	known *Known
-	file  *os.File // natively, /dev/tty
-	raw   func() (restore func(), err error)
-	close func() error
+	size     func() Size
+	known    *Known
+	file     *os.File // natively, /dev/tty
+	raw      func() (restore func(), err error)
+	cancelIn func() // natively, ends a read in progress on In
+	close    func() error
 
 	mu       sync.Mutex
 	surfaces []string
@@ -202,10 +203,9 @@ func (t *Term) Raw() (restore func(), err error) {
 // Natively it also closes /dev/tty. It is safe to call more than once.
 func (t *Term) Close() error {
 	t.mu.Lock()
-	stop := t.stop
-	t.stop = nil
-	closeFn := t.close
-	t.close = nil
+	stop, cancelIn, closeFn := t.stop, t.cancelIn, t.close
+	t.stop, t.cancelIn, t.close = nil, nil, nil
+	started, ended := t.started, t.ended
 	if !t.closed && t.sizes != nil {
 		close(t.sizes)
 	}
@@ -213,6 +213,16 @@ func (t *Term) Close() error {
 	t.mu.Unlock()
 	if stop != nil {
 		stop()
+	}
+	// A read in progress ends before the file under it closes.
+	if cancelIn != nil {
+		cancelIn()
+		if started {
+			select {
+			case <-ended:
+			case <-time.After(time.Second):
+			}
+		}
 	}
 	if closeFn != nil {
 		return closeFn()
@@ -441,10 +451,11 @@ func (t *Term) Request(ctx context.Context, build func(hotty.Option) string) (ho
 }
 
 // Fence waits until the terminal has taken everything written before it,
-// and returns the replies that came meanwhile: the errors of commands sent
-// with hotty.ReplyOnError, mostly. It asks for Primary Device Attributes,
-// which every terminal answers in order with what it was sent. Replies to
-// numbered commands go to their Request, or to Events.
+// and returns the replies to it that nothing has read: the errors of
+// commands sent with hotty.ReplyOnError, mostly. It asks for Primary Device
+// Attributes, which every terminal answers in order with what it was sent.
+// Replies to numbered commands go to their Request, or to Events, and so do
+// the replies Events delivered before the fence.
 //
 // Call it before exiting, after the last command that may be answered, so
 // that no reply is left for the shell to read as typing.
@@ -457,7 +468,22 @@ func (t *Term) Fence(ctx context.Context) ([]hotty.Reply, error) {
 	var replies []hotty.Reply
 	done := make(chan struct{})
 	finished := false
-	remove := t.listen(func(ev Event) bool {
+	// Replies that came before the fence, and that Events has not
+	// delivered, are the fence's too.
+	claim := func(queue []Event) []Event {
+		kept := queue[:0]
+		for _, ev := range queue {
+			if m, ok := ev.(Message); ok {
+				if r, ok := m.Reply(); ok && r.N == 0 {
+					replies = append(replies, r)
+					continue
+				}
+			}
+			kept = append(kept, ev)
+		}
+		return kept
+	}
+	remove := t.listenClaiming(claim, func(ev Event) bool {
 		if finished {
 			return false
 		}
@@ -507,14 +533,26 @@ func (t *Term) LineStart(ctx context.Context) error {
 	defer restore()
 	col := make(chan int, 1)
 	remove := t.listen(func(ev Event) bool {
-		if p, ok := ev.(uv.CursorPositionEvent); ok {
-			select {
-			case col <- p.X:
-			default:
+		x := -1
+		switch ev := ev.(type) {
+		case uv.CursorPositionEvent:
+			x = ev.X
+		case uv.KeyPressEvent:
+			// An answer on the first row, "\x1b[1;9R", is also F3 with
+			// modifiers, and when it arrives alone that is all the reader
+			// reports: its modifiers are the column, less one.
+			if ev.Code == uv.KeyF3 && ev.Text == "" {
+				x = int(ev.Mod)
 			}
-			return true
 		}
-		return false
+		if x < 0 {
+			return false
+		}
+		select {
+		case col <- x:
+		default:
+		}
+		return true
 	})
 	defer remove()
 	if err := t.Send("\x1b[6n"); err != nil {
@@ -610,9 +648,18 @@ func (t *Term) Events(ctx context.Context) <-chan Event {
 // listen starts reading the input if nothing has yet, and adds a tap; the
 // function it returns removes it.
 func (t *Term) listen(take func(Event) bool) (remove func()) {
+	return t.listenClaiming(nil, take)
+}
+
+// listenClaiming is listen that first lets claim take what it wants from
+// the events queued for Events, with no event routed in between.
+func (t *Term) listenClaiming(claim func([]Event) []Event, take func(Event) bool) (remove func()) {
 	t.start()
 	tp := &tap{take: take}
 	t.mu.Lock()
+	if claim != nil {
+		t.queue = claim(t.queue)
+	}
 	t.taps = append(t.taps, tp)
 	t.mu.Unlock()
 	return func() {
@@ -668,15 +715,25 @@ func (t *Term) start() {
 	}()
 }
 
+// route gives an event to the first tap that takes it, or queues it for
+// Events. Ultraviolet reports an input it cannot tell apart as several
+// events at once (a cursor position on the first row reads as a modified
+// F3 too): when a tap takes one of them, the others are its misreadings.
 func (t *Term) route(ev Event) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for _, tp := range t.taps {
-		if tp.take(ev) {
-			return
+	evs := []Event{ev}
+	if multi, ok := ev.(uv.MultiEvent); ok {
+		evs = multi
+	}
+	for _, e := range evs {
+		for _, tp := range t.taps {
+			if tp.take(e) {
+				return
+			}
 		}
 	}
-	t.queue = append(t.queue, ev)
+	t.queue = append(t.queue, evs...)
 	select {
 	case t.queued <- struct{}{}:
 	default:

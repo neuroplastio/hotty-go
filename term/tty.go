@@ -71,8 +71,8 @@ func Open(name string) (*Term, error) {
 			}
 		}, nil
 	}
+	t.cancelIn = func() { cr.Cancel() }
 	t.close = func() error {
-		cr.Cancel()
 		mu.Lock()
 		if rawState != nil {
 			_ = xterm.Restore(fd, rawState)

@@ -327,6 +327,8 @@ func (h *Host) csi(params string, final byte) {
 		h.in.write("\x1b[?62;22c")
 	case final == 'n' && params == "6":
 		h.in.write(fmt.Sprintf("\x1b[%d;%dR", h.scr.row+1, h.scr.col+1))
+	case final == 'n' && params == "?6":
+		h.in.write(fmt.Sprintf("\x1b[?%d;%dR", h.scr.row+1, h.scr.col+1))
 	default:
 		h.scr.csi(params, final)
 	}
