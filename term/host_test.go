@@ -17,10 +17,7 @@ import (
 // open is a Term on a test host, closed when the test ends.
 func open(t *testing.T, h *hottytest.Host) *term.Term {
 	t.Helper()
-	tm := term.New(h, h, "tool-7", func() term.Size {
-		c, r := h.TermSize()
-		return term.Size{Cols: c, Rows: r}
-	}, nil)
+	tm := term.New(h, h, "tool-7", h.TermSize, nil)
 	t.Cleanup(func() { _ = tm.Close() })
 	return tm
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func opener(h *hottytest.Host) func() (*term.Term, error) {
-	return func() (*term.Term, error) { return h.Term("hello"), nil }
+	return func() (*term.Term, error) { return term.New(h, h, "hello", h.TermSize, nil), nil }
 }
 
 func TestHost(t *testing.T) {

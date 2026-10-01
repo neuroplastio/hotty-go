@@ -3,10 +3,10 @@
 // test then looks at what the program showed, and plays the user.
 //
 //	h := hottytest.New(t)
-//	run(h.Term("tool"))              // the program under test; or tea.WithInput(h), …
+//	run(term.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
 //	card := h.Surface("tool-card")
-//	card.TextOf("status")            // what it shows
-//	h.Click("tool-card", "retry")    // what the user does
+//	card.TextOf("status")                         // what it shows
+//	h.Click("tool-card", "retry")                 // what the user does
 //
 // The host keeps every surface's document as the program's commands leave
 // it, with the patch operations and the morph of SPEC §6, and answers each
@@ -48,7 +48,6 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/term"
 )
 
 // Errors of the user's actions.
@@ -259,14 +258,8 @@ func (h *Host) Close() error {
 // "\x03" for Ctrl-C, "\x1b" for Escape.
 func (h *Host) Type(keys string) { h.in.write(keys) }
 
-// TermSize is the terminal's size (Size).
+// TermSize is the terminal's size (Size), as term.New takes it.
 func (h *Host) TermSize() (cols, rows int) { return h.cols, h.rows }
-
-// Term is a term.Term on the host, for a program named name: its
-// surfaces are name-…, without the process id term.Open adds.
-func (h *Host) Term(name string) *term.Term {
-	return term.New(h, h, name, func() term.Size { return term.Size{Cols: h.cols, Rows: h.rows} }, nil)
-}
 
 // Write is the program's output. It is parsed as it comes: HOTTY commands
 // are carried out and answered, the terminal's queries answered, and the

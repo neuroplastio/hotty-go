@@ -17,7 +17,7 @@ func on(t *testing.T, h *hottytest.Host, args []string) (code int, stdout string
 	t.Helper()
 	var out, errs strings.Builder
 	e := env{stdout: &out, stderr: &errs, tty: true,
-		open: func() (*term.Term, error) { return h.Term("card"), nil }}
+		open: func() (*term.Term, error) { return term.New(h, h, "card", h.TermSize, nil), nil }}
 	code = run(context.Background(), args, e)
 	// What the program prints to stdout reaches the same terminal.
 	_, _ = h.Write([]byte(out.String()))

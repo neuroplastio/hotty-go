@@ -44,7 +44,7 @@ A command that exits hands the terminal to whatever runs next, usually a shell, 
 - [`type Message`](#Message)
 - [`type Size`](#Size)
 - [`type Term`](#Term)
-  - [`func New(in io.Reader, out io.Writer, name string, size func() Size, known *Known) *Term`](#New)
+  - [`func New(in io.Reader, out io.Writer, name string, size func() (cols, rows int), known *Known) *Term`](#New)
   - [`func Open(name string) (*Term, error)`](#Open)
   - [`func (t *Term) Caps() hotty.Caps`](#Term.Caps)
   - [`func (t *Term) Close() error`](#Term.Close)
@@ -168,10 +168,10 @@ Term is one process's terminal. Its methods are safe for concurrent use.
 ### <a id="New"></a>func New
 
 ```go
-func New(in io.Reader, out io.Writer, name string, size func() Size, known *Known) *Term
+func New(in io.Reader, out io.Writer, name string, size func() (cols, rows int), known *Known) *Term
 ```
 
-New makes a terminal from its two streams. name prefixes the process's surfaces (Surface) and is made a valid surface name. size reports the terminal's size; known, when not nil, is what Detect answers without asking.
+New makes a terminal from its two streams. name prefixes the process's surfaces (Surface) and is made a valid surface name. size reports the terminal's size in cells, as hottytest.Host.TermSize does; nil, or a size of 0, is 80×24. known, when not nil, is what Detect answers without asking.
 
 ### <a id="Open"></a>func Open
 

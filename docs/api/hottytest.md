@@ -15,10 +15,10 @@ Package hottytest is a HOTTY host that runs inside a test. The program under tes
 
 ```go
 h := hottytest.New(t)
-run(h.Term("tool"))              // the program under test; or tea.WithInput(h), …
+run(term.New(h, h, "tool", h.TermSize, nil)) // the program under test; or tea.WithInput(h), …
 card := h.Surface("tool-card")
-card.TextOf("status")            // what it shows
-h.Click("tool-card", "retry")    // what the user does
+card.TextOf("status")                         // what it shows
+h.Click("tool-card", "retry")                 // what the user does
 ```
 
 The host keeps every surface's document as the program's commands leave it, with the patch operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors. It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows).
@@ -64,7 +64,6 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Submit(surface, id string) error`](#Host.Submit)
   - [`func (h *Host) Surface(name string) *Surface`](#Host.Surface)
   - [`func (h *Host) Surfaces() []*Surface`](#Host.Surfaces)
-  - [`func (h *Host) Term(name string) *term.Term`](#Host.Term)
   - [`func (h *Host) TermSize() (cols, rows int)`](#Host.TermSize)
   - [`func (h *Host) Type(keys string)`](#Host.Type)
   - [`func (h *Host) Write(p []byte) (int, error)`](#Host.Write)
@@ -366,21 +365,13 @@ func (h *Host) Surfaces() []*Surface
 
 Surfaces are the surfaces there are, in the order they were created.
 
-### <a id="Host.Term"></a>func (*Host) Term
-
-```go
-func (h *Host) Term(name string) *term.Term
-```
-
-Term is a term.Term on the host, for a program named name: its surfaces are name-…, without the process id term.Open adds.
-
 ### <a id="Host.TermSize"></a>func (*Host) TermSize
 
 ```go
 func (h *Host) TermSize() (cols, rows int)
 ```
 
-TermSize is the terminal's size (Size).
+TermSize is the terminal's size (Size), as term.New takes it.
 
 ### <a id="Host.Type"></a>func (*Host) Type
 

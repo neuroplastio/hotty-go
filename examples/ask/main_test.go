@@ -20,7 +20,7 @@ func start(t *testing.T, h *hottytest.Host) (wait func() (int, string)) {
 	var out, errs strings.Builder
 	done := make(chan int, 1)
 	go func() {
-		open := func() (*term.Term, error) { return h.Term("ask"), nil }
+		open := func() (*term.Term, error) { return term.New(h, h, "ask", h.TermSize, nil), nil }
 		done <- run(context.Background(), &out, &errs, open)
 	}()
 	return func() (int, string) {

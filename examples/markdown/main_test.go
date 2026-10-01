@@ -34,7 +34,7 @@ var files = fstest.MapFS{
 func on(h *hottytest.Host) (env, *strings.Builder) {
 	var errs strings.Builder
 	return env{stdin: strings.NewReader(""), stdout: h, stderr: &errs, files: files, tty: true,
-		open: func() (*term.Term, error) { return h.Term("markdown"), nil }}, &errs
+		open: func() (*term.Term, error) { return term.New(h, h, "markdown", h.TermSize, nil), nil }}, &errs
 }
 
 // resources are the resources the host was sent.

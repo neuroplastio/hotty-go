@@ -99,7 +99,7 @@ type Term struct {
 	// TermType is $TERM, for decoding keys.
 	TermType string
 
-	size     func() Size
+	size     func() (cols, rows int)
 	known    *Known
 	file     *os.File // natively, /dev/tty
 	raw      func() (restore func(), err error)
@@ -132,9 +132,10 @@ type tap struct{ take func(Event) bool }
 
 // New makes a terminal from its two streams. name prefixes the process's
 // surfaces (Surface) and is made a valid surface name. size reports the
-// terminal's size; known, when not nil, is what Detect answers without
+// terminal's size in cells, as hottytest.Host.TermSize does; nil, or a
+// size of 0, is 80×24. known, when not nil, is what Detect answers without
 // asking.
-func New(in io.Reader, out io.Writer, name string, size func() Size, known *Known) *Term {
+func New(in io.Reader, out io.Writer, name string, size func() (cols, rows int), known *Known) *Term {
 	return &Term{In: in, Out: out, Name: hotty.SurfaceName(name), TermType: "xterm-256color", size: size, known: known}
 }
 
@@ -173,8 +174,8 @@ func (t *Term) File() *os.File { return t.file }
 // Size is the terminal's size in cells, or 80×24 when it cannot be told.
 func (t *Term) Size() Size {
 	if t.size != nil {
-		if s := t.size(); s.Cols > 0 && s.Rows > 0 {
-			return s
+		if c, r := t.size(); c > 0 && r > 0 {
+			return Size{c, r}
 		}
 	}
 	return Size{80, 24}

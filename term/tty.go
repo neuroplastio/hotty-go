@@ -38,12 +38,12 @@ func Open(name string) (*Term, error) {
 		file:     f,
 		Name:     hotty.SurfaceName(fmt.Sprintf("%s-%d", name, os.Getpid())),
 		TermType: os.Getenv("TERM"),
-		size: func() Size {
+		size: func() (cols, rows int) {
 			w, h, err := xterm.GetSize(fd)
 			if err != nil {
-				return Size{}
+				return 0, 0
 			}
-			return Size{w, h}
+			return w, h
 		},
 	}
 	// Raw mode is the Term's, whoever asks: the first call sets it, and

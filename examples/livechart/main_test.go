@@ -19,7 +19,7 @@ const chartName = "livechart-chart"
 func on(h *hottytest.Host, in io.Reader) (env, *strings.Builder) {
 	var errs strings.Builder
 	return env{stdin: in, stdout: h, stderr: &errs, tty: true,
-		open: func() (*term.Term, error) { return h.Term("livechart"), nil }}, &errs
+		open: func() (*term.Term, error) { return term.New(h, h, "livechart", h.TermSize, nil), nil }}, &errs
 }
 
 // start runs livechart in the background; wait returns its exit status.

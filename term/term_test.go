@@ -23,7 +23,7 @@ type fake struct {
 func newFake(known *Known) *fake {
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
-	return &fake{out: outR, answer: inW, t: New(inR, outW, "tool-7", func() Size { return Size{100, 30} }, known)}
+	return &fake{out: outR, answer: inW, t: New(inR, outW, "tool-7", func() (int, int) { return 100, 30 }, known)}
 }
 
 // readQuery waits for the program's query, so the answer comes after it.
@@ -122,7 +122,7 @@ func TestEventsMessage(t *testing.T) {
 
 func TestSizesAndResized(t *testing.T) {
 	size := Size{100, 30}
-	tm := New(strings.NewReader(""), io.Discard, "x", func() Size { return size }, nil)
+	tm := New(strings.NewReader(""), io.Discard, "x", func() (int, int) { return size.Cols, size.Rows }, nil)
 	tm.Resized(Size{1, 1}) // nobody asked yet: dropped
 	sizes := tm.Sizes()
 	if tm.Sizes() != sizes {
