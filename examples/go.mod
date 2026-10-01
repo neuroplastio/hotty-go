@@ -7,11 +7,11 @@ go 1.26.8
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
-	github.com/neuroplastio/hotty-go v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/hottydoc v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/hottytea v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-00010101000000-000000000000
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-00010101000000-000000000000
+	github.com/neuroplastio/hotty-go v0.0.0-20261001200251-dc50cf1e26ae
+	github.com/neuroplastio/hotty-go/hottydoc v0.0.0-20261001200251-dc50cf1e26ae
+	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261001200251-dc50cf1e26ae
+	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-20261001200251-dc50cf1e26ae
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261001200251-dc50cf1e26ae
 )
 
 require (
