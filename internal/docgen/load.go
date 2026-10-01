@@ -88,8 +88,8 @@ func skipDir(rel, name string) bool {
 		strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
 
-// Load reads the module at root: its path, its public packages and its
-// examples.
+// Load reads the module at root: its path, its public packages, those of
+// the modules nested in it under its path, and its examples.
 func Load(root string) (*Module, error) {
 	modPath, err := modulePath(filepath.Join(root, "go.mod"))
 	if err != nil {
@@ -109,8 +109,13 @@ func Load(root string) (*Module, error) {
 			return filepath.SkipDir
 		}
 		if rel != "." {
-			if _, err := os.Stat(filepath.Join(p, "go.mod")); err == nil {
-				return filepath.SkipDir // another module
+			// A module in a directory is the repository's, and documented
+			// with it, when its path is the root's and the directory: the
+			// packages with dependencies of their own (term, hottytea, …).
+			// Any other is someone else's.
+			if nested, err := modulePath(filepath.Join(p, "go.mod")); err == nil &&
+				nested != modPath+"/"+filepath.ToSlash(rel) {
+				return filepath.SkipDir
 			}
 		}
 		pkg, err := loadPackage(&ctx, root, filepath.ToSlash(rel), modPath)

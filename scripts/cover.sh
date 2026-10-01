@@ -2,13 +2,14 @@
 # Coverage by package, from a profile written by go test -coverprofile, and
 # the gate: every public package (not internal, not a command) covers at
 # least MIN percent of its statements. A public package with no tests is 0%.
-# The examples are a module of their own, which ./... does not reach.
+# MODULES are the directories of the modules whose packages count.
 #
-#   GO="mise x -- go" sh scripts/cover.sh coverage.out 85
+#   GO="mise x -- go" MODULES=". term" sh scripts/cover.sh coverage.out 85
 set -eu
 profile=${1:-coverage.out}
 min=${2:-85}
 GO=${GO:-go}
+MODULES=${MODULES:-.}
 
 table=$(awk -F'[: ]' '
 	NR == 1 && /^mode:/ { next }
@@ -23,7 +24,7 @@ table=$(awk -F'[: ]' '
 		for (p in total) printf "%s %.1f\n", p, (total[p] ? 100 * covered[p] / total[p] : 100)
 	}' "$profile" | sort)
 
-public=$($GO list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... |
+public=$(for m in $MODULES; do (cd "$m" && $GO list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./...); done |
 	grep -v -e '/internal/' -e '/internal$' || true)
 
 printf '%-48s %8s\n' package coverage

@@ -39,8 +39,9 @@ func TestPackagesFound(t *testing.T) {
 	if m.Path != "example.com/fix" {
 		t.Errorf("module path %q", m.Path)
 	}
-	// Internal packages and commands have no page; the root comes first.
-	// (Large is documented by its group's comment.)
+	// Internal packages and commands have no page, nor another module's
+	// (vendored); a module nested under the root's path (sub) has one. The
+	// root comes first. (Large is documented by its group's comment.)
 	want := []string{"README.md", "docs/api/README.md", "docs/api/fix.md", "docs/api/sub.md"}
 	if got := keys(files); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("files %v, want %v", got, want)

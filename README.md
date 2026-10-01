@@ -37,7 +37,7 @@ Testing it needs no terminal:
 
 ```go
 h := hottytest.New(t)
-run(ctx, h.Term("hello"))
+run(ctx, term.New(h, h, "hello", h.TermSize, nil))
 h.Surface("hello-hello").Text() // "Hello, HTML in the terminal."
 ```
 
@@ -46,8 +46,19 @@ The reference is in [docs/api](docs/api) and on
 
 ## Install
 
+The SDK is a few modules, so that a program takes on only the dependencies
+of what it imports:
+
+| module | packages | needs |
+| --- | --- | --- |
+| `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library |
+| `github.com/neuroplastio/hotty-go/term` | `term` | ultraviolet, for the terminal's input |
+| `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
+| `github.com/neuroplastio/hotty-go/doc` | `doc` | goldmark, x/net/html |
+| `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
+
 ```
-go get github.com/neuroplastio/hotty-go
+go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/term
 ```
 
 ## Packages
@@ -109,7 +120,11 @@ The toolchain is in `mise.toml`: run `mise install` first.
 
 - `make check` is the gate: formatting, tidy modules, vet, staticcheck,
   the tests with the race detector, coverage, and the documentation being
-  current, in the SDK's module and the examples'.
+  current, in every module.
+- The modules build against each other as they are in the repository:
+  each nested `go.mod` replaces the others with their directories. A
+  release tags every module at one commit (`v0.1.0`, `term/v0.1.0`, …), and
+  its `go.mod` files require those versions of each other.
 - `make cover` runs the tests with coverage, prints a table by package, and
   fails when a public package is under `COVER_MIN` (85%).
 - `make docs` writes the documentation.
