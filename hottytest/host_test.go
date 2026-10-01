@@ -193,10 +193,16 @@ func TestScreen(t *testing.T) {
 	if got := h.Screen(); got != want {
 		t.Errorf("Screen:\n%s\nwant:\n%s", got, want)
 	}
+	// The screen is the last 5 lines; the rest went to the scrollback,
+	// which erasing the screen keeps, and its own sequence erases.
 	send(h, "\x1b[2J", "\x1b[3;2Hx", "\x1b[Hy", "\x1b[2B\x1b[2Cz\x1b[Az", "\x1b7\x1b[5;1Hs\x1b8!")
-	want = "y\n    z!\n x z\n\ns"
+	want = "hello\n100%\nb\nx       z\nac\nred\n    !\n" + "y\n    z!\n x z\n\ns"
 	if got := h.Screen(); got != want {
 		t.Errorf("after moves:\n%q\nwant:\n%q", got, want)
+	}
+	send(h, "\x1b[3J")
+	if got := h.Screen(); got != "y\n    z!\n x z\n\ns" {
+		t.Errorf("after erasing the scrollback: %q", got)
 	}
 	send(h, "\x1b[2;1H\x1b[J", "\x1b[?25l\x1b[>1u\x1b[E\x1b[F\x1b[G", "\x1b[1E-\x1b[1F+")
 	if got := h.Screen(); got != "y\n+\n-" {
@@ -204,6 +210,62 @@ func TestScreen(t *testing.T) {
 	}
 	if !strings.Contains(h.Output(), "\x1b[31mred") {
 		t.Error("Output keeps every byte")
+	}
+}
+
+// The sequences a full-screen renderer such as Bubble Tea's draws with.
+func TestScreenEdits(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+	}{
+		{"VPA, HPA and relative moves", "\x1b[3dA\x1b[5`B\x1b[2aC\x1b[1eD", "\n\nA   B  C\n        D"},
+		{"ECH", "abcdef\x1b[3G\x1b[2X", "ab  ef"},
+		{"ICH and DCH", "abcdef\x1b[2G\x1b[2@xy\x1b[6G\x1b[P", "axybcef"},
+		{"ICH past the edge", "0123456789\x1b[1G\x1b[3@", "   0123456"},
+		{"REP", "a-\x1b[4b|", "a-----|"},
+		{"CHT, and the right edge", "a\x1b[I|\x1b[2I-\x1b[20C!", "a       |!"},
+		{"IL and DL", "1\r\n2\r\n3\r\n4\x1b[2;1H\x1b[L+\x1b[4;1H\x1b[2M", "1\n+\n2"},
+		{"SU and SD", "1\r\n2\r\n3\x1b[S\x1b[3;1H\x1b[2T", "\n\n2\n3"},
+		{"scrolling region", "1\r\n2\r\n3\r\n4\r\n5\x1b[2;4r\x1b[4;1H\n\n+", "1\n4\n\n+\n5"},
+		{"RI at the top of the region", "1\r\n2\r\n3\x1b[2;3r\x1b[2;1H\x1bM+", "1\n+\n2"},
+		{"IND and NEL", "a\x1bDb\x1bEc", "a\n b\nc"},
+		{"SCOSC and SCORC", "ab\x1b[s\x1b[3;1Hc\x1b[ud", "abd\n\nc"},
+		{"wrapping at the last row", "\x1b[5;1H0123456789xy", "\n\n\n0123456789\nxy"},
+	} {
+		h := New(t, Size(10, 5), Text())
+		h.altScreen(true)
+		send(h, tc.in)
+		if got := h.Screen(); got != tc.want {
+			t.Errorf("%s:\n%q\nwant:\n%q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// The alternate screen is a screen of its own: the main one, scrollback
+// and cursor, is as it was when the program leaves it.
+func TestAlternateScreenBuffer(t *testing.T) {
+	h := New(t, Size(10, 3), Text())
+	send(h, "one\r\ntwo\r\nthree\r\nfour\r\n$ ")
+	main := h.Screen()
+	if main != "one\ntwo\nthree\nfour\n$" {
+		t.Fatalf("main: %q", main)
+	}
+	send(h, "\x1b[?1049h", "\x1b[H\x1b[2Jtitle\x1b[3;1Hfooter\n")
+	if got := h.Screen(); got != "\nfooter" {
+		t.Errorf("full screen, after scrolling off its last row: %q", got)
+	}
+	send(h, "\x1b[?1049l", "x")
+	if got := h.Screen(); got != main+" x" {
+		t.Errorf("back: %q", got)
+	}
+	// The cursor's row on view, 3 of 3: the scrollback does not count.
+	send(h, "\x1b[6n")
+	if got := h.drain(); got != "\x1b[3;4R" {
+		t.Errorf("cursor position: %q", got)
+	}
+	send(h, "\x1b[?1049h\x1bc")
+	if got := h.Screen(); got != "" {
+		t.Errorf("after a reset: %q", got)
 	}
 }
 

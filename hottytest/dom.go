@@ -79,8 +79,9 @@ func (s *Surface) Placement() hotty.Placement {
 	return s.place
 }
 
-// At is the screen cell of the placement's top-left corner: the cursor's,
-// when the program placed it.
+// At is the cell of the placement's top-left corner: the cursor's, when
+// the program placed it. row is a line of Screen, the scrollback's
+// included, of the screen it was placed on.
 func (s *Surface) At() (col, row int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

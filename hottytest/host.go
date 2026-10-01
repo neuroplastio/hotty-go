@@ -156,6 +156,7 @@ type Host struct {
 	invalid int
 	output  strings.Builder
 	scr     screen
+	main    screen // the main screen, while the alternate one is on
 
 	surfaces map[string]*Surface
 	created  int
@@ -185,7 +186,7 @@ func New(tb testing.TB, opts ...Option) *Host {
 	for _, o := range opts {
 		o(h)
 	}
-	h.scr.cols = h.cols
+	h.scr = screen{cols: h.cols, rows: h.rows}
 	if h.autoRows == nil {
 		h.autoRows = estimateRows
 	}
@@ -291,9 +292,16 @@ func (h *Host) byte(c byte) {
 		case 'P', '_', '^', 'X':
 			h.state, h.seq = 'P', append(h.seq[:0], 0x1b, c)
 		case '7':
-			h.scr.saved = [2]int{h.scr.col, h.scr.row}
+			h.scr.save()
 		case '8':
-			h.scr.col, h.scr.row = h.scr.saved[0], h.scr.saved[1]
+			h.scr.restore()
+		case 'D':
+			h.scr.index()
+		case 'E':
+			h.scr.index()
+			h.scr.col = 0
+		case 'M':
+			h.scr.reverseIndex()
 		case 'c':
 			h.reset()
 		}
@@ -332,6 +340,12 @@ func (h *Host) altScreen(on bool) {
 			}
 		}
 	}
+	switch {
+	case on && !h.alt:
+		h.main, h.scr = h.scr, screen{cols: h.cols, rows: h.rows, fixed: true}
+	case !on && h.alt:
+		h.scr = h.main
+	}
 	h.alt = on
 }
 
@@ -339,7 +353,7 @@ func (h *Host) altScreen(on bool) {
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
-	h.scr = screen{cols: h.cols}
+	h.scr, h.alt = screen{cols: h.cols, rows: h.rows}, false
 }
 
 func (h *Host) csi(params string, final byte) {
@@ -347,11 +361,11 @@ func (h *Host) csi(params string, final byte) {
 	case final == 'c' && (params == "" || params == "0"):
 		h.in.write("\x1b[?62;22c")
 	case final == 'n' && params == "6":
-		h.in.write(fmt.Sprintf("\x1b[%d;%dR", h.scr.row+1, h.scr.col+1))
+		h.in.write(fmt.Sprintf("\x1b[%d;%dR", h.scr.row-h.scr.top+1, min(h.scr.col, h.cols-1)+1))
 	case (final == 'h' || final == 'l') && (params == "?1049" || params == "?1047" || params == "?47"):
 		h.altScreen(final == 'h')
 	case final == 'n' && params == "?6":
-		h.in.write(fmt.Sprintf("\x1b[?%d;%dR", h.scr.row+1, h.scr.col+1))
+		h.in.write(fmt.Sprintf("\x1b[?%d;%dR", h.scr.row-h.scr.top+1, min(h.scr.col, h.cols-1)+1))
 	default:
 		h.scr.csi(params, final)
 	}
@@ -642,9 +656,10 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
 	if !s.place.KeepCursor {
 		// As if by h times IND, then CR.
-		h.scr.row += hh
+		for range hh {
+			h.scr.index()
+		}
 		h.scr.col = 0
-		h.scr.line()
 	}
 	return "", "", hotty.Control{{K: "c", V: strconv.Itoa(c)}, {K: "r", V: strconv.Itoa(r)}}
 }
@@ -1170,8 +1185,10 @@ func (h *Host) Surfaces() []*Surface {
 }
 
 // Screen is the cells the program printed, a line a row, without colours:
-// what is left after carriage returns, cursor moves and erases. Surfaces
-// are not drawn in it; the rows a placement covered are blank.
+// what is left after carriage returns, cursor moves, erases and scrolls.
+// It is the main screen, its scrollback first, or the alternate screen
+// while the program has it on. Surfaces are not drawn in it; the rows a
+// placement covered are blank.
 func (h *Host) Screen() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
