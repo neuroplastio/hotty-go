@@ -8,6 +8,7 @@ import "github.com/neuroplastio/hotty-go/hottytea"
 
 - [Overview](#pkg-overview)
 - [Index](#pkg-index)
+- [Examples](#pkg-examples)
 
 ## <a id="pkg-overview"></a>Overview
 
@@ -24,6 +25,140 @@ A Session is the program's side. Its life in a program:
 Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit.
 
 In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells.
+
+### <a id="example-package"></a>Example
+
+A full-screen Bubble Tea program with a surface. Here it runs on a host from hottytest, and a goroutine plays the user; on a real terminal it is
+
+```go
+p := tea.NewProgram(m, tea.WithOutput(m.s.WatchFile(os.Stdout)))
+m.s.Attach(p.Send)
+```
+
+```go
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottytea"
+	"github.com/neuroplastio/hotty-go/hottytest"
+)
+
+// counter is a full-screen program with one surface: a count, and a button
+// that adds one. In a terminal that is not a HOTTY host, it draws the
+// count in cells, and the + key adds one.
+type counter struct {
+	s     *hottytea.Session
+	n     int
+	frame string
+}
+
+func (m *counter) Init() tea.Cmd { return m.s.Detect() }
+
+func (m *counter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	msg, cmd := m.s.Update(msg) // the Session's first
+	switch msg := msg.(type) {
+	case hottytea.ReadyMsg:
+		fmt.Println("ready:", msg.Mode)
+	case hottytea.EventMsg:
+		if msg.Kind == hotty.EventClick && msg.Target == "plus" {
+			m.add()
+		}
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "+":
+			m.add()
+		case "q":
+			return m, tea.Sequence(m.s.Close(), tea.Quit)
+		}
+	}
+	return m, tea.Batch(cmd, m.draw())
+}
+
+// add counts one, and patches the surface: a few bytes, not a document.
+func (m *counter) add() {
+	m.n++
+	m.s.Send(hotty.SetText("counter", "count", strconv.Itoa(m.n)))
+}
+
+// draw lays the frame out: the cells that View returns, and the surfaces
+// that go in them. It returns the commands to send.
+func (m *counter) draw() tea.Cmd {
+	if m.s.Mode != hottytea.Native {
+		m.frame = fmt.Sprintf("Counter\n%d\n(+) add  (q)uit", m.n)
+		return nil
+	}
+	m.frame = "Counter\n\n(q)uit"
+	m.s.Layout([]hottytea.Surface{{
+		Name: "counter",
+		Rect: hottytea.Rect{X: 0, Y: 1, W: 24, H: 1},
+		Doc: func() string {
+			return `<b id="count">` + strconv.Itoa(m.n) + `</b> <button id="plus">+</button>`
+		},
+	}})
+	return m.s.Flush()
+}
+
+func (m *counter) View() tea.View {
+	v := tea.NewView(m.frame)
+	v.AltScreen = true
+	return v
+}
+
+// A full-screen Bubble Tea program with a surface. Here it runs on a host
+// from hottytest, and a goroutine plays the user; on a real terminal it is
+//
+//	p := tea.NewProgram(m, tea.WithOutput(m.s.WatchFile(os.Stdout)))
+//	m.s.Attach(p.Send)
+func main() {
+	h := hottytest.New(nil)
+	m := &counter{s: hottytea.New()}
+	p := tea.NewProgram(m, tea.WithInput(h), tea.WithOutput(m.s.Watch(h)),
+		tea.WithWindowSize(40, 10), tea.WithoutSignalHandler(), tea.WithEnvironment([]string{"TERM=xterm-256color"}))
+	m.s.Attach(p.Send)
+
+	go func() {
+		// The user clicks + twice, once it is on the screen, and quits.
+		for h.Click("counter", "plus") != nil {
+			time.Sleep(time.Millisecond)
+		}
+		_ = h.Click("counter", "plus")
+		h.Type("q")
+	}()
+	if _, err := p.Run(); err != nil {
+		fmt.Println(err)
+	}
+
+	// What the program sent the host, placements aside: one document, two
+	// patches, and the delete on its way out.
+	for _, c := range h.Commands() {
+		switch c.Get("a") {
+		case "doc":
+			fmt.Println("doc", c.Get("s"))
+		case "patch":
+			fmt.Println("patch", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
+		case "del":
+			fmt.Println("del", c.Get("s"))
+		}
+	}
+}
+```
+
+Output:
+
+```
+ready: native
+doc counter
+patch counter #count 1
+patch counter #count 2
+del counter
+```
 
 ## <a id="pkg-index"></a>Index
 
@@ -46,8 +181,8 @@ In a terminal that is not a host, Mode is Text and the Session sends nothing: th
 - [`type Session`](#Session)
   - [`func New() *Session`](#New)
   - [`func (h *Session) Attach(send func(tea.Msg))`](#Session.Attach)
+  - [`func (h *Session) Close() tea.Cmd`](#Session.Close)
   - [`func (h *Session) Delete(name string)`](#Session.Delete)
-  - [`func (h *Session) DeleteAll()`](#Session.DeleteAll)
   - [`func (h *Session) DetachAll()`](#Session.DetachAll)
   - [`func (h *Session) Detect() tea.Cmd`](#Session.Detect)
   - [`func (h *Session) Flush() tea.Cmd`](#Session.Flush)
@@ -61,6 +196,10 @@ In a terminal that is not a host, Mode is Text and the Session sends nothing: th
   - [`func (h *Session) WatchFile(f *os.File) *File`](#Session.WatchFile)
   - [`func (h *Session) Written() int`](#Session.Written)
 - [`type Surface`](#Surface)
+
+### <a id="pkg-examples"></a>Examples
+
+- [Package](#example-package)
 
 ## <a id="pkg-constants"></a>Constants
 
@@ -165,6 +304,8 @@ The modes.
 func (m Mode) String() string
 ```
 
+String is the mode's name: "detecting", "native" or "text".
+
 ## <a id="PongMsg"></a>type PongMsg
 
 ```go
@@ -232,7 +373,7 @@ type Session struct {
 }
 ```
 
-Session is a Bubble Tea program's side of HOTTY (SPEC §2: a program's connection to a host). Its methods are for the program's Update, which Bubble Tea runs on one goroutine; only the output it watches is read on another.
+Session is a Bubble Tea program's side of HOTTY (SPEC §2: a program's connection to a host). Its methods are for the program's Update, which Bubble Tea runs on one goroutine; the output it watches, and the commands Flush returns, run on others.
 
 ### <a id="New"></a>func New
 
@@ -250,6 +391,20 @@ func (h *Session) Attach(send func(tea.Msg))
 
 Attach gives the Session the program to tell when the screen was erased or scrolled under the surfaces: s.Attach(prog.Send), before prog.Run. Without it the Session never asks for a relayout.
 
+### <a id="Session.Close"></a>func (*Session) Close
+
+```go
+func (h *Session) Close() tea.Cmd
+```
+
+Close ends the Session, on the program's way out: it deletes every surface the Session sent, and none of anyone else's, and returns the command that writes the deletes. Return it with tea.Quit:
+
+```go
+return m, tea.Sequence(m.s.Close(), tea.Quit)
+```
+
+After it, Layout and Send do nothing, so that a frame drawn before the program quits does not send a document again. A host deletes the surfaces placed on the alternate screen when the program leaves it, but it may not (SPEC §5.4 says SHOULD).
+
 ### <a id="Session.Delete"></a>func (*Session) Delete
 
 ```go
@@ -258,28 +413,18 @@ func (h *Session) Delete(name string)
 
 Delete deletes a surface, kept or not: one that will not come back. It leaves with the next Flush.
 
-### <a id="Session.DeleteAll"></a>func (*Session) DeleteAll
-
-```go
-func (h *Session) DeleteAll()
-```
-
-DeleteAll deletes every surface the Session has sent, and none of anyone else's: what a program does on its way out, before tea.Quit:
-
-```go
-s.DeleteAll()
-return m, tea.Sequence(s.Flush(), tea.Quit)
-```
-
-A host deletes a surface placed on the alternate screen when the program leaves it, but it may not (SPEC §5.4 says SHOULD).
-
 ### <a id="Session.DetachAll"></a>func (*Session) DetachAll
 
 ```go
 func (h *Session) DetachAll()
 ```
 
-DetachAll detaches every surface the Session has sent (SPEC §5.5): for a program that is not on the alternate screen, and leaves its surfaces in the scrollback when it quits. They stay as they are, and stop reporting to whatever reads the terminal after the program, a shell for instance. It leaves with the next Flush.
+DetachAll detaches every surface the Session has sent (SPEC §5.5): for a program that leaves its surfaces on the screen when it quits, rather than Close. They stay as they are, and stop reporting to whatever reads the terminal after the program, a shell for instance. It leaves with the next Flush:
+
+```go
+m.s.DetachAll()
+return m, tea.Sequence(m.s.Flush(), tea.Quit)
+```
 
 ### <a id="Session.Detect"></a>func (*Session) Detect
 
@@ -295,7 +440,9 @@ Detect asks the terminal whether it is a host (SPEC §4): return it from Init. U
 func (h *Session) Flush() tea.Cmd
 ```
 
-Flush writes the queued commands as one tea.Raw, and is nil when there are none: return it from Update.
+Flush returns the command that writes what is queued, as one tea.Raw, or nil when nothing was queued since the last Flush: return it from Update.
+
+Bubble Tea runs each command on a goroutine of its own, so two updates' commands may run in either order. The command therefore takes the queue when it runs, not when it is made: whichever runs first writes everything queued so far, in order, and a later one what is left, if anything.
 
 ### <a id="Session.Has"></a>func (*Session) Has
 
@@ -311,7 +458,7 @@ Has reports whether the host has a surface's document, on screen or hidden, so t
 func (h *Session) Layout(want []Surface)
 ```
 
-Layout makes the surfaces on screen match want: a new surface gets its document and a placement, a moved or scrolled one is placed again (only the window inside its Clip), and one no longer wanted is hidden if it is kept, or else deleted. What it sends leaves with the next Flush. It does nothing until Mode is Native.
+Layout makes the surfaces on screen match want: a new surface gets its document and a placement, a moved or scrolled one is placed again (only the window inside its Clip), and one no longer wanted is hidden if it is kept, or else deleted. What it sends leaves with the next Flush. It does nothing until Mode is Native, and after Close.
 
 ### <a id="Session.Ping"></a>func (*Session) Ping
 
@@ -335,7 +482,7 @@ Placed reports whether a surface is on screen: placed by the last Layout, and no
 func (h *Session) Send(cmds ...string)
 ```
 
-Send queues commands (patches, focus) for the next Flush. It does nothing when the terminal is not a host.
+Send queues commands (patches, focus) for the next Flush. It does nothing when the terminal is not a host, or after Close.
 
 ### <a id="Session.Update"></a>func (*Session) Update
 

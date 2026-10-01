@@ -8,6 +8,7 @@ import "github.com/neuroplastio/hotty-go/doc"
 
 - [Overview](#pkg-overview)
 - [Index](#pkg-index)
+- [Examples](#pkg-examples)
 
 ## <a id="pkg-overview"></a>Overview
 
@@ -15,9 +16,51 @@ Package doc turns files into HOTTY documents: Markdown, HTML, CSV and TSV, JSON,
 
 A document is a list of top-level blocks, each with an estimate of the rows it takes. Pages groups them into surfaces of a few hundred rows, so a long document never reaches the 1000 rows a surface may have (§5.2) and the first surface can go out before the rest is laid out.
 
-Every block is inert (Inert): nothing in it reports what the user does, and its only links are hyperlinks the terminal opens itself (SPEC §9). A document left in scrollback after its program exits must be, or clicks in it would be reported to whatever reads the terminal next.
+Every block is inert (Inert): nothing in it reports what the user does, and its only links are hyperlinks the terminal opens itself (SPEC §9). A document left in scrollback after its program exits must be, or clicks in it would be reported to whatever reads the terminal next. The exception is a manual page's blocks (ManPage.Blocks), which keep their man: links for a viewer.
 
 The package does no I/O. What a document refers to (a Markdown file's images) comes through Options.ReadFile.
+
+### <a id="example-package-markdown"></a>Example (Markdown)
+
+A program shows a Markdown file among its output: a surface for each page, the page's images sent first as resources. The surfaces are created detached, so nothing in them reaches whatever reads the terminal after the program exits (SPEC §5.5), and their blocks are inert.
+
+```go
+readme := []byte("# Deploys\n\nRun `deploy` with an environment, as the diagram shows.\n\n" +
+	"![how a deploy goes](flow.svg)\n\n" +
+	"| env | region |\n| --- | --- |\n| staging | eu-west |\n| production | us-east |\n")
+flow := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="360" height="72"></svg>`)
+o := doc.Options{
+	Cols:      80, // the terminal's size
+	Screen:    40,
+	ResPrefix: "deploy-4121", // the program's own, so two runs never share an id
+	ReadFile: func(name string) ([]byte, error) {
+		if name == "flow.svg" {
+			return flow, nil
+		}
+		return nil, fs.ErrNotExist
+	},
+}
+d := doc.Markdown(readme, o)
+
+var term bytes.Buffer // os.Stdout, in a program
+for i, page := range doc.Pages(d.Blocks, o.PageRows()) {
+	name := fmt.Sprintf("deploy-4121-readme%d", i)
+	for _, r := range doc.Resources(page) {
+		term.WriteString(hotty.Res(r.ID, r.Type, r.Data))
+		fmt.Println("resource", r.ID, r.Type)
+	}
+	term.WriteString(hotty.DocDetached(name, d.Page(page)))
+	term.WriteString(hotty.Place(name, hotty.Placement{Cols: o.Cols})) // rows: as the content needs
+	fmt.Printf("surface %s: %d blocks, about %d rows\n", name, len(page), doc.Rows(page))
+}
+```
+
+Output:
+
+```
+resource deploy-4121-img-206171d340b210d1 image/svg+xml
+surface deploy-4121-readme0: 4 blocks, about 16 rows
+```
 
 ## <a id="pkg-index"></a>Index
 
@@ -42,6 +85,7 @@ The package does no I/O. What a document refers to (a Markdown file's images) co
   - [`func Markdown(src []byte, o Options) *Doc`](#Markdown)
   - [`func Text(src []byte, o Options) *Doc`](#Text)
   - [`func (d *Doc) Body(page []Block) string`](#Doc.Body)
+  - [`func (d *Doc) Page(page []Block) string`](#Doc.Page)
 - [`type Info`](#Info)
   - [`func ImageInfo(data []byte, name string) (Info, bool)`](#ImageInfo)
 - [`type ManBlock`](#ManBlock)
@@ -67,6 +111,12 @@ The package does no I/O. What a document refers to (a Markdown file's images) co
   - [`func (t *Table) Doc(o Options) *Doc`](#Table.Doc)
 - [`type Value`](#Value)
   - [`func ParseJSON(src []byte) ([]*Value, error)`](#ParseJSON)
+
+### <a id="pkg-examples"></a>Examples
+
+- [Package (Markdown)](#example-package-markdown)
+- [Inert](#example-Inert)
+- [ReadTable](#example-ReadTable)
 
 ## <a id="pkg-constants"></a>Constants
 
@@ -306,13 +356,31 @@ Image is an image file as a document: the image as a resource, in a surface of a
 func Inert(fragment string) string
 ```
 
-Inert makes a fragment of HTML safe to leave in scrollback after its program exits (docs/toolkit.md, Surfaces):
+Inert makes a fragment of HTML safe to leave in scrollback after its program exits, on a surface nobody listens to any more:
 
-  - nothing that runs or loads: \<script>, \<iframe>, \<object>, \<embed>, \<base>, \<meta>, \<link>, event attributes, javascript: URLs;
-  - nothing that reports: no id on a link, button, summary or form control, no data-on, and no forms (a submit is reported whatever the ids);
-  - links only as hyperlinks: an absolute http(s) link gets target="\_blank", so the terminal opens it and never reports it (SPEC §9); any other link becomes its text.
+  - nothing that runs or embeds: \<script>, \<iframe>, \<object>, \<embed>, \<base>, \<meta>, \<link>, event attributes, javascript: URLs, and SVG animations that would set back what Inert removes;
+  - nothing that reports: no id on a link, button, summary or form control, no data-on, and no forms (a submit is reported whatever the ids; SPEC §9);
+  - nothing that takes the keyboard (SPEC §10.1): form controls are disabled, and contenteditable, tabindex and autofocus go;
+  - links only as hyperlinks: an absolute http(s) link gets target="\_blank", so the terminal opens it and never reports it (SPEC §9); any other link becomes its text. An SVG keeps its references to its own parts (href="#…").
 
-A host removes scripts itself (SPEC §12); this does not rely on it.
+The result reads back as itself: markup a second parse would read differently, such as a \<style> that moves into MathML and stops being text, goes through Inert again until it does. A \<plaintext>, which would make the rest of a page its text, becomes a \<pre>.
+
+A \<summary> still takes the keyboard on a click: a program that leaves a document behind detaches its surface too (SPEC §5.5), or creates it detached (hotty.DocDetached). A host removes scripts itself (SPEC §12); Inert does not rely on it.
+
+### <a id="example-Inert"></a>Example
+
+A program's last surface, left behind in scrollback when it exits: its link opens in the browser, and its button does nothing.
+
+```go
+fmt.Println(doc.Inert(`<p id="status">Deployed. <a href="https://ci.example.com/run/42">See the run</a>` +
+	`, or <button id="undo" onclick="undo()">undo</button>.</p>`))
+```
+
+Output:
+
+```
+<p id="status">Deployed. <a href="https://ci.example.com/run/42" target="_blank" rel="noopener noreferrer">See the run</a>, or <button disabled="">undo</button>.</p>
+```
 
 ## <a id="IsImage"></a>func IsImage
 
@@ -419,7 +487,7 @@ Block is one top-level block of a document.
 ```go
 type Doc struct {
 	// CSS is the document's own stylesheet: it goes after the shared one
-	// (CSS), so it wins.
+	// (CSS), so it wins (Page). Nothing in it ends a <style> element.
 	CSS string
 	// Blocks are its top-level blocks, in order.
 	Blocks []Block
@@ -483,11 +551,21 @@ func (d *Doc) Body(page []Block) string
 
 Body is a page's blocks as one body, in the element the stylesheet styles (CSS): \<main class="doc">.
 
+### <a id="Doc.Page"></a>func (*Doc) Page
+
+```go
+func (d *Doc) Page(page []Block) string
+```
+
+Page is a page's document, for hotty.Doc or hotty.DocDetached: the package's stylesheet (CSS), then the document's own, and the page's Body.
+
 ## <a id="Info"></a>type Info
 
 ```go
 type Info struct {
+	// Type is its MIME type: "image/png", "image/svg+xml".
 	Type string
+	// W and H are its size in CSS pixels.
 	W, H int
 }
 ```
@@ -519,11 +597,12 @@ ManBlock is a block of a page for a viewer: part of a section, the first part wi
 ```go
 type ManPage struct {
 	Name, Section string // "ls", "1"
-	Sections      []ManSection
+	// Sections are the page's sections, in order.
+	Sections []ManSection
 }
 ```
 
-ManPage is a manual page as clean, semantic HTML: a section per heading, definition lists for tagged paragraphs (options), and references to other pages as man: links. It is what a viewer shows, and what the web shell's /usr/share/man/html holds, ready made.
+ManPage is a manual page as clean, semantic HTML: a section per heading, definition lists for tagged paragraphs (options), and references to other pages as man: links. CleanMan makes one from groff's or mandoc's HTML; HTML and ReadMan keep it in a file, ready made.
 
 ### <a id="CleanMan"></a>func CleanMan
 
@@ -547,7 +626,9 @@ ReadMan reads a page that HTML wrote.
 func (m *ManPage) Blocks(o Options, target int) []ManBlock
 ```
 
-Blocks splits the page into blocks of about target rows at o.Cols: a section each, a long one cut between its paragraphs and between the entries of its definition lists.
+Blocks splits the page into blocks of about target rows at o.Cols: a section each, a long one cut between its paragraphs and between the entries of its definition lists. target \<= 0 is ManTarget.
+
+The blocks are inert (Inert), but for their man: links: they are for a viewer that hears their clicks (SPEC §9), and shows the page they name (ParseManRef). Detached and left in scrollback, a click on one is reported to whatever reads the terminal next.
 
 ### <a id="ManPage.HTML"></a>func (*ManPage) HTML
 
@@ -555,7 +636,7 @@ Blocks splits the page into blocks of about target rows at o.Cols: a section eac
 func (m *ManPage) HTML(generator string) string
 ```
 
-HTML is the page as a file of its own, what \`go generate\` writes to /usr/share/man/html/\<name>.\<section>.html. generator names what made it, such as "groff 1.24.1", for a test to know it can make it again.
+HTML is the page as a file of its own, which ReadMan reads back: a program can turn its pages once, ahead of time, and keep them as \<name>.\<section>.html. generator names what made it, such as "groff 1.24.1", for a test to know it can make it again (Generator).
 
 ### <a id="ManPage.Text"></a>func (*ManPage) Text
 
@@ -577,6 +658,7 @@ Title is the page as man writes it: "ls(1)".
 
 ```go
 type ManSection struct {
+	// Title is the section's heading, as the page has it: "OPTIONS".
 	Title string
 	// HTML is its content, its heading left out: paragraphs, <dl>, <pre>,
 	// <table> and <h3> subsections.
@@ -642,6 +724,8 @@ type Para struct {
 	// Kind is the element it came from: "h1"…"h6", "p", "li", "pre",
 	// "dt", "dd", "td" (a table's row, cells joined by two spaces).
 	Kind string
+	// Text is its text, its runs of whitespace made one space (a <pre>'s
+	// kept as they are).
 	Text string
 }
 ```
@@ -660,8 +744,12 @@ Paragraphs is an HTML document's text, a paragraph per block: runs of whitespace
 
 ```go
 type Resource struct {
-	ID, Type string
-	Data     []byte
+	// ID is what the document's markup names it by, after cid:.
+	ID string
+	// Type is its MIME type: "image/png".
+	Type string
+	// Data is its bytes, as hotty.Res sends them.
+	Data []byte
 }
 ```
 
@@ -679,7 +767,9 @@ Resources are the resources a page's blocks refer to, each once.
 
 ```go
 type Table struct {
+	// Head is the first row: the columns' names.
 	Head []string
+	// Rows are the rows after it, each as many cells as it had.
 	Rows [][]string
 	// More is how many rows there were after MaxRecords.
 	More int
@@ -700,6 +790,35 @@ func ReadTable(src []byte, comma rune) (*Table, error)
 ```
 
 ReadTable reads a CSV (comma ',') or TSV (comma '\\t') file. TSV fields are split at tabs, with no quoting. On a malformed record it returns the rows before it with the error.
+
+#### <a id="example-ReadTable"></a>Example
+
+A CSV file as a table: its numeric columns right-aligned, and its text for a terminal that is not a host.
+
+```go
+csv := []byte("service,p50 ms,p99 ms\napi,12,48\nauth,7,31\nsearch,25,140\n")
+t, err := doc.ReadTable(csv, ',')
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(t.Head, len(t.Rows), "rows; numeric:", t.Numeric)
+
+d := t.Doc(doc.Options{Cols: 80})
+_ = hotty.DocDetached("latency", d.Page(d.Blocks)) // a host draws the table
+for _, p := range doc.Paragraphs([]byte(d.Body(d.Blocks))) {
+	fmt.Println(p.Text) // any other terminal, its text
+}
+```
+
+Output:
+
+```
+[service p50 ms p99 ms] 3 rows; numeric: [false true true]
+service  p50 ms  p99 ms
+api  12  48
+auth  7  31
+search  25  140
+```
 
 ### <a id="Table.Cell"></a>func (*Table) Cell
 

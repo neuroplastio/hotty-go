@@ -463,6 +463,8 @@ Error is an error reply (SPEC §3.6).
 func (e *Error) Error() string
 ```
 
+Error says what was refused and why: "hotty: patch card: ENOTARGET (go)".
+
 ## <a id="Event"></a>type Event
 
 ```go
@@ -732,6 +734,8 @@ The results of Decoder.Feed.
 ```go
 func (r Result) String() string
 ```
+
+String names the result: "complete", "invalid", ….
 
 ## <a id="Window"></a>type Window
 

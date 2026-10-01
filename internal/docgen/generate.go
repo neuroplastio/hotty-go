@@ -88,7 +88,8 @@ func (m *Module) apiIndex() []byte {
 }
 
 // examplesTable is a table of the example programs: the first sentence of
-// each one's package comment is its use case, the next what it shows.
+// each one's package comment is its use case, the next what it shows. Code
+// in the comment (a usage line, indented) is not a sentence.
 func (m *Module) examplesTable() string {
 	if len(m.Examples) == 0 {
 		return "No examples yet.\n"
@@ -96,7 +97,13 @@ func (m *Module) examplesTable() string {
 	var b strings.Builder
 	b.WriteString("| example | use case | what it shows |\n| --- | --- | --- |\n")
 	for _, e := range m.Examples {
-		text := strings.Join(strings.Fields(e.Doc), " ")
+		var prose []string
+		for line := range strings.Lines(e.Doc) {
+			if !strings.HasPrefix(line, "\t") && !strings.HasPrefix(line, "    ") {
+				prose = append(prose, line)
+			}
+		}
+		text := strings.Join(strings.Fields(strings.Join(prose, "")), " ")
 		useCase := firstSentence(text)
 		shows := firstSentence(strings.TrimSpace(text[len(useCase):]))
 		name := strings.TrimPrefix(e.Dir, "examples/")

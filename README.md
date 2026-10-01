@@ -1,11 +1,47 @@
 # hotty-go
 
 hotty-go is the Go SDK for [HOTTY](https://github.com/neuroplastio/hotty),
-HTML Over The TTY: a terminal program shows small HTML documents, surfaces,
-on rectangles of cells, and hears what the user does in them. The SDK
-encodes the protocol, finds out whether the terminal is a HOTTY host, keeps
-surfaces on screen, and tests programs against a host that runs in the test.
-The reference is also on
+HTML Over The TTY. With it, a terminal program shows small HTML documents,
+called surfaces, on rectangles of cells, and hears what the user does in
+them. A surface can be a card left in the scrollback, a chart that streams,
+a form that asks, or the panels of a full-screen Bubble Tea program.
+
+The SDK:
+
+- encodes the protocol;
+- finds out whether the terminal is a HOTTY host;
+- keeps surfaces on screen while a full-screen frame changes;
+- converts Markdown, tables and images into documents;
+- tests programs against a host that runs inside `go test`.
+
+Every program has three renditions (SPEC §14): surfaces on a host, cells on
+any other terminal, and plain data into a pipe. The examples show all three.
+
+```go
+t, err := term.Open("hello") // the terminal, whatever stdout is
+if err != nil {
+	fmt.Println("Hello.") // no terminal: a pipe, a cron job
+	return
+}
+defer t.Close()
+if !t.Detect(ctx) {
+	fmt.Println("Hello.") // a terminal that is not a host
+	return
+}
+_ = t.LineStart(ctx)
+_, _ = t.Print("hello", `<p>Hello, <b>HTML</b> in the terminal.</p>`, hotty.Placement{Cols: 40, Rows: 1})
+_, _ = t.Fence(ctx) // the host's replies, before the shell reads the terminal
+```
+
+Testing it needs no terminal:
+
+```go
+h := hottytest.New(t)
+run(ctx, h.Term("hello"))
+h.Surface("hello-hello").Text() // "Hello, HTML in the terminal."
+```
+
+The reference is in [docs/api](docs/api) and on
 [pkg.go.dev](https://pkg.go.dev/github.com/neuroplastio/hotty-go).
 
 ## Install
@@ -39,7 +75,13 @@ any other terminal, and into a pipe.
 <!-- docgen:examples -->
 | example | use case | what it shows |
 | --- | --- | --- |
+| [ask](examples/ask) | Ask asks for what a deploy needs with a form, and prints the answers as JSON for the script that ran it. | It shows a surface the program reads events from: the form is the program's while it asks, takes the keyboard, reports a submit, and shows what is wrong without a round trip per key; then a detached summary replaces it, so nothing is left that reports to the shell (SPEC §5.5, §10). |
+| [card](examples/card) | Card prints the result of a deploy as a card that stays in the scrollback, as a box of text where the terminal is not a HOTTY host, and as one line of data into a pipe. | It shows the three renditions every HOTTY program has (SPEC §14): which one a run takes, and how each is made. |
+| [dashboard](examples/dashboard) | Dashboard watches HTTP endpoints, full screen: whether each is up, and its latency charted as the probes come back. | It is a Bubble Tea program, and each endpoint is a card on a surface that hottytea keeps in place as the frame changes. |
 | [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest HOTTY program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
+| [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
+| [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | doc.Markdown converts the file into blocks; doc.Pages groups them into surfaces that each fit the screen, so a host can show each whole. |
+| [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.SetVar) and text patches change the labels (hotty.SetText), a few dozen bytes each, in synchronized output so the host shows them together (SPEC §6). |
 <!-- /docgen:examples -->
 
 ## Documentation

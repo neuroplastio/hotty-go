@@ -279,6 +279,9 @@ func TestEveryExportedIdentifierIsDocumented(t *testing.T) {
 var (
 	anchorRE = regexp.MustCompile(`<a id="([^"]+)"></a>`)
 	linkRE   = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+	// codeRE is code, fenced or a span, whose brackets are not links: an
+	// Example's Markdown in a Go string.
+	codeRE = regexp.MustCompile("(?s)```.*?```|`[^`\n]*`")
 )
 
 // Every link the documentation makes inside the repository leads to a file
@@ -294,7 +297,7 @@ func TestLinksResolve(t *testing.T) {
 			}
 		}
 		for p, b := range files {
-			for _, m := range linkRE.FindAllStringSubmatch(string(b), -1) {
+			for _, m := range linkRE.FindAllStringSubmatch(codeRE.ReplaceAllString(string(b), ""), -1) {
 				target := m[1]
 				if strings.Contains(target, "://") {
 					continue

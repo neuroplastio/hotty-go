@@ -14,7 +14,7 @@ import "github.com/neuroplastio/hotty-go/chart"
 
 Package chart draws line charts for HOTTY surfaces, as inline SVG that a program patches as values arrive, and in cells for a terminal that is not a host (Spark).
 
-A Line is one series: its box, its scale and its colour. SVG is the chart in a box of its own; Shapes are its line and area, for a box several series share (Box). Patch and PatchShapes are the commands that bring a chart already sent to new values: a few hundred bytes a tick, where a new document would be thousands (SPEC §6).
+A Line is one series: its box, its scale and its colour. SVG is the chart in a box of its own. For a box several series share (Box), each draws its Shapes, its line and area, and one of them its Rules, the grid. Patch and PatchShapes are the commands that bring a chart already sent to new values: a few hundred bytes a tick, where a new document would be thousands (SPEC §6).
 
 The SVG keeps to rules that make it draw the same in every host:
 
@@ -65,6 +65,7 @@ rpsA d=M0,54L0,35.1L36,37.8L72,21.6L108,10.8L108,54Z
   - [`func (c Line) Patch(surface string, values []float64) []string`](#Line.Patch)
   - [`func (c Line) PatchShapes(surface string, values []float64) []string`](#Line.PatchShapes)
   - [`func (c Line) Path(values []float64) string`](#Line.Path)
+  - [`func (c Line) Rules() string`](#Line.Rules)
   - [`func (c Line) SVG(values []float64) string`](#Line.SVG)
   - [`func (c Line) Shapes(values []float64) string`](#Line.Shapes)
 
@@ -342,6 +343,14 @@ Output:
 ```
 M30,9L60,6L90,7L120,1
 ```
+
+### <a id="Line.Rules"></a>func (Line) Rules
+
+```go
+func (c Line) Rules() string
+```
+
+Rules is the grid, one \<path> of thin rectangles (a rectangle fills its pixel row where a 1px stroke would straddle two), for a box several series share: draw it first, under their Shapes. "" without Grid. When the grid changes, set its path data (GridID, "d") to GridPath.
 
 ### <a id="Line.SVG"></a>func (Line) SVG
 
