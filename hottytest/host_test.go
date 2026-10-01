@@ -533,13 +533,15 @@ func TestClick(t *testing.T) {
 	}
 	// The button takes the keyboard, then reports with its value.
 	expect(t, sent(h), "ev focus t=", `ev click t=go {"value":"7"}`)
+	// A click on what takes no focus gives the keyboard back (SPEC
+	// §10.1): blur, and then the click it reports.
 	_ = h.Click("c", "text")
-	expect(t, sent(h), "ev click t=card")
+	expect(t, sent(h), "ev blur t=", "ev click t=card")
 	if err := h.Click("c", "plain"); !errors.Is(err, ErrNoReport) {
 		t.Errorf("a click on plain text: %v", err)
 	}
 	_ = h.Click("c", "rel")
-	expect(t, sent(h), `ev click t= {"href":"guide","url":"https://example.com/docs/guide"}`)
+	expect(t, sent(h), "ev focus t=", `ev click t= {"href":"guide","url":"https://example.com/docs/guide"}`)
 	_ = h.Click("c", "web")
 	expect(t, sent(h))
 	if o := h.Opened(); len(o) != 1 || o[0] != "https://neuroplast.io" {
@@ -555,6 +557,21 @@ func TestClick(t *testing.T) {
 	local := shown(t, "l", `<a id=top href="#top">top</a>`)
 	_ = local.Click("l", "top")
 	expect(t, sent(local), "ev focus t=", `ev click t= {"href":"#top"}`)
+
+	// So does a click on another surface, on what takes no focus: the
+	// surface that had the keyboard hears blur.
+	two := shown(t, "a", `<input id=i>`)
+	send(two, hotty.Doc("b", `<div id=d data-on=click>d</div>`), hotty.Place("b", hotty.Placement{Cols: 10, Rows: 1}))
+	_ = two.Click("a", "i")
+	two.drain()
+	_ = two.Click("b", "d")
+	if evs := two.Events(); len(evs) < 2 || evs[len(evs)-2].Surface != "a" || evs[len(evs)-2].Kind != "blur" {
+		t.Errorf("a click on another surface: %+v", evs)
+	}
+	expect(t, sent(two), "ev blur t=", "ev click t=d")
+	if f := two.Surface("a").Focused(); f != "" {
+		t.Errorf("the first surface still has the keyboard, at %q", f)
+	}
 }
 
 // Links have no id as often as not: a manual page's references, a

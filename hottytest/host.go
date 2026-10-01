@@ -801,10 +801,11 @@ func (h *Host) element(s *Surface, id string) (*html.Node, error) {
 
 // Click clicks the element with an id, as the user does (SPEC §9): a press
 // first, if the placement asks for presses; the keyboard, if the element
-// takes focus; then click, reported by the nearest element from it outward
-// that reports clicks, if that has an id. A link reports its href, and a
-// hyperlink (target=_blank) is opened by the terminal and reports nothing
-// (Opened). A submit button then submits its form.
+// takes focus, or else back to the terminal from the surface that had it
+// (blur, SPEC §10.1); then click, reported by the nearest element from it
+// outward that reports clicks, if that has an id. A link reports its href,
+// and a hyperlink (target=_blank) is opened by the terminal and reports
+// nothing (Opened). A submit button then submits its form.
 //
 // On a detached surface the click does what is local and reports nothing:
 // ErrDetached.
@@ -859,6 +860,10 @@ func (h *Host) click(s *Surface, el *html.Node) error {
 	}
 	if f := closest(el, focusable); f != nil {
 		h.takeKeyboard(s, f, true)
+	} else if h.keyboard != nil {
+		// A click on what takes no focus gives the keyboard back to the
+		// terminal (SPEC §10.1).
+		h.blur(h.keyboard)
 	}
 	rep := closest(el, reportsClick)
 	if rep == nil {
