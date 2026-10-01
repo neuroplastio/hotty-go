@@ -20,8 +20,9 @@ type Surface struct {
 	detached bool
 	placed   bool
 	place    hotty.Placement
-	col, row int // where the placement's top-left cell is on the screen
-	created  int // the order of creation, for stacking
+	col, row int  // where the placement's top-left cell is on the screen
+	alt      bool // placed on the alternate screen
+	created  int  // the order of creation, for stacking
 
 	// The controls' state, which the user changes and the program's
 	// attributes set (SPEC §6.2): a control's value, a box's checked.
@@ -95,8 +96,9 @@ func (s *Surface) HTML() string {
 	return b.String()
 }
 
-// Text is the text of the document's body, its runs of whitespace made one
-// space: what a reader sees, roughly.
+// Text is the text of the document's body as a reader sees it, roughly:
+// block elements apart, runs of whitespace one space, styles and scripts
+// left out.
 func (s *Surface) Text() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,7 +106,41 @@ func (s *Surface) Text() string {
 	if body == nil {
 		return ""
 	}
-	return strings.Join(strings.Fields(textOf(body)), " ")
+	var b strings.Builder
+	var visit func(n *html.Node)
+	visit = func(n *html.Node) {
+		switch {
+		case n.Type == html.TextNode:
+			b.WriteString(n.Data)
+			return
+		case n.Type == html.ElementNode && (n.DataAtom == atom.Style || n.DataAtom == atom.Script || n.DataAtom == atom.Template):
+			return
+		}
+		apart := n.Type == html.ElementNode && blocks[n.DataAtom]
+		if apart {
+			b.WriteByte(' ')
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			visit(c)
+		}
+		if apart {
+			b.WriteByte(' ')
+		}
+	}
+	visit(body)
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// blocks are the elements a reader sees apart from their neighbours.
+var blocks = map[atom.Atom]bool{
+	atom.Address: true, atom.Article: true, atom.Aside: true, atom.Blockquote: true, atom.Br: true,
+	atom.Button: true, atom.Caption: true, atom.Dd: true, atom.Details: true, atom.Dialog: true,
+	atom.Div: true, atom.Dl: true, atom.Dt: true, atom.Fieldset: true, atom.Figcaption: true,
+	atom.Figure: true, atom.Footer: true, atom.Form: true, atom.H1: true, atom.H2: true, atom.H3: true,
+	atom.H4: true, atom.H5: true, atom.H6: true, atom.Header: true, atom.Hr: true, atom.Legend: true,
+	atom.Li: true, atom.Main: true, atom.Nav: true, atom.Ol: true, atom.Option: true, atom.P: true,
+	atom.Pre: true, atom.Section: true, atom.Summary: true, atom.Table: true, atom.Tbody: true,
+	atom.Td: true, atom.Tfoot: true, atom.Th: true, atom.Thead: true, atom.Tr: true, atom.Ul: true,
 }
 
 // Element is an element as a host inspects it (SPEC §16): its tag, its

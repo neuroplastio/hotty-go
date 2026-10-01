@@ -15,6 +15,9 @@
 // vectors. It lays nothing out and draws no pixels: a placement with auto
 // rows gets an estimate (AutoRows).
 //
+// A placement made on the alternate screen goes with it, and so does its
+// surface (SPEC §5.4). A full reset (RIS) deletes every surface.
+//
 // It also answers the queries terminals answer: Primary Device Attributes,
 // the cursor's position, the background colour, and, when asked to
 // (KittyGraphics), the kitty graphics query. Text keeps the cells the
@@ -158,6 +161,7 @@ type Host struct {
 	created  int
 	res      map[string]resource
 	keyboard *Surface // the surface that has the keyboard
+	alt      bool     // the alternate screen is on
 	commands []hotty.Message
 	replies  []hotty.Message
 	events   []hotty.Event
@@ -315,6 +319,22 @@ func (h *Host) byte(c byte) {
 	}
 }
 
+// altScreen enters or leaves the alternate screen. A placement made there
+// belongs to it: leaving deletes its surface (SPEC §5.4, SHOULD).
+func (h *Host) altScreen(on bool) {
+	if !on && h.alt {
+		for name, s := range h.surfaces {
+			if s.placed && s.alt {
+				if h.keyboard == s {
+					h.keyboard = nil
+				}
+				delete(h.surfaces, name)
+			}
+		}
+	}
+	h.alt = on
+}
+
 // reset is RIS: a full reset deletes every surface (SPEC §5.4).
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
@@ -328,6 +348,8 @@ func (h *Host) csi(params string, final byte) {
 		h.in.write("\x1b[?62;22c")
 	case final == 'n' && params == "6":
 		h.in.write(fmt.Sprintf("\x1b[%d;%dR", h.scr.row+1, h.scr.col+1))
+	case (final == 'h' || final == 'l') && (params == "?1049" || params == "?1047" || params == "?47"):
+		h.altScreen(final == 'h')
 	case final == 'n' && params == "?6":
 		h.in.write(fmt.Sprintf("\x1b[?%d;%dR", h.scr.row+1, h.scr.col+1))
 	default:
@@ -617,7 +639,7 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 	if _, ok := m.Control["x"]; ok || m.Control["y"] != "" || m.Control["w"] != "" || m.Control["h"] != "" {
 		s.place.Window = hotty.Window{X: x, Y: y, W: w, H: hh}
 	}
-	s.col, s.row = h.scr.col, h.scr.row
+	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
 	if !s.place.KeepCursor {
 		// As if by h times IND, then CR.
 		h.scr.row += hh

@@ -260,6 +260,10 @@ func TestSurfacesAndReset(t *testing.T) {
 	for _, s := range h.Surfaces() {
 		names = append(names, s.Name())
 	}
+	send(h, hotty.Doc("t", `<style>p{}</style><p>one<b>two</b></p><ul><li>three</li><li>four</li></ul>x<br>y`))
+	if got := h.Surface("t").Text(); got != "onetwo three four x y" {
+		t.Errorf("Text = %q", got)
+	}
 	if strings.Join(names, ",") != "b,a" || h.Surface("b").Text() != "B" {
 		t.Errorf("Surfaces %v, b %q", names, h.Surface("b").Text())
 	}
@@ -272,8 +276,26 @@ func TestSurfacesAndReset(t *testing.T) {
 	if len(h.Surfaces()) != 0 {
 		t.Error("DelAll")
 	}
-	if len(h.Commands()) != 5 {
+	if len(h.Commands()) != 6 {
 		t.Errorf("%d commands", len(h.Commands()))
+	}
+}
+
+// A placement made on the alternate screen belongs to it: leaving the
+// screen deletes the surface (SPEC §5.4).
+func TestAlternateScreen(t *testing.T) {
+	h := New(t)
+	send(h, hotty.Doc("main", ""), hotty.Place("main", hotty.Placement{Cols: 5, Rows: 1}))
+	send(h, "\x1b[?1049h", hotty.Doc("alt", ""), hotty.Place("alt", hotty.Placement{Cols: 5, Rows: 1}), hotty.Doc("unplaced", ""))
+	send(h, "\x1b[?1049l")
+	if h.Surface("alt") != nil || h.Surface("main") == nil || h.Surface("unplaced") == nil {
+		t.Errorf("after leaving the alternate screen: %v", h.Surfaces())
+	}
+	// Placed on the main screen again, a surface stays.
+	send(h, "\x1b[?1049h", hotty.Place("main", hotty.Placement{Cols: 5, Rows: 1}), hotty.Place("unplaced", hotty.Placement{Cols: 5, Rows: 1}), "\x1b[?1049l")
+	send(h, hotty.Place("main", hotty.Placement{Cols: 5, Rows: 1}))
+	if h.Surface("unplaced") != nil {
+		t.Error("placed on the alternate screen")
 	}
 }
 
