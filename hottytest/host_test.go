@@ -238,6 +238,41 @@ func TestScreen(t *testing.T) {
 }
 
 // The sequences a full-screen renderer such as Bubble Tea's draws with.
+// A line longer than the terminal is wide goes on in the rows below:
+// Screen has the rows, Lines the lines as the program wrote them.
+func TestLines(t *testing.T) {
+	h := New(t, Size(10, 6))
+	if got := h.Lines(); len(got) != 0 {
+		t.Errorf("Lines of a new host: %q", got)
+	}
+	send(h, "$ echo 0123456789abc\r\n", "0123456789abc \r\n", "short\r\n")
+	if got, want := h.Screen(), "$ echo 012\n3456789abc\n0123456789\nabc\nshort"; got != want {
+		t.Errorf("Screen %q, want %q", got, want)
+	}
+	lines := func(want ...string) {
+		t.Helper()
+		if got := h.Lines(); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("Lines %q, want %q", got, want)
+		}
+	}
+	lines("$ echo 0123456789abc", "0123456789abc", "short")
+	// A row erased whole goes on from nothing: what is written there is a
+	// line of its own.
+	send(h, "\x1b[2A\x1b[2Kx")
+	lines("$ echo 0123456789abc", "0123456789", "x", "short")
+	// Lines inserted and deleted take their rows' wraps with them.
+	send(h, "\x1b[4A\r\x1b[L")
+	lines("", "$ echo 0123456789abc", "0123456789", "x", "short")
+	send(h, "\x1b[M")
+	lines("$ echo 0123456789abc", "0123456789", "x", "short")
+	// The alternate screen has rows of its own, and scrolls them with
+	// their wraps.
+	send(h, "\x1b[?1049h", "aaaaaaaaaabbbbbbbbbbcc\r\nd\r\ne\r\nf\r\ng")
+	lines("bbbbbbbbbbcc", "d", "e", "f", "g")
+	send(h, "\x1b[?1049l")
+	lines("$ echo 0123456789abc", "0123456789", "x", "short")
+}
+
 func TestScreenEdits(t *testing.T) {
 	for _, tc := range []struct {
 		name, in, want string

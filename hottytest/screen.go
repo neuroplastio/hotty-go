@@ -16,8 +16,9 @@ import (
 // screen (fixed) is rows lines, and what scrolls off it is lost.
 type screen struct {
 	lines      [][]rune
-	top        int // the first line on view
-	col, row   int // the cursor; row is an index in lines
+	wraps      []bool // wraps[i]: line i goes on from line i-1, which the cursor wrapped off
+	top        int    // the first line on view
+	col, row   int    // the cursor; row is an index in lines
 	cols, rows int
 	fixed      bool   // the alternate screen
 	saved      [2]int // DECSC: the cursor's column and row on view
@@ -31,6 +32,7 @@ func (s *screen) line() []rune { return s.lineAt(s.row) }
 func (s *screen) lineAt(i int) []rune {
 	for len(s.lines) <= i {
 		s.lines = append(s.lines, nil)
+		s.wraps = append(s.wraps, false)
 	}
 	return s.lines[i]
 }
@@ -39,6 +41,7 @@ func (s *screen) put(r rune) {
 	if s.col >= s.cols {
 		s.index()
 		s.col = 0
+		s.wraps[s.row] = true
 	}
 	l := s.line()
 	for len(l) < s.col {
@@ -129,8 +132,9 @@ func (s *screen) insertLines(a, b, n int) {
 	s.lineAt(b)
 	n = min(n, b-a+1)
 	copy(s.lines[a+n:b+1], s.lines[a:b+1-n])
+	copy(s.wraps[a+n:b+1], s.wraps[a:b+1-n])
 	for i := a; i < a+n; i++ {
-		s.lines[i] = nil
+		s.clear(i)
 	}
 }
 
@@ -140,8 +144,9 @@ func (s *screen) deleteLines(a, b, n int) {
 	s.lineAt(b)
 	n = min(n, b-a+1)
 	copy(s.lines[a:b+1-n], s.lines[a+n:b+1])
+	copy(s.wraps[a:b+1-n], s.wraps[a+n:b+1])
 	for i := b + 1 - n; i <= b; i++ {
-		s.lines[i] = nil
+		s.clear(i)
 	}
 }
 
@@ -152,11 +157,18 @@ func (s *screen) moveTo(row, col int) {
 	s.line()
 }
 
+// clear blanks line i whole: what is written there next is a line of its
+// own.
+func (s *screen) clear(i int) { s.lines[i], s.wraps[i] = nil, false }
+
 // erase blanks the cursor's line from column a to before b.
 func (s *screen) erase(a, b int) {
 	l := s.line()
 	if b >= len(l) {
 		s.lines[s.row] = l[:min(a, len(l))]
+		if a == 0 {
+			s.wraps[s.row] = false
+		}
 		return
 	}
 	for i := a; i < b; i++ {
@@ -213,26 +225,26 @@ func (s *screen) csi(params string, final byte) {
 		case 1:
 			s.erase(0, s.col+1)
 		case 2:
-			s.lines[s.row] = nil
+			s.clear(s.row)
 		}
 	case 'J':
 		switch arg(0, 0) {
 		case 0:
 			s.erase(s.col, s.cols)
 			for i := s.row + 1; i < min(len(s.lines), s.top+s.rows); i++ {
-				s.lines[i] = nil
+				s.clear(i)
 			}
 		case 1:
 			s.erase(0, s.col+1)
 			for i := s.top; i < s.row; i++ {
-				s.lines[i] = nil
+				s.clear(i)
 			}
 		case 2:
 			for i := s.top; i < min(len(s.lines), s.top+s.rows); i++ {
-				s.lines[i] = nil
+				s.clear(i)
 			}
 		case 3:
-			s.lines = s.lines[s.top:]
+			s.lines, s.wraps = s.lines[s.top:], s.wraps[s.top:]
 			s.row -= s.top
 			s.top = 0
 		}
@@ -292,6 +304,36 @@ func (s *screen) save() { s.saved = [2]int{s.col, s.row - s.top} }
 
 // restore is DECRC.
 func (s *screen) restore() { s.moveTo(s.saved[1], s.saved[0]) }
+
+// logical is the screen's text as lines were written: a row the cursor
+// wrapped onto joined to the one before it, trailing spaces and empty
+// lines at the end left out.
+func (s *screen) logical() []string {
+	var out []string
+	var cur []rune
+	row := 0 // where the last row starts in cur
+	for i, l := range s.lines {
+		switch {
+		case i > 0 && s.wraps[i]:
+			// The row before was full when the cursor wrapped off it.
+			for len(cur) < row+s.cols {
+				cur = append(cur, ' ')
+			}
+		case i > 0:
+			out = append(out, strings.TrimRight(string(cur), " "))
+			cur = cur[:0]
+		}
+		row = len(cur)
+		cur = append(cur, l...)
+	}
+	if len(s.lines) > 0 {
+		out = append(out, strings.TrimRight(string(cur), " "))
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return out
+}
 
 // String is the screen as text: a line a row, trailing spaces and empty
 // rows at the end left out.

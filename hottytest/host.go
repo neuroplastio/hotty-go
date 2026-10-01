@@ -19,8 +19,9 @@
 //
 // It also answers the queries terminals answer: Primary Device Attributes,
 // the cursor's position, the background colour, and, when asked to
-// (KittyGraphics), the kitty graphics query. Text keeps the cells the
-// program printed (Screen).
+// (KittyGraphics), the kitty graphics query. It keeps the cells the
+// program printed, as rows (Screen) and as the lines it wrote (Lines), and
+// where it left the cursor (Cursor).
 //
 // A Host made with Text is a terminal that is not a HOTTY host: the
 // program's commands get no answer, as in any other terminal.
@@ -1233,6 +1234,16 @@ func (h *Host) Screen() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.scr.String()
+}
+
+// Lines is the screen's text as the program wrote its lines: Screen, with
+// each row that a line went on to when it was wider than the terminal
+// (autowrap) joined to the row before it. A row erased whole starts a line
+// of its own.
+func (h *Host) Lines() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.scr.logical()
 }
 
 // Cursor is where the cursor is, and whether it is on show (DECTCEM:

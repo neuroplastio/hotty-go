@@ -25,7 +25,7 @@ The host keeps every surface's document as the program's commands leave it, with
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
-It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. Text keeps the cells the program printed (Screen).
+It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. It keeps the cells the program printed, as rows (Screen) and as the lines it wrote (Lines), and where it left the cursor (Cursor).
 
 A Host made with Text is a terminal that is not a HOTTY host: the program's commands get no answer, as in any other terminal.
 
@@ -53,6 +53,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
   - [`func (h *Host) Fill(surface, id, text string) error`](#Host.Fill)
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
+  - [`func (h *Host) Lines() []string`](#Host.Lines)
   - [`func (h *Host) Opened() []string`](#Host.Opened)
   - [`func (h *Host) Output() string`](#Host.Output)
   - [`func (h *Host) Press(surface, id string) error`](#Host.Press)
@@ -276,6 +277,14 @@ func (h *Host) Invalid() int
 ```
 
 Invalid counts the malformed messages the program sent.
+
+### <a id="Host.Lines"></a>func (*Host) Lines
+
+```go
+func (h *Host) Lines() []string
+```
+
+Lines is the screen's text as the program wrote its lines: Screen, with each row that a line went on to when it was wider than the terminal (autowrap) joined to the row before it. A row erased whole starts a line of its own.
 
 ### <a id="Host.Opened"></a>func (*Host) Opened
 
