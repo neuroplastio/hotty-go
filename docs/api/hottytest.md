@@ -43,6 +43,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Check(surface, id string, on bool) error`](#Host.Check)
   - [`func (h *Host) Choose(surface, id, value string) error`](#Host.Choose)
   - [`func (h *Host) Click(surface, id string) error`](#Host.Click)
+  - [`func (h *Host) ClickLink(surface, href string) error`](#Host.ClickLink)
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
@@ -193,6 +194,14 @@ func (h *Host) Click(surface, id string) error
 Click clicks the element with an id, as the user does (SPEC §9): a press first, if the placement asks for presses; the keyboard, if the element takes focus; then click, reported by the nearest element from it outward that reports clicks, if that has an id. A link reports its href, and a hyperlink (target=\_blank) is opened by the terminal and reports nothing (Opened). A submit button then submits its form.
 
 On a detached surface the click does what is local and reports nothing: ErrDetached.
+
+### <a id="Host.ClickLink"></a>func (*Host) ClickLink
+
+```go
+func (h *Host) ClickLink(surface, href string) error
+```
+
+ClickLink clicks the first link in a surface whose href is href, as written in the document: for links with no id, such as a manual page's references. It is Click on that link.
 
 ### <a id="Host.Close"></a>func (*Host) Close
 

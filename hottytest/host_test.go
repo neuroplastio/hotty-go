@@ -471,6 +471,35 @@ func TestClick(t *testing.T) {
 	expect(t, sent(local), "ev focus t=", `ev click t= {"href":"#top"}`)
 }
 
+// Links have no id as often as not: a manual page's references, a
+// document's. ClickLink clicks one by its href.
+func TestClickLink(t *testing.T) {
+	h := shown(t, "m", `<p>See <a href="man:ls(1)" class="xref"><b>ls</b>(1)</a> and `+
+		`<a href="https://neuroplast.io" target=_blank>the site</a>.</p><p><a href="man:ls(1)">again</a></p>`)
+	if err := h.ClickLink("m", "man:ls(1)"); err != nil {
+		t.Fatal(err)
+	}
+	// The first of the two, which takes the keyboard (a link with an href)
+	// and reports its href.
+	expect(t, sent(h), "ev focus t=", `ev click t= {"href":"man:ls(1)","url":"man:ls(1)"}`)
+	if f := h.Surface("m").Focused(); f != "" {
+		t.Errorf("focused %q: the link has no id", f)
+	}
+	if err := h.ClickLink("m", "https://neuroplast.io"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, sent(h))
+	if o := h.Opened(); len(o) != 1 || o[0] != "https://neuroplast.io" {
+		t.Errorf("Opened %v", o)
+	}
+	if err := h.ClickLink("m", "man:cat(1)"); !errors.Is(err, ErrNoElement) {
+		t.Errorf("no such link: %v", err)
+	}
+	if err := h.ClickLink("nope", "man:ls(1)"); !errors.Is(err, ErrNoSurface) {
+		t.Errorf("no such surface: %v", err)
+	}
+}
+
 func TestFormAndKeyboard(t *testing.T) {
 	h := shown(t, "f", `<form id=f>`+
 		`<input id=name name=name><textarea id=notes name=notes data-on=input></textarea>`+

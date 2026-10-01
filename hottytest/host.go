@@ -806,6 +806,30 @@ func (h *Host) Click(surface, id string) error {
 	if err != nil {
 		return err
 	}
+	return h.click(s, el)
+}
+
+// ClickLink clicks the first link in a surface whose href is href, as
+// written in the document: for links with no id, such as a manual page's
+// references. It is Click on that link.
+func (h *Host) ClickLink(surface, href string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, err := h.target(surface)
+	if err != nil {
+		return err
+	}
+	el := find(s.doc, func(n *html.Node) bool {
+		v, ok := attr(n, "href")
+		return n.DataAtom == atom.A && ok && v == href
+	})
+	if el == nil {
+		return fmt.Errorf("%w: a link to %s in %s", ErrNoElement, href, s.name)
+	}
+	return h.click(s, el)
+}
+
+func (h *Host) click(s *Surface, el *html.Node) error {
 	if a := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.A }); a != nil {
 		if _, ok := attr(a, "href"); ok && hyperlink(a) {
 			if u := s.resolve(a); u != "" {
