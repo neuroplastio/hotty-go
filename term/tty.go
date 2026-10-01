@@ -83,3 +83,8 @@ func Open(name string) (*Term, error) {
 	}
 	return t, nil
 }
+
+// IsTerminal reports whether f is a terminal: whether output written to it
+// is seen, so surfaces and cells make sense, or goes to a pipe or a file,
+// which wants plain data.
+func IsTerminal(f *os.File) bool { return f != nil && xterm.IsTerminal(f.Fd()) }

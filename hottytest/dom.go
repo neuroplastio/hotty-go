@@ -3,6 +3,7 @@ package hottytest
 import (
 	"slices"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -13,6 +14,7 @@ import (
 // Surface is one surface the program made: its document, as the program's
 // commands left it, and its placement.
 type Surface struct {
+	mu       *sync.Mutex // the host's: its accessors are safe while the program writes
 	name     string
 	doc      *html.Node
 	detached bool
@@ -30,8 +32,8 @@ type Surface struct {
 	keyb    bool // the surface has the keyboard
 }
 
-func newSurface(name, markup string, created int) *Surface {
-	s := &Surface{name: name, created: created}
+func newSurface(mu *sync.Mutex, name, markup string, created int) *Surface {
+	s := &Surface{mu: mu, name: name, created: created}
 	s.setDoc(markup)
 	return s
 }
@@ -55,21 +57,39 @@ func (s *Surface) dirty() map[*html.Node]bool { return s.edited }
 func (s *Surface) Name() string { return s.name }
 
 // Detached reports whether the surface is detached (SPEC §5.5).
-func (s *Surface) Detached() bool { return s.detached }
+func (s *Surface) Detached() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.detached
+}
 
 // Placed reports whether the surface is placed: on screen, not hidden.
-func (s *Surface) Placed() bool { return s.placed }
+func (s *Surface) Placed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.placed
+}
 
 // Placement is the surface's last placement, as the program sent it; Rows
 // is the rows the host chose when the program asked for auto.
-func (s *Surface) Placement() hotty.Placement { return s.place }
+func (s *Surface) Placement() hotty.Placement {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.place
+}
 
 // At is the screen cell of the placement's top-left corner: the cursor's,
 // when the program placed it.
-func (s *Surface) At() (col, row int) { return s.col, s.row }
+func (s *Surface) At() (col, row int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.col, s.row
+}
 
 // HTML is the document as it is now.
 func (s *Surface) HTML() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var b strings.Builder
 	_ = html.Render(&b, s.doc)
 	return b.String()
@@ -78,6 +98,8 @@ func (s *Surface) HTML() string {
 // Text is the text of the document's body, its runs of whitespace made one
 // space: what a reader sees, roughly.
 func (s *Surface) Text() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	body := find(s.doc, func(n *html.Node) bool { return n.DataAtom == atom.Body })
 	if body == nil {
 		return ""
@@ -106,6 +128,8 @@ type Child struct {
 
 // Element finds the element with an id. ok is false when there is none.
 func (s *Surface) Element(id string) (e Element, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := s.byID(id)
 	if n == nil {
 		return Element{}, false
@@ -125,12 +149,18 @@ func (s *Surface) Element(id string) (e Element, ok bool) {
 
 // TextOf is the text of the element with an id, "" when there is none.
 func (s *Surface) TextOf(id string) string {
-	e, _ := s.Element(id)
-	return e.Text
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n := s.byID(id); n != nil {
+		return textOf(n)
+	}
+	return ""
 }
 
 // Attr is an attribute of the element with an id.
 func (s *Surface) Attr(id, name string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := s.byID(id)
 	if n == nil {
 		return "", false
@@ -141,7 +171,13 @@ func (s *Surface) Attr(id, name string) (string, bool) {
 // Var is the custom property --name set on the element with an id, by the
 // document's style attribute or a var patch.
 func (s *Surface) Var(id, name string) (string, bool) {
-	style, ok := s.Attr(id, "style")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.byID(id)
+	if n == nil {
+		return "", false
+	}
+	style, ok := attr(n, "style")
 	if !ok {
 		return "", false
 	}
@@ -151,6 +187,8 @@ func (s *Surface) Var(id, name string) (string, bool) {
 // Value is a control's current value: what the program set, or the user
 // typed (Fill). For a checkbox or radio button, "true" or "false".
 func (s *Surface) Value(id string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	n := s.byID(id)
 	if n == nil {
 		return "", false
@@ -167,6 +205,8 @@ func (s *Surface) Value(id string) (string, bool) {
 // Focused is the id of the element that has focus, while the surface has
 // the keyboard; "" otherwise.
 func (s *Surface) Focused() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.keyb || s.focused == nil {
 		return ""
 	}

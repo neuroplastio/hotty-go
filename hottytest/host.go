@@ -160,6 +160,7 @@ type Host struct {
 	keyboard *Surface // the surface that has the keyboard
 	commands []hotty.Message
 	replies  []hotty.Message
+	events   []hotty.Event
 	opened   []string // hyperlinks the user opened
 	errs     []string
 
@@ -441,6 +442,9 @@ func (h *Host) send(ctl hotty.Control, payload []byte) {
 		if _, ok := m.Reply(); ok {
 			h.replies = append(h.replies, m)
 		}
+		if ev, ok := m.Event(); ok {
+			h.events = append(h.events, ev)
+		}
 	}
 	h.in.write(enc)
 }
@@ -488,7 +492,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 				return hotty.EQUOTA, "surfaces", nil
 			}
 			h.created++
-			s = newSurface(name, string(m.Payload), h.created)
+			s = newSurface(&h.mu, name, string(m.Payload), h.created)
 			h.surfaces[name] = s
 		} else {
 			if h.keyboard == s {
@@ -1171,6 +1175,14 @@ func (h *Host) Replies() []hotty.Message {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]hotty.Message(nil), h.replies...)
+}
+
+// Events are the events the host sent the program, in order: what the
+// user's actions reported.
+func (h *Host) Events() []hotty.Event {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]hotty.Event(nil), h.events...)
 }
 
 // Resource is a resource the program stored (SPEC §7.1).

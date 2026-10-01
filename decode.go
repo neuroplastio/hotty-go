@@ -35,6 +35,7 @@ const (
 	Invalid
 )
 
+// String names the result: "complete", "invalid", ….
 func (r Result) String() string {
 	switch r {
 	case NotHotty:

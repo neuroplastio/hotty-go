@@ -172,6 +172,7 @@ type Error struct {
 	Surface string
 }
 
+// Error says what was refused and why: "hotty: patch card: ENOTARGET (go)".
 func (e *Error) Error() string {
 	s := "hotty: " + e.Re
 	if e.Surface != "" {

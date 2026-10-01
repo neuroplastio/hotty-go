@@ -16,7 +16,9 @@ type recorder struct {
 	errs []string
 }
 
-func (r *recorder) Errorf(format string, args ...any) { r.errs = append(r.errs, fmt.Sprintf(format, args...)) }
+func (r *recorder) Errorf(format string, args ...any) {
+	r.errs = append(r.errs, fmt.Sprintf(format, args...))
+}
 
 func send(h *Host, cmds ...string) {
 	for _, c := range cmds {
@@ -539,5 +541,10 @@ func TestReplies(t *testing.T) {
 	expect(t, sent(h), "ok re=doc s=x", "ok re=patch s=x")
 	if n := len(h.Replies()); n != 2 {
 		t.Errorf("%d replies", n)
+	}
+	send(h, hotty.Place("x", hotty.Placement{Cols: 5, Rows: 1}))
+	_ = h.Emit("x", "custom", "p", nil)
+	if evs := h.Events(); len(evs) != 1 || evs[0].Kind != "custom" || evs[0].Target != "p" {
+		t.Errorf("Events %+v", evs)
 	}
 }
