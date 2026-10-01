@@ -31,13 +31,12 @@ type watcher struct {
 	send    func(tea.Msg)
 	pending bool
 
-	// A ping waiting for the next frame (Session.Ping), and when the last one
-	// was written.
-	ping     []byte
-	pingWant time.Time
-	pingAt   time.Time
-	out      func([]byte) (int, error)
-	written  int // every byte written, frames and HOTTY alike
+	// A ping waiting for the next frame (Session.Ping), and when the last
+	// one was written; out writes it, once anything has been written.
+	ping    []byte
+	pingAt  time.Time
+	out     func([]byte) (int, error)
+	written int // every byte written, frames and HOTTY alike
 }
 
 // frameEnd ends every frame Bubble Tea writes to a terminal that has
@@ -55,15 +54,17 @@ func (w *watcher) wrote(p []byte, out func([]byte) (int, error)) {
 	}
 }
 
-// sendPing writes the waiting ping. The caller holds w.mu.
-func (w *watcher) sendPing() {
+// sendPing writes the waiting ping, and reports whether it could: not
+// before anything has been written. The caller holds w.mu.
+func (w *watcher) sendPing() bool {
 	if w.out == nil {
-		return
+		return false
 	}
 	_, _ = w.out(w.ping)
 	w.written += len(w.ping)
 	w.ping = nil
 	w.pingAt = time.Now()
+	return true
 }
 
 // scan reports whether p erases or scrolls, and sends erasedMsg once until
@@ -131,27 +132,30 @@ func (w *watcher) handled() {
 }
 
 // Watch has the Session read what the program writes: give the writer it
-// returns to Bubble Tea (tea.WithOutput). Attach the program before it
-// runs.
+// returns to Bubble Tea (tea.WithOutput), and Attach the program before it
+// runs. For the terminal's own file, use WatchFile.
 func (h *Session) Watch(out io.Writer) io.Writer {
 	return writer{out, &h.watch}
 }
 
-// WatchFile is Watch for a terminal: Bubble Tea still finds a terminal
-// there (term.File), so it sizes it and sets it to raw mode.
+// WatchFile is Watch for a terminal's file, such as os.Stdout: what it
+// returns is still a terminal to Bubble Tea, which then sizes it and sets
+// it to raw mode.
 func (h *Session) WatchFile(f *os.File) *File {
 	return &File{f: f, w: &h.watch}
 }
 
-// Written counts every byte written to the terminal: frames and HOTTY.
+// Written counts every byte written through Watch or WatchFile: frames and
+// HOTTY commands alike.
 func (h *Session) Written() int {
 	h.watch.mu.Lock()
 	defer h.watch.mu.Unlock()
 	return h.watch.written
 }
 
-// Attach gives the Session the program to tell when the screen was erased:
-// s.Attach(prog.Send).
+// Attach gives the Session the program to tell when the screen was erased
+// or scrolled under the surfaces: s.Attach(prog.Send), before prog.Run.
+// Without it the Session never asks for a relayout.
 func (h *Session) Attach(send func(tea.Msg)) {
 	h.watch.mu.Lock()
 	h.watch.send = send
@@ -170,16 +174,23 @@ func (x writer) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// File is a terminal whose output the Session reads.
+// File is a terminal whose output the Session reads (WatchFile).
 type File struct {
 	f *os.File
 	w *watcher
 }
 
+// Read reads the terminal.
 func (x *File) Read(p []byte) (int, error) { return x.f.Read(p) }
-func (x *File) Close() error               { return x.f.Close() }
-func (x *File) Fd() uintptr                { return x.f.Fd() }
 
+// Close closes the terminal's file.
+func (x *File) Close() error { return x.f.Close() }
+
+// Fd is the terminal's file descriptor, so that Bubble Tea finds a
+// terminal.
+func (x *File) Fd() uintptr { return x.f.Fd() }
+
+// Write writes to the terminal, and reads what was written.
 func (x *File) Write(p []byte) (int, error) {
 	n, err := x.f.Write(p)
 	x.w.scan(p[:n])

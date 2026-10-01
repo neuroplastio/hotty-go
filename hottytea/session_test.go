@@ -20,6 +20,7 @@ func native() *Session {
 func flushed(h *Session) string {
 	s := strings.Join(h.out, "")
 	h.out = h.out[:0]
+	h.queued = 0
 	return s
 }
 
