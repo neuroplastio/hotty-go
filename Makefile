@@ -12,7 +12,7 @@ STATICCHECK ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
 SDK         := . term hottytea doc hottytest
 MODULES     := $(SDK) examples
 
-.PHONY: check fmt tidy vet lint test cover docs docs-check examples vectors clean
+.PHONY: check fmt tidy vet lint test cover docs docs-check examples pin vectors clean
 
 check: fmt tidy vet lint cover docs-check examples   ## the gate
 
@@ -47,6 +47,9 @@ docs-check:   ## fails when docs/api or README's tables are not what make docs w
 
 examples:   ## the example programs' tests, with the race detector
 	cd examples && $(GO) test -race ./...
+
+pin:   ## the requirements between the modules, at REV: a release (v0.1.0) or a pushed commit (scripts/pin.sh)
+	GO="$(GO)" sh scripts/pin.sh $(REV)
 
 vectors:   ## the conformance vectors, from a checkout of neuroplastio/hotty (HOTTY_DIR)
 	cp $(HOTTY_DIR)/conformance/vectors.json testdata/conformance/vectors.json

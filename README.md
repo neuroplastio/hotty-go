@@ -122,9 +122,11 @@ The toolchain is in `mise.toml`: run `mise install` first.
   the tests with the race detector, coverage, and the documentation being
   current, in every module.
 - The modules build against each other as they are in the repository:
-  each nested `go.mod` replaces the others with their directories. A
-  release tags every module at one commit (`v0.1.0`, `term/v0.1.0`, …), and
-  its `go.mod` files require those versions of each other.
+  each nested `go.mod` replaces the others with their directories. What a
+  program that uses the SDK gets are the requirements between them, which
+  `make pin REV=…` sets: before a release to a pushed commit, and for a
+  release to its version (`make pin REV=v0.1.0`), committed, and then every
+  module tagged at that commit (`v0.1.0`, `term/v0.1.0`, …).
 - `make cover` runs the tests with coverage, prints a table by package, and
   fails when a public package is under `COVER_MIN` (85%).
 - `make docs` writes the documentation.
