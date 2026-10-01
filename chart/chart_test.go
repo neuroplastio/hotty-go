@@ -216,3 +216,20 @@ func TestSpark(t *testing.T) {
 		}
 	}
 }
+
+func TestRules(t *testing.T) {
+	a := Line{ID: "a", W: 10, H: 10, Grid: []float64{0.5}, GridColor: "#333"}
+	if got, want := a.Rules(), `<path id="aG" d="M0,5h10v1h-10Z" fill="#333"/>`; got != want {
+		t.Errorf("Rules:\n%s\nwant\n%s", got, want)
+	}
+	if (Line{}).Rules() != "" {
+		t.Error("Rules without a grid")
+	}
+	// Two series in one box: the grid under both lines.
+	b := Line{ID: "b", W: 10, H: 10, Color: "#f00"}
+	box := Box(a.BoxID(), 10, 10, a.Rules()+a.Shapes([]float64{1, 2})+b.Shapes([]float64{2, 1}))
+	if !strings.HasPrefix(box, `<div class="chart-box"><svg id="aV" viewBox="0 0 10 10" preserveAspectRatio="none"><path id="aG"`) ||
+		strings.Index(box, `id="aL"`) > strings.Index(box, `id="bL"`) {
+		t.Errorf("Box: %s", box)
+	}
+}

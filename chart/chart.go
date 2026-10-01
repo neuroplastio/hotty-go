@@ -3,10 +3,11 @@
 // a host (Spark).
 //
 // A Line is one series: its box, its scale and its colour. SVG is the chart
-// in a box of its own; Shapes are its line and area, for a box several
-// series share (Box). Patch and PatchShapes are the commands that bring a
-// chart already sent to new values: a few hundred bytes a tick, where a new
-// document would be thousands (SPEC §6).
+// in a box of its own. For a box several series share (Box), each draws its
+// Shapes, its line and area, and one of them its Rules, the grid. Patch and
+// PatchShapes are the commands that bring a chart already sent to new
+// values: a few hundred bytes a tick, where a new document would be
+// thousands (SPEC §6).
 //
 // The SVG keeps to rules that make it draw the same in every host:
 //
@@ -140,12 +141,14 @@ func (c Line) stroke() float64 {
 // line.
 func (c Line) SVG(values []float64) string {
 	w, h := c.size()
-	return Box(c.BoxID(), w, h, c.grid()+c.Shapes(values))
+	return Box(c.BoxID(), w, h, c.Rules()+c.Shapes(values))
 }
 
-// grid is the rules as one path of thin rectangles: a rectangle fills its
-// pixel row where a 1px stroke would straddle two.
-func (c Line) grid() string {
+// Rules is the grid, one <path> of thin rectangles (a rectangle fills its
+// pixel row where a 1px stroke would straddle two), for a box several
+// series share: draw it first, under their Shapes. "" without Grid. When
+// the grid changes, set its path data (GridID, "d") to GridPath.
+func (c Line) Rules() string {
 	if len(c.Grid) == 0 {
 		return ""
 	}
