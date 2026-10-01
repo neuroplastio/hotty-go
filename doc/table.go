@@ -14,7 +14,9 @@ import (
 // Table is a CSV or TSV file read: the first row as the header, then at
 // most MaxRecords rows.
 type Table struct {
+	// Head is the first row: the columns' names.
 	Head []string
+	// Rows are the rows after it, each as many cells as it had.
 	Rows [][]string
 	// More is how many rows there were after MaxRecords.
 	More int

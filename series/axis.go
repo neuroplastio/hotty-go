@@ -2,9 +2,14 @@ package series
 
 import "math"
 
-// Axis is a value axis: its ends, and the step between its ticks, a round
-// number (1, 2, 2.5 or 5 times a power of ten).
-type Axis struct{ Lo, Hi, Step float64 }
+// Axis is a value axis: its ends, and the step between its ticks.
+type Axis struct {
+	// Lo and Hi are its ends, multiples of Step unless fixed (Scale).
+	Lo, Hi float64
+	// Step is the distance between ticks, a round number (1, 2, 2.5 or 5
+	// times a power of ten); 0 when no round step fits.
+	Step float64
+}
 
 // Ticks are the multiples of Step from Lo to Hi.
 func (a Axis) Ticks() []float64 {
@@ -42,11 +47,18 @@ func decimals(step float64) int {
 	return 12
 }
 
-// clean rounds away the float error of k*step (0.30000000000000004).
+// clean rounds away the float error of k*step (0.30000000000000004). A step
+// too small for 12 decimals is left alone: rounding would make it 0.
 func clean(v, step float64) float64 {
-	p := math.Pow(10, float64(decimals(step)))
+	d := decimals(step)
+	if d >= 12 {
+		return v + 0
+	}
+	p := math.Pow(10, float64(d))
 	return math.Round(v*p)/p + 0 // + 0: no -0
 }
+
+func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 // Nice is the smallest round number (1, 2, 2.5 or 5 times a power of ten)
 // at least v; 1 for v <= 0.
@@ -93,10 +105,11 @@ type Scale struct {
 // NewScale is a Scale with both ends fitted to the data.
 func NewScale() *Scale { return &Scale{Min: math.NaN(), Max: math.NaN()} }
 
-// Fit returns the axis for data from lo to hi (lo > hi: no data yet).
+// Fit returns the axis for data from lo to hi. lo > hi, or an end that is
+// NaN or infinite, is no data: the axis stays as it was.
 func (s *Scale) Fit(lo, hi float64) Axis {
 	fixLo, fixHi := !math.IsNaN(s.Min), !math.IsNaN(s.Max)
-	if lo > hi || math.IsNaN(lo) || math.IsNaN(hi) {
+	if lo > hi || !finite(lo) || !finite(hi) {
 		if s.ok {
 			return s.axis
 		}
@@ -157,15 +170,22 @@ func (s *Scale) nice(lo, hi float64, pinLo, pinHi bool) Axis {
 		}
 	}
 	span := hi - lo
-	if !pinHi {
+	if !finite(span) {
+		// Too wide for a float: no round step, and no headroom.
+		return Axis{Lo: lo, Hi: hi}
+	}
+	if !pinHi && finite(hi+span*0.05) {
 		hi += span * 0.05
 	}
-	if !pinLo {
+	if !pinLo && finite(lo-span*0.05) {
 		lo -= span * 0.05
 	}
-	// The smallest round step that keeps to about ticks steps.
+	// The smallest round step that keeps to about ticks steps. Each try
+	// takes the next round number, so a few dozen reach any span a float
+	// holds; the cap is for ends a step cannot round out to.
 	var a Axis
-	for step := niceBelow((hi - lo) / float64(ticks)); ; step = Nice(step * 1.001) {
+	step := niceBelow((hi - lo) / float64(ticks))
+	for range 64 {
 		a = Axis{Lo: lo, Hi: hi, Step: step}
 		if !math.IsNaN(s.Min) {
 			a.Lo = s.Min
@@ -180,15 +200,19 @@ func (s *Scale) nice(lo, hi float64, pinLo, pinHi bool) Axis {
 		if (a.Hi-a.Lo)/step <= float64(ticks)+1+1e-9 {
 			return a
 		}
+		step = Nice(step * 1.001)
 	}
+	return Axis{Lo: lo, Hi: hi}
 }
 
 // Bins are a histogram's: Counts[s][b] is how many of series s's values fall
 // in bin b, which runs from Lo+b*Width, included, to the next, excluded (the
 // last includes its end).
 type Bins struct {
+	// Lo is the first bin's lower edge, and Width every bin's width.
 	Lo, Width float64
-	Counts    [][]float64
+	// Counts are each series' counts, a bin each, weighted.
+	Counts [][]float64
 }
 
 // N is the number of bins.
@@ -205,13 +229,16 @@ func (b Bins) Edge(i int) float64 { return clean(b.Lo+float64(i)*b.Width, b.Widt
 // Hist bins every series' values in at most n bins of one round width
 // (Nice), shared by all of them, from the smallest value to the largest.
 // weights[s], if given, is what each of series s's values counts for
-// (Set.Kept). It returns no bins when there are no values.
+// (Set.Kept). NaN and infinite values are left out. It returns no bins when
+// there are no values.
 func Hist(values [][]float64, weights []float64, n int) Bins {
 	n = max(1, n)
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, vs := range values {
 		for _, v := range vs {
-			lo, hi = math.Min(lo, v), math.Max(hi, v)
+			if finite(v) {
+				lo, hi = math.Min(lo, v), math.Max(hi, v)
+			}
 		}
 	}
 	if lo > hi {
@@ -226,15 +253,22 @@ func Hist(values [][]float64, weights []float64, n int) Bins {
 		}
 		start = math.Floor(lo/width) * width
 	} else {
-		for width = Nice((hi - lo) / float64(n)); ; width = Nice(width * 1.01) {
-			start = math.Floor(lo/width+1e-9) * width
-			count = int(math.Floor((hi-start)/width+1e-9)) + 1
+		// Values so far apart that no round width a float holds spans
+		// them in n bins go in one bin.
+		start, width = lo, hi-lo
+		for w, try := Nice(hi/float64(n)-lo/float64(n)), 0; try < 64 && finite(w); w, try = Nice(w*1.01), try+1 {
+			st := math.Floor(lo/w+1e-9) * w
+			c := math.Floor((hi-st)/w+1e-9) + 1
+			if !finite(c) {
+				continue
+			}
 			// The largest value, on an edge, has a bin of its own if there
 			// is room, else goes in the last, which then includes its end.
-			if e := start + float64(count-1)*width; count == n+1 && math.Abs(hi-e) < width*1e-9 {
-				count--
+			if e := st + (c-1)*w; c == float64(n+1) && math.Abs(hi-e) < w*1e-9 {
+				c--
 			}
-			if count <= n {
+			if c <= float64(n) {
+				start, width, count = st, w, int(c)
 				break
 			}
 		}
@@ -247,6 +281,9 @@ func Hist(values [][]float64, weights []float64, n int) Bins {
 		}
 		b.Counts[s] = make([]float64, count)
 		for _, v := range vs {
+			if !finite(v) {
+				continue
+			}
 			i := int(math.Floor((v-b.Lo)/width + 1e-9))
 			i = max(0, min(count-1, i))
 			b.Counts[s][i] += w

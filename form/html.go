@@ -121,8 +121,11 @@ func (s *Spec) Rows() int {
 }
 
 // First is the id to focus first: the first field's control, or its chosen
-// option.
+// option; "" for a spec without fields.
 func (s *Spec) First() string {
+	if len(s.Fields) == 0 {
+		return ""
+	}
 	f := s.Fields[0]
 	switch f.kind() {
 	case Select, Radio:

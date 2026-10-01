@@ -15,15 +15,17 @@ import (
 
 // ManPage is a manual page as clean, semantic HTML: a section per
 // heading, definition lists for tagged paragraphs (options), and references
-// to other pages as man: links. It is what a viewer shows, and what the
-// web shell's /usr/share/man/html holds, ready made.
+// to other pages as man: links. CleanMan makes one from groff's or
+// mandoc's HTML; HTML and ReadMan keep it in a file, ready made.
 type ManPage struct {
 	Name, Section string // "ls", "1"
-	Sections      []ManSection
+	// Sections are the page's sections, in order.
+	Sections []ManSection
 }
 
 // ManSection is one section of a page: NAME, SYNOPSIS, OPTIONS, ….
 type ManSection struct {
+	// Title is the section's heading, as the page has it: "OPTIONS".
 	Title string
 	// HTML is its content, its heading left out: paragraphs, <dl>, <pre>,
 	// <table> and <h3> subsections.
@@ -704,9 +706,10 @@ func linkText(parent, t *xhtml.Node) {
 
 // --- the page as a file ------------------------------------------------------------
 
-// HTML is the page as a file of its own, what `go generate` writes to
-// /usr/share/man/html/<name>.<section>.html. generator names what made it,
-// such as "groff 1.24.1", for a test to know it can make it again.
+// HTML is the page as a file of its own, which ReadMan reads back: a
+// program can turn its pages once, ahead of time, and keep them as
+// <name>.<section>.html. generator names what made it, such as
+// "groff 1.24.1", for a test to know it can make it again (Generator).
 func (m *ManPage) HTML(generator string) string {
 	var b strings.Builder
 	b.WriteString("<!doctype html>\n<html><head><meta charset=\"utf-8\">")
@@ -812,7 +815,12 @@ const ManTarget = 60
 
 // Blocks splits the page into blocks of about target rows at o.Cols: a
 // section each, a long one cut between its paragraphs and between the
-// entries of its definition lists.
+// entries of its definition lists. target <= 0 is ManTarget.
+//
+// The blocks are inert (Inert), but for their man: links: they are for a
+// viewer that hears their clicks (SPEC §9), and shows the page they name
+// (ParseManRef). Detached and left in scrollback, a click on one is
+// reported to whatever reads the terminal next.
 func (m *ManPage) Blocks(o Options, target int) []ManBlock {
 	if target <= 0 {
 		target = ManTarget
@@ -860,11 +868,12 @@ func (m *ManPage) Blocks(o Options, target int) []ManBlock {
 				cur.WriteString("</dl>")
 				inDL = false
 			}
+			h := inertKeeping(cur.String(), func(href string) bool { _, _, ok := ParseManRef(href); return ok })
 			var text []string
-			for _, p := range Paragraphs([]byte("<body>" + cur.String() + "</body>")) {
+			for _, p := range Paragraphs([]byte("<body>" + h + "</body>")) {
 				text = append(text, p.Text)
 			}
-			out = append(out, ManBlock{Block: Block{HTML: cur.String(), Rows: rows, Text: strings.Join(text, "\n")}, Section: si, First: first})
+			out = append(out, ManBlock{Block: Block{HTML: h, Rows: rows, Text: strings.Join(text, "\n")}, Section: si, First: first})
 			cur.Reset()
 			rows, first = 0, false
 		}

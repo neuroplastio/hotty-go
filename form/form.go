@@ -16,14 +16,16 @@
 // (a key the controls do not use, such as Ctrl-D) keeps a State from the
 // change events and reads that instead.
 //
-// It does no I/O. Documents are fragments for a page with the host
-// stylesheet (SPEC §8) and CSS below; hotty-demo wraps them in ui.Page.
+// It does no I/O. HTML is a fragment for a document that has the host
+// stylesheet (SPEC §8) and CSS: put both in the page a program sends with
+// hotty.Doc.
 package form
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -46,8 +48,11 @@ var types = []string{Text, Password, Email, Number, Date, Textarea, Select, Radi
 // Spec is a form: a title, its fields in order, and the submit button's
 // label.
 type Spec struct {
-	Title  string  `json:"title,omitempty"`
-	Submit string  `json:"submit,omitempty"` // "OK" when empty
+	// Title heads the form; none when empty.
+	Title string `json:"title,omitempty"`
+	// Submit is the submit button's label: "OK" when empty.
+	Submit string `json:"submit,omitempty"`
+	// Fields are the questions, in order.
 	Fields []Field `json:"fields"`
 }
 
@@ -58,9 +63,11 @@ type Field struct {
 	// Label is what it asks; the name when empty.
 	Label string `json:"label,omitempty"`
 	// Type is one of the types above; text when empty.
-	Type        string   `json:"type,omitempty"`
-	Placeholder string   `json:"placeholder,omitempty"`
-	Options     []string `json:"options,omitempty"`
+	Type string `json:"type,omitempty"`
+	// Placeholder is shown in an empty text field.
+	Placeholder string `json:"placeholder,omitempty"`
+	// Options are a select's or a radio's choices, each once.
+	Options []string `json:"options,omitempty"`
 	// Default is the value it starts with: a string, a number for a number
 	// field, a boolean for a checkbox.
 	Default any `json:"default,omitempty"`
@@ -79,6 +86,9 @@ func Parse(b []byte) (*Spec, error) {
 	if err := d.Decode(&s); err != nil {
 		return nil, fmt.Errorf("form: %w", err)
 	}
+	if _, err := d.Token(); err != io.EOF {
+		return nil, errors.New("form: more after the spec")
+	}
 	for i := range s.Fields {
 		if n, ok := s.Fields[i].Default.(json.Number); ok {
 			f, err := n.Float64()
@@ -94,9 +104,9 @@ func Parse(b []byte) (*Spec, error) {
 	return &s, nil
 }
 
-// Check reports what is wrong with a spec: a field without a name, two with
-// one name, an unknown type, a choice without options, a default of the
-// wrong kind.
+// Check reports what is wrong with a spec: no fields, a field without a
+// name, two with one name, an unknown type, a choice without options or
+// with one twice, a default of the wrong kind.
 func (s *Spec) Check() error {
 	if len(s.Fields) == 0 {
 		return errors.New("form: no fields")
@@ -116,6 +126,11 @@ func (s *Spec) Check() error {
 			return fmt.Errorf("%s: unknown type %q (one of %s)", where, f.Type, strings.Join(types, ", "))
 		case (f.kind() == Select || f.kind() == Radio) && len(f.Options) == 0:
 			return fmt.Errorf("%s: a %s needs options", where, f.kind())
+		}
+		for j, o := range f.Options {
+			if indexOf(f.Options[:j], o) >= 0 {
+				return fmt.Errorf("%s: the option %q is there twice", where, o)
+			}
 		}
 		seen[f.Name] = true
 		switch d := f.Default.(type) {

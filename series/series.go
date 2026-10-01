@@ -1,5 +1,5 @@
-// Package series reads numbers from a stream of text, as plotting tools do
-// (plothot, youplot, asciigraph): lines of numbers separated by spaces, tabs
+// Package series reads numbers from a stream of text, as plotting tools such
+// as youplot and asciigraph do: lines of numbers separated by spaces, tabs
 // or commas, a column a series, and a first line with no numbers naming them.
 // It also keeps what a live chart needs: the last N samples, statistics over
 // all of them, an axis that grows to fit without jumping on every sample
@@ -19,8 +19,10 @@ import (
 // had none for it. Label is the line's text in a column of words (a time in
 // a CSV file), when the input has a header and such a column.
 type Sample struct {
+	// Values are the line's numbers, a series each.
 	Values []float64
-	Label  string
+	// Label is the line's text in the column of words, if any.
+	Label string
 }
 
 // Parser turns lines into samples. The zero Parser reads columns; set Keys
@@ -40,9 +42,9 @@ type Parser struct {
 	// Keys, if set, name the series and take them from KEY=value.
 	Keys []string
 
-	started  bool   // a line with content was seen
+	started  bool     // a line with content was seen
 	header   []string // the header's fields, by column
-	col      []int  // header mode: series -> column
+	col      []int    // header mode: series -> column
 	byCol    map[int]int
 	labelCol int // header mode: the column that labels samples; -1 none, -2 not yet known
 	width    int // series seen so far

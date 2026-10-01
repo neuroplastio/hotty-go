@@ -19,7 +19,9 @@ import (
 // Info is what a program needs to know about an image to place it: its
 // MIME type and its size in pixels.
 type Info struct {
+	// Type is its MIME type: "image/png", "image/svg+xml".
 	Type string
+	// W and H are its size in CSS pixels.
 	W, H int
 }
 
@@ -110,7 +112,9 @@ func webpSize(d []byte) (int, int, bool) {
 }
 
 // svgSize is an SVG's size in CSS pixels: its width and height, else its
-// viewBox, else 300×150 as a browser has it.
+// viewBox, else 300×150 as a browser has it. A size that is not a
+// positive number does not count, and one past maxSVG comes down to it,
+// in shape.
 func svgSize(data []byte) (int, int) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = false
@@ -138,22 +142,38 @@ func svgSize(data []byte) (int, int) {
 				}
 			}
 		}
+		w, h, vw, vh = positive(w), positive(h), positive(vw), positive(vh)
 		switch {
 		case w > 0 && h > 0:
 		case vw > 0 && vh > 0 && w > 0:
-			h = w * vh / vw
+			h = w * (vh / vw)
 		case vw > 0 && vh > 0 && h > 0:
-			w = h * vw / vh
+			w = h * (vw / vh)
 		case vw > 0 && vh > 0:
 			w, h = vw, vh
 		default:
 			w, h = 300, 150
 		}
-		return int(math.Round(w)), int(math.Round(h))
+		if m := math.Max(w, h); math.IsInf(m, 1) {
+			w, h = math.Min(w, maxSVG), math.Min(h, maxSVG)
+		} else if m > maxSVG {
+			w, h = w/m*maxSVG, h/m*maxSVG
+		}
+		return max(1, int(math.Round(w))), max(1, int(math.Round(h)))
 	}
 }
 
-// cssPx is a length in pixels; 0 for a percentage or anything unknown.
+// maxSVG is the most CSS pixels an SVG is taken to be, either way.
+const maxSVG = 1e6
+
+// positive is v if it is a finite number above 0, else 0.
+func positive(v float64) float64 {
+	if v > 0 && !math.IsInf(v, 1) {
+		return v
+	}
+	return 0
+}
+
 func cssPx(v string) float64 {
 	v = strings.TrimSpace(v)
 	for _, u := range []struct {
@@ -193,11 +213,11 @@ func Image(name string, data []byte, o Options) (*Doc, Info, error) {
 		return nil, Info{}, fmt.Errorf("%s: not an image this can show", path.Base(name))
 	}
 	cols, rows := o.Fit(info.W, info.H)
-	id := o.resID("img")
+	id := o.resID("img", data)
 	return &Doc{
-		CSS:    ImageCSS,
-		Cols:   cols,
-		Rows:   rows,
+		CSS:  ImageCSS,
+		Cols: cols,
+		Rows: rows,
 		Blocks: []Block{{
 			HTML: fmt.Sprintf(`<img class="image" src="cid:%s" alt="%s">`, id, html.EscapeString(path.Base(name))),
 			Rows: rows,

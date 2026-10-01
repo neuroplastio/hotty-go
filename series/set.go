@@ -4,7 +4,9 @@ import "math"
 
 // Stats are one series' statistics over every sample it had a value in.
 type Stats struct {
-	N                   int
+	// N is how many values it has had.
+	N int
+	// Last is the latest value; Min, Max and Sum are over all of them.
 	Last, Min, Max, Sum float64
 }
 

@@ -1,6 +1,10 @@
 package braille
 
-import "testing"
+import (
+	"math"
+	"testing"
+	"time"
+)
 
 func TestDots(t *testing.T) {
 	c := New(2, 1)
@@ -47,5 +51,62 @@ func TestRowStyles(t *testing.T) {
 	// A blank cell after a run stays in it: fewer styles to print.
 	if want := "<1>⠁⠁ </><2>⠁</>"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A line with an end far outside the canvas, as a NaN or an overflow makes
+// one, walked every dot of its length: a hang. The part inside is drawn.
+func TestLineFarOutside(t *testing.T) {
+	done := make(chan string)
+	go func() {
+		c := New(4, 2)
+		c.Line(0, 0, 1<<40, 1<<40, 1)     // down and right, off the corner
+		c.Line(0, 7, math.MinInt, 7, 2)   // from the bottom-left dot to the far left
+		c.Line(-1<<50, -5, -1<<49, -5, 3) // all of it outside
+		done <- c.String()
+	}()
+	select {
+	case got := <-done:
+		// The diagonal crosses the first rows' top-left dots; the bottom
+		// row keeps its first dot.
+		if want := "⠑⢄  \n⡀ ⠑⢄"; got != want {
+			t.Errorf("got\n%s\nwant\n%s", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Line walked a line far outside the canvas")
+	}
+}
+
+// A line that leaves the canvas nearby is not cut: it has the dots it has
+// on a canvas large enough to hold it, where nothing is cut.
+func TestLineNearOutside(t *testing.T) {
+	small := New(4, 2) // 8×8 dots
+	small.Line(-3, -2, 9, 9, 1)
+	// The same line on a larger canvas, moved by 5 cells across and 3
+	// down (10 and 12 dots), lies inside it.
+	big := New(20, 10)
+	big.Line(-3+10, -2+12, 9+10, 9+12, 1)
+	for col := range 4 {
+		for row := range 2 {
+			a, _ := small.Cell(col, row)
+			b, _ := big.Cell(col+5, row+3)
+			if a != b {
+				t.Errorf("cell %d,%d: %q, want %q", col, row, a, b)
+			}
+		}
+	}
+}
+
+func TestEmptyAndCells(t *testing.T) {
+	c := New(-1, 3)
+	if cols, rows := c.Cells(); cols != 0 || rows != 3 {
+		t.Errorf("Cells = %d×%d", cols, rows)
+	}
+	c.Line(0, 0, 5, 5, 1) // nowhere to draw: nothing happens
+	if got := c.String(); got != "\n\n" {
+		t.Errorf("an empty canvas: %q", got)
+	}
+	if r, ink := New(2, 2).Cell(5, 0); r != ' ' || ink != 0 {
+		t.Errorf("a cell outside: %q %d", r, ink)
 	}
 }

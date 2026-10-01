@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // parse runs lines through a parser and returns the samples, NaN as -1 so
@@ -247,5 +248,140 @@ func TestHist(t *testing.T) {
 	}
 	if b = Hist([][]float64{nil}, nil, 20); b.N() != 0 {
 		t.Errorf("no values: %+v", b)
+	}
+}
+
+// done fails the test if f does not return within a second: a loop that
+// does not end is a hang, not a slow test.
+func done(t *testing.T, name string, f func()) {
+	t.Helper()
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		f()
+	}()
+	select {
+	case <-c:
+	case <-time.After(time.Second):
+		t.Fatalf("%s did not return", name)
+	}
+}
+
+// NaN and infinities in the values a histogram is given are left out; they
+// made a negative bin count, and a panic.
+func TestHistLeavesOutWhatIsNotANumber(t *testing.T) {
+	b := Hist([][]float64{{1, math.NaN(), 3, math.Inf(1), math.Inf(-1)}}, nil, 4)
+	total := 0.0
+	for _, c := range b.Counts[0] {
+		total += c
+	}
+	if total != 2 || b.Lo > 1 || b.Edge(b.N()) < 3 {
+		t.Errorf("bins %+v: want the 1 and the 3 alone", b)
+	}
+	if b := Hist([][]float64{{math.NaN()}}, nil, 4); b.N() != 0 {
+		t.Errorf("nothing but NaN: %+v", b)
+	}
+	// Values as far apart as a float holds: one bin, and no panic.
+	done(t, "Hist of the widest range", func() {
+		b := Hist([][]float64{{-math.MaxFloat64, math.MaxFloat64}}, nil, 4)
+		sum := 0.0
+		for _, c := range b.Counts[0] {
+			sum += c
+		}
+		if b.N() < 1 || sum != 2 {
+			t.Errorf("widest range: %+v", b)
+		}
+	})
+}
+
+// An infinite end, or a span wider than a float, made the search for a
+// round step loop for ever.
+func TestScaleOfUnboundedData(t *testing.T) {
+	done(t, "Fit with an infinite end", func() {
+		s := NewScale()
+		a := s.Fit(0, 10)
+		if b := s.Fit(0, math.Inf(1)); b != a {
+			t.Errorf("an infinite end moved the axis: %+v", b)
+		}
+		if b := s.Fit(math.NaN(), 5); b != a {
+			t.Errorf("a NaN end moved the axis: %+v", b)
+		}
+	})
+	done(t, "Fit of the widest range", func() {
+		a := NewScale().Fit(-math.MaxFloat64, math.MaxFloat64)
+		if a.Lo > -math.MaxFloat64/2 || a.Hi < math.MaxFloat64/2 {
+			t.Errorf("widest range: %+v", a)
+		}
+	})
+}
+
+// A step finer than 12 decimals was rounded to nothing: data from 1e-300
+// to 2e-300 had an axis from 0 to 0.
+func TestScaleOfTinyValues(t *testing.T) {
+	a := NewScale().Fit(1e-300, 2e-300)
+	if a.Hi < 2e-300 || a.Step <= 0 || a.Frac(2e-300) > 1 {
+		t.Errorf("tiny values: %+v", a)
+	}
+	if ticks := a.Ticks(); len(ticks) < 2 || ticks[len(ticks)-1] < 2e-300 {
+		t.Errorf("tiny ticks: %v", ticks)
+	}
+}
+
+func TestAxisFrac(t *testing.T) {
+	a := Axis{Lo: -10, Hi: 30, Step: 10}
+	for v, want := range map[float64]float64{-10: 0, 30: 1, 10: 0.5, 50: 1.5} {
+		if got := a.Frac(v); got != want {
+			t.Errorf("Frac(%v) = %v, want %v", v, got, want)
+		}
+	}
+	if got := (Axis{Lo: 3, Hi: 3}).Frac(3); got != 0 {
+		t.Errorf("Frac on an axis of no length = %v", got)
+	}
+	if got := (Axis{Lo: 5, Hi: 1}).Ticks(); !reflect.DeepEqual(got, []float64{5, 1}) {
+		t.Errorf("Ticks of a reversed axis = %v", got)
+	}
+}
+
+func TestNice(t *testing.T) {
+	for v, want := range map[float64]float64{0.7: 1, 1: 1, 1.1: 2, 2.2: 2.5, 3: 5, 7: 10, 42: 50, 0: 1, -3: 1} {
+		if got := Nice(v); got != want {
+			t.Errorf("Nice(%v) = %v, want %v", v, got, want)
+		}
+	}
+	if Nice(math.NaN()) != 1 || Nice(math.Inf(1)) != 1 {
+		t.Error("Nice of what is not a number")
+	}
+}
+
+func TestSet(t *testing.T) {
+	s := NewSet(1, false)
+	if s.Window() != 2 {
+		t.Errorf("a window of %d: at least 2", s.Window())
+	}
+	s.SetNames([]string{"cpu", "mem", "disk"})
+	s.Add(Sample{Values: []float64{1, math.NaN()}})
+	if s.Len() != 1 || s.Width() != 3 || !reflect.DeepEqual(s.Names(), []string{"cpu", "mem", "disk"}) {
+		t.Errorf("Len %d, Width %d, Names %v", s.Len(), s.Width(), s.Names())
+	}
+	if st := s.Stats(1); st.N != 0 || !math.IsNaN(st.Mean()) {
+		t.Errorf("a series with only NaN: %+v, mean %v", st, st.Mean())
+	}
+	if st := s.Stats(7); st.N != 0 {
+		t.Errorf("a series that is not there: %+v", st)
+	}
+	if vals, w := s.Kept(0); vals != nil || w != 1 {
+		t.Errorf("Kept without keep: %v %v", vals, w)
+	}
+	_, last := s.Last()
+	if len(last) != 1 || len(last[0].Values) != 3 || !math.IsNaN(last[0].Values[2]) {
+		t.Errorf("Last pads to the width: %v", last)
+	}
+}
+
+func TestParserWidth(t *testing.T) {
+	var p Parser
+	parse(&p, "1 2\n3 4 5")
+	if p.Width() != 3 || len(p.Names()) != 3 || p.Names()[2] != "" {
+		t.Errorf("Width %d, Names %q", p.Width(), p.Names())
 	}
 }

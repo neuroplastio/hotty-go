@@ -107,6 +107,12 @@ func TestParseErrors(t *testing.T) {
 		{`{"fields": [{"name": "a", "default": 3}]}`, "a text's default is not a number"},
 		{`{"fields": [{"name": "a", "type": "checkbox", "default": "maybe"}]}`, "true or false"},
 		{`{"fields": [}`, "form: invalid character"},
+		// What follows the spec was ignored.
+		{`{"fields": [{"name": "a"}]} {"fields": []}`, "more after the spec"},
+		{`{"fields": [{"name": "a"}]}}`, "more after the spec"},
+		// Two options alike made two radio buttons a choice cannot tell
+		// apart.
+		{`{"fields": [{"name": "a", "type": "select", "options": ["x", "y", "x"]}]}`, `the option "x" is there twice`},
 	} {
 		_, err := Parse([]byte(c.spec))
 		if err == nil || !strings.Contains(err.Error(), c.err) {
@@ -238,5 +244,89 @@ func TestState(t *testing.T) {
 	b, _ := json.Marshal(a)
 	if got, want := string(b), `{"env":"production","version":"v2","notify":false,"notes":"a\nb"}`; got != want || len(problems) > 0 {
 		t.Errorf("state %s %v, want %s", got, problems, want)
+	}
+}
+
+// NaN and the infinities parse as floats, and were taken as numbers: the
+// answers then failed to marshal as JSON. Hexadecimal was taken too.
+func TestNumberIsDecimal(t *testing.T) {
+	s := &Spec{Fields: []Field{{Name: "n", Type: Number}}}
+	for _, v := range []string{"NaN", "nan", "Inf", "-Infinity", "0x1p4", "1e400", "1_000", "twelve"} {
+		if msg := s.Fields[0].Check(v); msg != "not a number" {
+			t.Errorf("Check(%q) = %q, want not a number", v, msg)
+		}
+		a, problems := s.Read(map[string]string{"n": v})
+		if len(problems) != 1 {
+			t.Errorf("Read(%q): problems %v", v, problems)
+		}
+		if _, err := json.Marshal(a); err != nil {
+			t.Errorf("Read(%q): the answers do not marshal: %v", v, err)
+		}
+	}
+	for v, want := range map[string]string{" 12 ": "12", "-3.50": "-3.5", "1e3": "1000", ".5": "0.5"} {
+		a, problems := s.Read(map[string]string{"n": v})
+		if b, _ := json.Marshal(a); len(problems) > 0 || string(b) != `{"n":`+want+`}` {
+			t.Errorf("Read(%q) = %s, %v", v, b, problems)
+		}
+	}
+}
+
+// A spec built in Go, unchecked, may have no fields; Show may be given a
+// problem for a field the spec does not have. Both panicked.
+func TestEdgesOfASpec(t *testing.T) {
+	if got := (&Spec{}).First(); got != "" {
+		t.Errorf("First of no fields = %q", got)
+	}
+	s := &Spec{Fields: []Field{{Name: "a"}}}
+	cmds := s.Show("x", []Problem{{Field: 3, Message: "gone"}, {Field: -1, Message: "gone"}})
+	for _, c := range cmds {
+		if strings.Contains(c, "a=focus") {
+			t.Errorf("a problem for no field took the focus: %q", c)
+		}
+	}
+}
+
+func TestFieldStartAndKind(t *testing.T) {
+	for _, c := range []struct {
+		f    Field
+		want string
+	}{
+		{Field{Name: "a"}, ""},
+		{Field{Name: "a", Default: "x"}, "x"},
+		{Field{Name: "a", Type: Checkbox, Default: true}, "true"},
+		{Field{Name: "a", Type: Checkbox, Default: false}, ""},
+		{Field{Name: "a", Type: Checkbox, Default: "false"}, ""},
+		{Field{Name: "a", Type: Number, Default: 2.50}, "2.5"},
+		{Field{Name: "a", Type: Number, Default: 7}, "7"},
+		{Field{Name: "a", Default: []string{"?"}}, ""},
+	} {
+		if got := c.f.Start(); got != c.want {
+			t.Errorf("Start of %+v = %q, want %q", c.f, got, c.want)
+		}
+	}
+	if (Field{Name: "a"}).Kind() != Text || (Field{Name: "a", Type: Email}).Kind() != Email {
+		t.Error("Kind")
+	}
+	if (Field{Name: "a"}).Title() != "a" || (Field{Name: "a", Label: "A"}).Title() != "A" {
+		t.Error("Title")
+	}
+	if err := (&Spec{Fields: []Field{{Name: "a", Default: []string{"?"}}}}).Check(); err == nil {
+		t.Error("a default that is a list passed Check")
+	}
+}
+
+func TestAnswers(t *testing.T) {
+	s := parse(t, deploy)
+	a, _ := s.Read(map[string]string{"env": "staging", "version": "v1"})
+	if got := strings.Join(a.Names(), ","); got != "env,version,notify,notes" {
+		t.Errorf("Names %s: the spec's order", got)
+	}
+	if a.Get("version") != "v1" || a.Get("notify") != false || a.Get("nope") != nil {
+		t.Errorf("Get: %v %v %v", a.Get("version"), a.Get("notify"), a.Get("nope"))
+	}
+	// A select's first option is chosen first, unless its default is.
+	s2 := &Spec{Fields: []Field{{Name: "c", Type: Radio, Options: []string{"a", "b"}}}}
+	if s2.First() != "f0-0" {
+		t.Errorf("First = %q", s2.First())
 	}
 }

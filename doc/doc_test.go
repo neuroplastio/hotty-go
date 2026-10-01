@@ -2,7 +2,9 @@ package doc
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
@@ -30,17 +32,35 @@ func checkInert(t *testing.T, markup string) {
 			if dropped[name] {
 				t.Errorf("a <%s> is left", name)
 			}
-			if name == "form" {
+			if name == "form" && n.Namespace == "" {
 				t.Errorf("a form is left: a submit is reported whatever the ids")
 			}
+			if name == "plaintext" && n.Namespace == "" {
+				t.Errorf("a <plaintext> is left: it would swallow the page after it")
+			}
+			if n.Namespace == "" && (name == "input" || name == "select" || name == "textarea" || name == "button") && !hasAttr(n, "disabled") {
+				t.Errorf("<%s> is not disabled: a click on it takes the keyboard", name)
+			}
+			if a := strings.ToLower(strings.TrimSpace(attr(n, "attributename"))); name == "set" || name == "animate" {
+				if k := a[strings.LastIndexByte(a, ':')+1:]; k == "href" || k == "target" || k == "id" || strings.HasPrefix(k, "on") {
+					t.Errorf("<%s attributeName=%q> is left", name, a)
+				}
+			}
 			for _, a := range n.Attr {
+				k := strings.ToLower(a.Key)
 				switch {
-				case a.Key == "id" && reporting[name]:
+				case k == "id" && reporting[name]:
 					t.Errorf("<%s id=%q> would report", name, a.Val)
-				case a.Key == "data-on":
+				case k == "data-on":
 					t.Errorf("<%s data-on> would report", name)
-				case strings.HasPrefix(a.Key, "on"):
+				case strings.HasPrefix(k, "on"):
 					t.Errorf("<%s %s> is an event attribute", name, a.Key)
+				case k == "contenteditable" || k == "tabindex" || k == "autofocus":
+					t.Errorf("<%s %s> takes the keyboard", name, a.Key)
+				case urlAttr[k] && scriptURL(a.Val):
+					t.Errorf("<%s %s=%q> is a script URL", name, a.Key, a.Val)
+				case k == "href" && name != "a" && !strings.HasPrefix(a.Val, "#"):
+					t.Errorf("<%s %s=%q> links out", name, a.Key, a.Val)
 				}
 			}
 			if name == "a" && n.Namespace == "" {
@@ -63,10 +83,10 @@ func TestInert(t *testing.T) {
 		{`<a href="notes.md">a file</a>`, `<span>a file</span>`, `href`},
 		{`<a href="javascript:alert(1)">js</a>`, `<span>js</span>`, `javascript`},
 		{`<a href="#top" id="t">top</a>`, `<span>top</span>`, `id=`},
-		{`<button id="go" onclick="x()">Go</button>`, `<button>Go</button>`, `onclick`},
+		{`<button id="go" onclick="x()">Go</button>`, `<button disabled="">Go</button>`, `onclick`},
 		{`<details><summary id="s">more</summary>x</details>`, `<summary>more</summary>`, `id=`},
 		{`<div id="card" data-on="click">x</div>`, `<div id="card">x</div>`, `data-on`},
-		{`<form action="/x"><input id="n" name="n" autofocus></form>`, `<div><input name="n"/></div>`, `form`},
+		{`<form action="/x"><input id="n" name="n" autofocus></form>`, `<div><input name="n" disabled=""/></div>`, `form`},
 		{`<img src="javascript:x" alt="a">`, `<img alt="a"/>`, `javascript`},
 		{`<iframe src="https://example.com"></iframe><p>after</p>`, `<p>after</p>`, `iframe`},
 		{`<svg><a href="https://example.com"><text>t</text></a><script>x</script></svg>`, `target="_blank"`, `script`},
@@ -80,6 +100,84 @@ func TestInert(t *testing.T) {
 		}
 		checkInert(t, got)
 	}
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// hostile is markup written to get past Inert.
+var hostile = []string{
+	// Parsed again, a <style> in MathML is markup, not text (mutation XSS).
+	`<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>`,
+	`<svg></p><style><a id="</style><img src=1 onerror=alert(1)>">`,
+	`<noembed><img title="</noembed><img src onerror=alert(1)>"></noembed>`,
+	`<math><mi><mglyph><svg><mtext><textarea><path id="</textarea><img onerror=alert(1) src=1>">`,
+	`<form><math><mtext></form><form><mglyph><style></math><img src onerror=alert(1)>`,
+	// A <b> breaks out of an <svg>: the <a> after it is HTML's.
+	`<svg><b><a href="cmd:x">x</a></b></svg>`,
+	// An SVG animation sets back what Inert removed.
+	`<svg><a><set attributeName="href" to="javascript:alert(1)"/><text>x</text></a></svg>`,
+	`<svg><a xlink:href="https://example.com"><animate attributeName="xlink:href" values="cmd:rm"/><text>x</text></a></svg>`,
+	`<svg><a href="https://example.com"><set attributeName="target" to="_self"/><text>x</text></a></svg>`,
+	// What takes the keyboard (SPEC §10.1).
+	`<input><select><option>1</select><textarea>t</textarea><button>b</button>`,
+	`<div contenteditable>edit</div><span tabindex="0">tab</span><p TabIndex=-1>p</p>`,
+	// <plaintext> never ends: the rest of the page would be its text.
+	`<plaintext><p id=x>`,
+	`<a href=" JaVaScRiPt:alert(1)">x</a><a href="java&#x09;script:alert(1)">y</a><img src="&#106;avascript:x">`,
+	`<a href="https://ok.example" id="x" onclick="y()" target="_self">z</a>`,
+	`<svg><use href="//evil.example/x.svg#a"/><image href="https://evil.example/i.png"/></svg>`,
+	`<base href="https://evil.example/"><meta http-equiv="refresh" content="0;url=x"><link rel=prefetch href=x>`,
+	`<object data="x.swf"></object><embed src="x"><portal src="x"></portal><template><script>x</script></template>`,
+	`<!--><script>alert(1)</script>--><p>after</p>`,
+	`<details open><summary id="s" data-on="click">s</summary><label id="l">l</label></details>`,
+	`<svg><script>alert(1)</script><foreignObject><iframe src="x"></iframe></foreignObject></svg>`,
+}
+
+func TestInertHostile(t *testing.T) {
+	for _, in := range hostile {
+		out := Inert(in)
+		checkInert(t, out)
+		if again := Inert(out); again != out {
+			t.Errorf("Inert(%q)\n= %q\nreads back as %q", in, out, again)
+		}
+	}
+}
+
+func TestInertKeepsWhatIsHarmless(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		// An SVG's references to its own parts are not links.
+		{`<svg><use xlink:href="#a"/></svg>`, `<use xlink:href="#a">`},
+		{`<svg><linearGradient id="g" href="#h"/></svg>`, `href="#h"`},
+		{`<svg><circle r="1"><animate attributeName="r" to="2"/></circle></svg>`, `<animate attributeName="r" to="2">`},
+		{`<input disabled>`, `<input disabled=""/>`},
+		{`<plaintext>a <b>`, `<pre>a &lt;b&gt;</pre>`},
+	} {
+		if got := Inert(tc.in); !strings.Contains(got, tc.want) {
+			t.Errorf("Inert(%q) = %q, want it to contain %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Whatever it is given, Inert's result is inert, and reads back as itself.
+func FuzzInert(f *testing.F) {
+	for _, s := range hostile {
+		f.Add(s)
+	}
+	f.Add(sample)
+	f.Fuzz(func(t *testing.T, in string) {
+		out := Inert(in)
+		checkInert(t, out)
+		if again := Inert(out); again != out {
+			t.Errorf("Inert(%q)\n= %q\nreads back as %q", in, out, again)
+		}
+	})
 }
 
 func TestPages(t *testing.T) {
@@ -164,12 +262,12 @@ func TestMarkdown(t *testing.T) {
 		`<pre class="code" data-lang="go"><code><span class="kw">func main() { return }</span></code></pre>`,
 		`<pre class="code" data-lang="sh"><code>echo &lt;hi&gt;</code></pre>`,
 		`<li class="task done"><span class="box">✓</span>done</li>`, `<li class="task"><span class="box">☐</span>open</li>`,
-		`<img src="cid:t-1-img1" alt="a picture"/>`,
+		`<img src="cid:` + imgID("t-1", pic) + `" alt="a picture"/>`,
 		`<span class="alt">[missing]</span>`,
 		`<a class="alt" href="https://example.com/r.png" target="_blank" rel="noopener noreferrer">[remote]</a>`,
 		`<blockquote class="warning">`, `<span class="callout">WARNING</span>`,
 		"<blockquote>", "A plain quote.",
-		"<button>raw</button>", "<hr/>",
+		"<button disabled=\"\">raw</button>", "<hr/>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the document has no %s", want)
@@ -179,7 +277,7 @@ func TestMarkdown(t *testing.T) {
 		t.Errorf("a relative link or a callout marker is left: %s", got)
 	}
 	checkInert(t, got)
-	if len(res) != 1 || res[0].ID != "t-1-img1" || res[0].Type != "image/png" || !bytes.Equal(res[0].Data, pic) {
+	if len(res) != 1 || res[0].ID != imgID("t-1", pic) || res[0].Type != "image/png" || !bytes.Equal(res[0].Data, pic) {
 		t.Errorf("resources %+v, want the one image", res)
 	}
 }
@@ -239,7 +337,7 @@ func TestHTML(t *testing.T) {
 		res += len(b.Res)
 	}
 	got := all.String()
-	if strings.Contains(got, "script") || !strings.Contains(got, `<img src="cid:h-img1" alt="pic"/>`) || res != 1 {
+	if strings.Contains(got, "script") || !strings.Contains(got, `<img src="cid:`+imgID("h", pngBytes(10, 10))+`" alt="pic"/>`) || res != 1 {
 		t.Errorf("blocks %q, %d resources", got, res)
 	}
 	checkInert(t, got)
@@ -416,6 +514,70 @@ func TestImageInfo(t *testing.T) {
 	}
 }
 
+// An SVG's size is whatever its file says: it comes out a size a screen
+// can show, whatever that is.
+func TestSVGSize(t *testing.T) {
+	for _, tc := range []struct {
+		svg  string
+		w, h int
+	}{
+		{`<svg width="2in" height="12pt"/>`, 192, 16},
+		{`<svg width="2.54cm" height="25.4mm"/>`, 96, 96},
+		{`<svg width="1em" height="3px"/>`, 16, 3},
+		{`<svg viewBox="0,0,40,30"/>`, 40, 30},
+		{`<svg viewBox="0 0 40 30" height="15"/>`, 20, 15},
+		{`<svg width="100%" height="50%"/>`, 300, 150},
+		{`<svg width="1e300" height="1e299"/>`, 1000000, 100000},
+		{`<svg width="1e300" height="1"/>`, 1000000, 1},
+		{`<svg width="Infinity" height="5" viewBox="0 0 4 2"/>`, 10, 5},
+		{`<svg width="NaN" height="-3"/>`, 300, 150},
+		{`<svg viewBox="0 0 1e-300 1e300" width="5"/>`, 5, 1000000},
+		{`<svg width="0.0001" height="0.0001"/>`, 1, 1},
+		{`<svg width="7" `, 300, 150},
+	} {
+		got, ok := ImageInfo([]byte(tc.svg), "x.svg")
+		if !ok || got.W != tc.w || got.H != tc.h {
+			t.Errorf("%s: %d×%d, want %d×%d", tc.svg, got.W, got.H, tc.w, tc.h)
+		}
+	}
+}
+
+func TestWebPAndSVGSniffing(t *testing.T) {
+	webp := func(chunk string, size func(d []byte)) []byte {
+		d := append([]byte("RIFF\x00\x00\x00\x00WEBP"+chunk), make([]byte, 14)...)
+		size(d)
+		return d
+	}
+	lossy := webp("VP8 ", func(d []byte) {
+		binary.LittleEndian.PutUint16(d[26:], 640)
+		binary.LittleEndian.PutUint16(d[28:], 480)
+	})
+	extended := webp("VP8X", func(d []byte) { d[24], d[25], d[27] = 0xff, 0x01, 0x63 }) // 512×100
+	for _, tc := range []struct {
+		data []byte
+		want Info
+		ok   bool
+	}{
+		{lossy, Info{"image/webp", 640, 480}, true},
+		{extended, Info{"image/webp", 512, 100}, true},
+		{webp("VP9 ", func([]byte) {}), Info{"image/webp", 0, 0}, false},
+		{lossy[:20], Info{"image/webp", 0, 0}, false},
+		{[]byte("\uFEFF<!DOCTYPE svg><svg width='4' height='2'/>"), Info{"image/svg+xml", 4, 2}, true},
+		{[]byte("<!-- no end <svg/>"), Info{}, false},
+		{[]byte("<?xml no end <svg/>"), Info{}, false},
+		{[]byte("<!doctype no end"), Info{}, false},
+	} {
+		got, ok := ImageInfo(tc.data, "")
+		if ok != tc.ok || got != tc.want {
+			t.Errorf("%q: %+v %v, want %+v %v", tc.data[:min(len(tc.data), 20)], got, ok, tc.want, tc.ok)
+		}
+	}
+	// An .svg file that starts with something else is still read as one.
+	if got, ok := ImageInfo([]byte("<!-- a -->\n<?pi?> <svg width='3' height='3'/>"), "pic.SVG"); !ok || got.W != 3 {
+		t.Errorf("an .svg after a comment: %+v %v", got, ok)
+	}
+}
+
 func TestImage(t *testing.T) {
 	o := Options{Cols: 80, CellW: 9, CellH: 18, ResPrefix: "p"}
 	// Small: its own size. Wide: the width. Tall: 30 rows.
@@ -437,7 +599,7 @@ func TestImage(t *testing.T) {
 		t.Fatalf("Image: %+v %+v %v", d, info, err)
 	}
 	b := d.Blocks[0]
-	if b.HTML != `<img class="image" src="cid:p-img1" alt="pic.png">` || len(b.Res) != 1 || b.Res[0].Type != "image/png" {
+	if b.HTML != `<img class="image" src="cid:`+imgID("p", pngBytes(90, 36))+`" alt="pic.png">` || len(b.Res) != 1 || b.Res[0].Type != "image/png" {
 		t.Errorf("block %+v", b)
 	}
 	if _, _, err := Image("x.png", []byte("not"), o); err == nil {
@@ -485,4 +647,70 @@ func TestEveryDocumentIsInert(t *testing.T) {
 			checkInert(t, d.Body(p))
 		}
 	}
+}
+
+// imgID is an image's resource id: the prefix, and a hash of its bytes.
+func imgID(prefix string, data []byte) string {
+	sum := sha256.Sum256(data)
+	return prefix + "-img-" + hex.EncodeToString(sum[:8])
+}
+
+// Each conversion counted its images from 1, so two documents shown by one
+// program named different images alike: the second document's resource
+// replaced the first's (SPEC §7.1), and the first surface showed the
+// second's image.
+func TestResourcesOfTwoDocumentsDiffer(t *testing.T) {
+	files := map[string][]byte{"a.png": pngBytes(10, 10), "b.png": pngBytes(20, 10)}
+	o := Options{ResPrefix: "tool-7", ReadFile: func(name string) ([]byte, error) { return files[name], nil }}
+	a := Markdown([]byte("![a](a.png)"), o)
+	b := Markdown([]byte("![b](b.png)\n\n![a again](a.png)"), o)
+	ra, rb := Resources(a.Blocks), Resources(b.Blocks)
+	if len(ra) != 1 || len(rb) != 2 {
+		t.Fatalf("resources %d and %d", len(ra), len(rb))
+	}
+	if ra[0].ID == rb[0].ID {
+		t.Errorf("two images, one id: %s", ra[0].ID)
+	}
+	// The same image is the same resource, sent once a page.
+	if rb[1].ID != ra[0].ID {
+		t.Errorf("one image, two ids: %s and %s", ra[0].ID, rb[1].ID)
+	}
+	two := Markdown([]byte("![a](a.png) ![a](a.png)"), o)
+	if got := Resources(two.Blocks); len(got) != 1 {
+		t.Errorf("an image shown twice is %d resources", len(got))
+	}
+	for _, r := range append(ra, rb...) {
+		if !strings.HasPrefix(r.ID, "tool-7-img-") {
+			t.Errorf("id %q lacks the prefix", r.ID)
+		}
+	}
+}
+
+// A document's own CSS goes in a <style>: nothing in it ends the element.
+func TestHTMLStylesStayStyles(t *testing.T) {
+	src := `<html><head><style>p::before { content: "<b>" }</style>` +
+		`<link rel="stylesheet" href="evil.css"></head>` +
+		`<body style="}</style><script>alert(1)</script><style>">` +
+		`<svg><style>&lt;/style&gt;&lt;script&gt;alert(2)&lt;/script&gt;</style></svg><p>x</p></body></html>`
+	o := Options{ReadFile: func(string) ([]byte, error) { return []byte("</STYLE ><script>alert(3)</script>"), nil }}
+	d := HTML([]byte(src), o)
+	if strings.Contains(strings.ToLower(d.CSS), "</style") {
+		t.Errorf("the CSS ends its <style>: %s", d.CSS[len(PageCSS):])
+	}
+	if !strings.Contains(d.CSS, `content: "\3c b>"`) {
+		t.Errorf("a string's < is not the same character escaped: %s", d.CSS[len(PageCSS):])
+	}
+}
+
+func TestPage(t *testing.T) {
+	d := &Doc{CSS: "p { color: red } /* </style><script>x()</script> */", Blocks: []Block{{HTML: "<p>a</p>"}}}
+	page := d.Page(d.Blocks)
+	shared, own := strings.Index(page, CSS), strings.Index(page, "p { color: red }")
+	if !strings.HasPrefix(page, "<!doctype html>") || shared < 0 || own < shared {
+		t.Errorf("the page's stylesheets: the shared one at %d, the document's at %d", shared, own)
+	}
+	if strings.Count(strings.ToLower(page), "</style") != 1 || !strings.HasSuffix(page, `<body><main class="doc"><p>a</p></main></body></html>`) {
+		t.Errorf("page %s", page[len(page)-120:])
+	}
+	checkInert(t, page)
 }

@@ -10,32 +10,60 @@ import (
 )
 
 // Inert makes a fragment of HTML safe to leave in scrollback after its
-// program exits (docs/toolkit.md, Surfaces):
-//   - nothing that runs or loads: <script>, <iframe>, <object>, <embed>,
-//     <base>, <meta>, <link>, event attributes, javascript: URLs;
+// program exits, on a surface nobody listens to any more:
+//   - nothing that runs or embeds: <script>, <iframe>, <object>, <embed>,
+//     <base>, <meta>, <link>, event attributes, javascript: URLs, and SVG
+//     animations that would set back what Inert removes;
 //   - nothing that reports: no id on a link, button, summary or form
 //     control, no data-on, and no forms (a submit is reported whatever
-//     the ids);
+//     the ids; SPEC §9);
+//   - nothing that takes the keyboard (SPEC §10.1): form controls are
+//     disabled, and contenteditable, tabindex and autofocus go;
 //   - links only as hyperlinks: an absolute http(s) link gets
 //     target="_blank", so the terminal opens it and never reports it
-//     (SPEC §9); any other link becomes its text.
+//     (SPEC §9); any other link becomes its text. An SVG keeps its
+//     references to its own parts (href="#…").
 //
-// A host removes scripts itself (SPEC §12); this does not rely on it.
-func Inert(fragment string) string {
-	ctx := &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body}
-	nodes, err := html.ParseFragment(strings.NewReader(fragment), ctx)
+// The result reads back as itself: markup a second parse would read
+// differently, such as a <style> that moves into MathML and stops being
+// text, goes through Inert again until it does. A <plaintext>, which
+// would make the rest of a page its text, becomes a <pre>.
+//
+// A <summary> still takes the keyboard on a click: a program that leaves
+// a document behind detaches its surface too (SPEC §5.5), or creates it
+// detached (hotty.DocDetached). A host removes scripts itself (SPEC §12);
+// Inert does not rely on it.
+func Inert(fragment string) string { return inertKeeping(fragment, nil) }
+
+// inertKeeping is Inert, but for the links keep names, which stay links
+// (a man page's man: links, which its viewer hears).
+func inertKeeping(fragment string, keep func(href string) bool) string {
+	out := inertOnce(fragment, keep)
+	for range 4 {
+		again := inertOnce(out, keep)
+		if again == out {
+			return out
+		}
+		out = again
+	}
+	return html.EscapeString(fragment)
+}
+
+// inertOnce parses a fragment as a page's body, the way a host reads it.
+// (A fragment parse differs: it keeps a <b> inside an <svg>, which a
+// page's parse moves out of it.)
+func inertOnce(fragment string, keep func(string) bool) string {
+	doc, err := html.Parse(strings.NewReader("<body>" + fragment))
 	if err != nil {
 		return html.EscapeString(fragment)
 	}
+	body := find(doc, func(n *html.Node) bool { return n.DataAtom == atom.Body })
+	if body == nil {
+		return html.EscapeString(fragment)
+	}
+	inert(body, keep)
 	var b strings.Builder
-	for _, n := range nodes {
-		if n.Type == html.ElementNode && dropped[strings.ToLower(n.Data)] || n.Type == html.CommentNode {
-			continue
-		}
-		if n.Type == html.ElementNode {
-			inertElement(n)
-		}
-		inert(n)
+	for n := body.FirstChild; n != nil; n = n.NextSibling {
 		_ = html.Render(&b, n)
 	}
 	return b.String()
@@ -45,6 +73,7 @@ func Inert(fragment string) string {
 var dropped = map[string]bool{
 	"script": true, "noscript": true, "iframe": true, "frame": true, "frameset": true, "object": true,
 	"embed": true, "applet": true, "base": true, "meta": true, "link": true, "template": true, "portal": true,
+	"fencedframe": true,
 }
 
 // reporting are the elements whose clicks or changes a host reports when
@@ -54,53 +83,100 @@ var reporting = map[string]bool{
 	"option": true, "area": true, "label": true,
 }
 
-func inert(n *html.Node) {
+// gone reports whether Inert removes a node with its content: a comment,
+// a dropped element, or an SVG animation that sets an attribute Inert
+// removes, such as <set attributeName="href" to="javascript:…">.
+func gone(n *html.Node) bool {
+	switch n.Type {
+	case html.CommentNode:
+		return true
+	case html.ElementNode:
+		name := strings.ToLower(n.Data)
+		if dropped[name] {
+			return true
+		}
+		if name != "set" && name != "animate" {
+			return false
+		}
+		k := strings.ToLower(strings.TrimSpace(attr(n, "attributeName")))
+		k = k[strings.LastIndexByte(k, ':')+1:]
+		return stripped(k) || k == "href" || k == "id" || k == "disabled" || urlAttr[k]
+	}
+	return false
+}
+
+// stripped reports whether Inert removes an attribute from every element.
+func stripped(k string) bool {
+	switch k {
+	case "data-on", "autofocus", "action", "formaction", "target", "ping", "download", "rel", "form",
+		"contenteditable", "tabindex":
+		return true
+	}
+	return strings.HasPrefix(k, "on")
+}
+
+func inert(n *html.Node, keep func(string) bool) {
 	for c := n.FirstChild; c != nil; {
 		next := c.NextSibling
 		switch {
-		case c.Type == html.CommentNode:
-			n.RemoveChild(c)
-		case c.Type == html.ElementNode && dropped[strings.ToLower(c.Data)]:
+		case gone(c):
 			n.RemoveChild(c)
 		case c.Type == html.ElementNode:
-			inertElement(c)
-			inert(c)
+			inertElement(c, keep)
+			inert(c, keep)
 		}
 		c = next
 	}
 }
 
-func inertElement(n *html.Node) {
+func inertElement(n *html.Node, keepLink func(string) bool) {
 	name := strings.ToLower(n.Data)
 	keep := n.Attr[:0]
 	var href string
+	disabled := false
 	for _, a := range n.Attr {
 		k := strings.ToLower(a.Key)
 		switch {
-		case strings.HasPrefix(k, "on"), k == "data-on", k == "autofocus", k == "action", k == "formaction",
-			k == "target", k == "ping", k == "download", k == "rel", k == "form":
+		case stripped(k):
 			continue
 		case k == "id" && reporting[name]:
 			continue
-		case k == "href" || (a.Namespace == "xlink" && k == "href"):
+		case k == "href":
 			href = strings.TrimSpace(a.Val)
+			if n.Namespace == "svg" && name != "a" && strings.HasPrefix(href, "#") {
+				keep = append(keep, a)
+			}
 			continue
 		case urlAttr[k] && scriptURL(a.Val):
 			continue
 		}
+		disabled = disabled || k == "disabled"
 		keep = append(keep, a)
 	}
 	n.Attr = keep
+	if name == "a" && Web(href) {
+		n.Attr = append(n.Attr, html.Attribute{Key: "href", Val: href},
+			html.Attribute{Key: "target", Val: "_blank"}, html.Attribute{Key: "rel", Val: "noopener noreferrer"})
+		return
+	}
+	if name == "a" && n.Namespace == "" && keepLink != nil && keepLink(href) {
+		n.Attr = append(n.Attr, html.Attribute{Key: "href", Val: href})
+		return
+	}
+	if n.Namespace != "" {
+		return // an SVG or MathML <a> without its href is not a link
+	}
 	switch name {
 	case "a":
-		if Web(href) {
-			n.Attr = append(n.Attr, html.Attribute{Key: "href", Val: href},
-				html.Attribute{Key: "target", Val: "_blank"}, html.Attribute{Key: "rel", Val: "noopener noreferrer"})
-		} else if n.Namespace == "" {
-			n.Data, n.DataAtom = "span", atom.Span
-		}
+		n.Data, n.DataAtom = "span", atom.Span
 	case "form":
 		n.Data, n.DataAtom = "div", atom.Div
+	case "plaintext":
+		n.Data, n.DataAtom = "pre", atom.Pre
+	case "input", "select", "textarea", "button":
+		if !disabled {
+			n.Attr = append(n.Attr, html.Attribute{Key: "disabled"})
+		}
 	}
 }
 
@@ -150,7 +226,7 @@ func (o *Options) image(ref string) (src string, res Resource, ok bool) {
 	if !ok {
 		return "", Resource{}, false
 	}
-	res = Resource{ID: o.resID("img"), Type: info.Type, Data: data}
+	res = Resource{ID: o.resID("img", data), Type: info.Type, Data: data}
 	return "cid:" + res.ID, res, true
 }
 
@@ -213,7 +289,7 @@ func HTML(src []byte, o Options) *Doc {
 	if s := attr(body, "style"); s != "" {
 		css.WriteString("main.page {" + s + "}\n")
 	}
-	d.CSS = PageCSS + css.String()
+	d.CSS = PageCSS + styleText(css.String())
 	d.Blocks = splitNodes(children(body), &o, 0)
 	// Resources go with the first block that refers to them.
 	for _, r := range res {
@@ -434,6 +510,8 @@ type Para struct {
 	// Kind is the element it came from: "h1"…"h6", "p", "li", "pre",
 	// "dt", "dd", "td" (a table's row, cells joined by two spaces).
 	Kind string
+	// Text is its text, its runs of whitespace made one space (a <pre>'s
+	// kept as they are).
 	Text string
 }
 

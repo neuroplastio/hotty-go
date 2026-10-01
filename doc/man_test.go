@@ -213,3 +213,78 @@ func TestManBlocks(t *testing.T) {
 		t.Errorf("text %+v", paras[:2])
 	}
 }
+
+// A page read from a file is anyone's markup: its blocks are inert, but
+// for the man: links a viewer hears.
+func TestManBlocksAreInert(t *testing.T) {
+	evil := `<p>x<script>alert(1)</script><img src=x onerror=y><a href="javascript:z" id=q>l</a>` +
+		`<button id=b>b</button> see <a href="man:ls(1)" class="xref" id="r" onclick="z()">ls(1)</a></p>`
+	m, err := ReadMan([]byte(`<article class="man"><section><h2>NAME</h2>` + evil + `</section></article>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := m.Blocks(Options{}, 0)
+	if len(blocks) != 1 {
+		t.Fatalf("%d blocks", len(blocks))
+	}
+	b := blocks[0]
+	for _, bad := range []string{"<script", "alert", "onerror", "javascript", `id="`, "onclick"} {
+		if strings.Contains(b.HTML, bad) {
+			t.Errorf("the block has %q: %s", bad, b.HTML)
+		}
+	}
+	if !strings.Contains(b.HTML, `<a class="xref" href="man:ls(1)">ls(1)</a>`) || !strings.Contains(b.HTML, `<button disabled="">`) {
+		t.Errorf("the block %s", b.HTML)
+	}
+	if strings.Contains(b.Text, "alert") {
+		t.Errorf("the block's text %q", b.Text)
+	}
+}
+
+// mandoc's lists, tables, subsections and indented displays come out as
+// their plain HTML, its classes and styles left behind.
+func TestCleanManMandocBlocks(t *testing.T) {
+	src := `<html><body><div class="manual-text">
+<section class="Sh"><h1 class="Sh">DESCRIPTION</h1>
+loose text
+<h2 class="Ss">Lists</h2>
+<ul class="Bl-bullet"><li>one</li><li><p class="Pp">two</p><p class="Pp">more</p></li></ul>
+<ol class="Bl-enum"><li>first</li></ol>
+<table class="tbl"><tbody><tr><th>key</th><th>value</th></tr><tr><td colspan="2" style="x">both</td></tr></tbody></table>
+<div class="Bd-indent"><div class="Bd-indent">deep</div></div>
+<hr><img src="x.png"><script>alert(1)</script>
+<div class="Nd"><span>inline only</span></div>
+<div class="wrap"><p>in a div</p><pre>code</pre></div>
+<blockquote>quoted</blockquote>
+</section></div></body></html>`
+	m, err := CleanMan([]byte(src), "x", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<p>loose text</p><h3>Lists</h3><ul><li>one</li><li><p>two</p><p>more</p></li></ul><ol><li>first</li></ol>` +
+		`<table><tbody><tr><th>key</th><th>value</th></tr><tr><td colspan="2">both</td></tr></tbody></table>` +
+		`<div class="i1"><div class="i1"><p>deep</p></div></div><p>inline only</p><p>in a div</p><pre>code</pre><blockquote>quoted</blockquote>`
+	if len(m.Sections) != 1 || m.Sections[0].HTML != want {
+		t.Errorf("got\n%+v\nwant\n%s", m.Sections, want)
+	}
+}
+
+// A link on a line of its own in groff's HTML is a hyperlink; an anchor
+// goes.
+func TestCleanManGroffLink(t *testing.T) {
+	src := `<html><body><h2>SEE ALSO</h2><a name="x"></a><a href="https://example.com/x">home</a></body></html>`
+	m, err := CleanMan([]byte(src), "x", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<p><a href="https://example.com/x" target="_blank" rel="noopener noreferrer">home</a></p>`
+	if len(m.Sections) != 1 || m.Sections[0].HTML != want {
+		t.Errorf("got %+v, want %s", m.Sections, want)
+	}
+	if _, err := CleanMan([]byte("<html><frameset></frameset></html>"), "x", "1"); err == nil {
+		t.Error("a page with no body, and no error")
+	}
+	if g := Generator([]byte(`<p>no meta`)); g != "" {
+		t.Errorf("Generator of a page without one: %q", g)
+	}
+}

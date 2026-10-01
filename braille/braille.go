@@ -7,7 +7,10 @@
 // it.
 package braille
 
-import "strings"
+import (
+	"math"
+	"strings"
+)
 
 // Canvas is cols×rows cells of dots. Dot (0, 0) is the top-left one.
 type Canvas struct {
@@ -42,7 +45,19 @@ func (c *Canvas) Set(x, y int, ink uint8) {
 }
 
 // Line sets the dots of a line from (x0, y0) to (x1, y1), both included.
+// The ends may lie outside the canvas, however far: the part inside is
+// drawn.
 func (c *Canvas) Line(x0, y0, x1, y1 int, ink uint8) {
+	w, h := c.Size()
+	if far(x0, w) || far(x1, w) || far(y0, h) || far(y1, h) {
+		// Walking a line dot by dot takes as long as it is, and an end
+		// made from a NaN is as far as an int goes: cut it to the canvas
+		// first. Lines near it are drawn as they are, dot for dot.
+		var ok bool
+		if x0, y0, x1, y1, ok = clip(x0, y0, x1, y1, w, h); !ok {
+			return
+		}
+	}
 	dx, dy := abs(x1-x0), -abs(y1-y0)
 	sx, sy := sign(x1-x0), sign(y1-y0)
 	e := dx + dy
@@ -111,6 +126,42 @@ func (c *Canvas) String() string {
 		rows[r] = c.Row(r, nil)
 	}
 	return strings.Join(rows, "\n")
+}
+
+// far reports whether v lies further from 0…n than n again.
+func far(v, n int) bool { return v < -n-1 || v > 2*n+1 }
+
+// clip cuts the line from (x0, y0) to (x1, y1) to the box from -1 to w
+// across and -1 to h down, a dot beyond the canvas on every side (Liang and
+// Barsky's algorithm). ok is false when no part of it is inside.
+func clip(x0, y0, x1, y1, w, h int) (int, int, int, int, bool) {
+	fx, fy := float64(x0), float64(y0)
+	dx, dy := float64(x1)-fx, float64(y1)-fy
+	t0, t1 := 0.0, 1.0
+	edge := func(p, q float64) bool { // the part where p·t ≤ q
+		switch {
+		case p == 0:
+			return q >= 0
+		case p < 0:
+			if r := q / p; r > t1 {
+				return false
+			} else if r > t0 {
+				t0 = r
+			}
+		default:
+			if r := q / p; r < t0 {
+				return false
+			} else if r < t1 {
+				t1 = r
+			}
+		}
+		return true
+	}
+	if !edge(-dx, fx+1) || !edge(dx, float64(w)-fx) || !edge(-dy, fy+1) || !edge(dy, float64(h)-fy) {
+		return 0, 0, 0, 0, false
+	}
+	round := func(v float64) int { return int(math.Round(v)) }
+	return round(fx + t0*dx), round(fy + t0*dy), round(fx + t1*dx), round(fy + t1*dy), true
 }
 
 func abs(v int) int {

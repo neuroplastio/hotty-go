@@ -3,6 +3,7 @@ package form
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -92,8 +93,8 @@ func (f Field) read(v string, sent bool) (any, string) {
 			}
 			return nil, ""
 		}
-		n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		if err != nil {
+		n, ok := decimal(v)
+		if !ok {
 			return v, "not a number"
 		}
 		return json.Number(strconv.FormatFloat(n, 'f', -1, 64)), ""
@@ -123,13 +124,29 @@ func (f Field) read(v string, sent bool) (any, string) {
 	return v, ""
 }
 
+// decimal reads a number as a person types one: digits, a sign, a point,
+// an exponent. Not hexadecimal, NaN or an infinity, which JSON cannot
+// carry.
+func decimal(v string) (float64, bool) {
+	v = strings.TrimSpace(v)
+	if strings.ContainsAny(v, "xXnN_") { // 0x…, NaN, Inf, infinity
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	return n, err == nil && !math.IsInf(n, 0) && !math.IsNaN(n)
+}
+
 // Show returns the commands that show problems in the form placed as
 // surface, clear the ones fixed since, and give the keyboard to the first
-// field with a problem. The values typed stay as they are.
+// field with a problem. The values typed stay as they are. Problems for
+// fields the spec does not have are left out.
 func (s *Spec) Show(surface string, problems []Problem) []string {
 	msg := map[int]string{}
 	first := -1
 	for _, p := range problems {
+		if p.Field < 0 || p.Field >= len(s.Fields) {
+			continue
+		}
 		if _, ok := msg[p.Field]; !ok {
 			msg[p.Field] = p.Message
 		}

@@ -10,14 +10,17 @@
 // Every block is inert (Inert): nothing in it reports what the user does,
 // and its only links are hyperlinks the terminal opens itself (SPEC §9).
 // A document left in scrollback after its program exits must be, or clicks
-// in it would be reported to whatever reads the terminal next.
+// in it would be reported to whatever reads the terminal next. The
+// exception is a manual page's blocks (ManPage.Blocks), which keep their
+// man: links for a viewer.
 //
 // The package does no I/O. What a document refers to (a Markdown file's
 // images) comes through Options.ReadFile.
 package doc
 
 import (
-	"fmt"
+	"crypto/sha256"
+	"encoding/hex"
 	"html"
 	"math"
 	"strings"
@@ -40,14 +43,18 @@ type Block struct {
 
 // Resource is bytes a document refers to as cid:<ID> (SPEC §7.1).
 type Resource struct {
-	ID, Type string
-	Data     []byte
+	// ID is what the document's markup names it by, after cid:.
+	ID string
+	// Type is its MIME type: "image/png".
+	Type string
+	// Data is its bytes, as hotty.Res sends them.
+	Data []byte
 }
 
 // Doc is a converted document.
 type Doc struct {
 	// CSS is the document's own stylesheet: it goes after the shared one
-	// (CSS), so it wins.
+	// (CSS), so it wins (Page). Nothing in it ends a <style> element.
 	CSS string
 	// Blocks are its top-level blocks, in order.
 	Blocks []Block
@@ -77,8 +84,11 @@ type Options struct {
 	// (resolved by the caller against the document's directory), such as a
 	// Markdown file's images. nil leaves them out.
 	ReadFile func(name string) ([]byte, error)
-	// ResPrefix makes resource ids unique to the program: two runs never
-	// share one. It is the start of every id, as in "showhot-4121-img1".
+	// ResPrefix makes resource ids the program's own, so that two runs
+	// never share one: the process's surface prefix, such as
+	// "mytool-4121". An id is the prefix, the kind, and a hash of the
+	// bytes ("mytool-4121-img-3f2a…"): two images never share one, in one
+	// document or several, and the same image is one resource.
 	ResPrefix string
 	// Screen is the terminal's height in rows, 0 if unknown. Pages and
 	// images are made to fit it (PageRows), so that a surface placed
@@ -86,8 +96,6 @@ type Options struct {
 	// is whole (hotty-blitz's polyfill draws it with Unicode placeholders,
 	// reserved by moving the cursor, which stops at the screen's edges).
 	Screen int
-
-	res int // resources named so far
 }
 
 func (o *Options) cols() int {
@@ -123,14 +131,14 @@ func (o *Options) imageRows() int {
 	return MaxImageRows
 }
 
-// resID names a new resource.
-func (o *Options) resID(kind string) string {
-	o.res++
+// resID names a resource by its bytes (ResPrefix).
+func (o *Options) resID(kind string, data []byte) string {
 	p := o.ResPrefix
 	if p == "" {
 		p = "doc"
 	}
-	return fmt.Sprintf("%s-%s%d", p, kind, o.res)
+	sum := sha256.Sum256(data)
+	return p + "-" + kind + "-" + hex.EncodeToString(sum[:8])
 }
 
 // Target is how many rows Pages aims for in a surface: small enough that an
@@ -180,6 +188,18 @@ func (d *Doc) Body(page []Block) string {
 	b.WriteString(`</main>`)
 	return b.String()
 }
+
+// Page is a page's document, for hotty.Doc or hotty.DocDetached: the
+// package's stylesheet (CSS), then the document's own, and the page's Body.
+func (d *Doc) Page(page []Block) string {
+	return "<!doctype html><html><head><style>" + CSS + styleText(d.CSS) + "</style></head><body>" +
+		d.Body(page) + "</body></html>"
+}
+
+// styleText makes CSS safe in a <style> element: each "<" is written as
+// the escape \3c, the same character to CSS, so that nothing in it ends
+// the element and starts markup (</style><script>).
+func styleText(css string) string { return strings.ReplaceAll(css, "<", `\3c `) }
 
 // Resources are the resources a page's blocks refer to, each once.
 func Resources(page []Block) []Resource {
