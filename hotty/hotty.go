@@ -115,9 +115,24 @@ func Query(n int) string {
 }
 
 // Doc creates a surface, or replaces its document. Errors come back
-// (EQUOTA: the terminal holds no more surfaces).
+// (EQUOTA: the terminal holds no more surfaces). The surface is the
+// program's, even one it had detached: it reports what the user does in it,
+// and takes the keyboard on the program's behalf (SPEC §5.5).
 func Doc(surface, html string) string {
 	return Encode(Control{{"a", "doc"}, {"s", surface}, {"q", q(ReplyOnError)}}, []byte(html))
+}
+
+// DocDetached is Doc for a document the program only shows: the surface is
+// created detached, or its document replaced and the surface detached, in
+// the one command (d=1, SPEC §5.5). It reports nothing, never takes the
+// keyboard, and its controls act disabled; hover, selection, <details> and
+// hyperlinks still work. It is what a tool prints among its output, which
+// outlives it: whatever reads the terminal after it, a shell, would read
+// the surface's events as typing. Patches, placements, Hide and Del work on
+// it as before. A host older than §5.5 ignores d=1 and makes the surface
+// the program's.
+func DocDetached(surface, html string) string {
+	return Encode(Control{{"a", "doc"}, {"s", surface}, {"d", "1"}, {"q", q(ReplyOnError)}}, []byte(html))
 }
 
 // Place places a surface at the cursor, over cols columns and rows rows (0
@@ -229,6 +244,18 @@ func Del(surface string) string {
 
 // DelAll deletes every surface.
 func DelAll() string { return Encode(Control{{"a", "del"}, {"q", q(NoReply)}}, nil) }
+
+// Detach gives a surface up (SPEC §5.5): it stays on the screen as text
+// does, placed, patched and deleted as before, but sends no more events and
+// never has the keyboard; if it has it, the keyboard goes back to the
+// terminal with no blur. A program that leaves surfaces on the screen when
+// it exits detaches them first, unless it sent them with DocDetached. The
+// next Doc makes the surface the program's again. It is never answered: a
+// host older than §5.5 refuses it (EINVAL), and a reply nobody reads would
+// reach the shell as typing.
+func Detach(surface string) string {
+	return Encode(Control{{"a", "detach"}, {"s", surface}, {"q", q(NoReply)}}, nil)
+}
 
 // Focus gives a surface the keyboard, at an element if target is not empty.
 func Focus(surface, target string) string {

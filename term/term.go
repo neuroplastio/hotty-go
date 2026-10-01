@@ -113,8 +113,10 @@ func (t *Term) Surface(name string) string {
 }
 
 // Surfaces are the names Surface has returned: what this process may have
-// left on the terminal. The web shell deletes them when their scrollback is
-// long gone; natively they stay until the host drops them.
+// left on the terminal. The web shell detaches them when the process exits
+// (SPEC §5.5), in case it did not, and deletes them when their scrollback
+// is long gone; natively they stay until the host drops them, and a tool
+// detaches what it leaves itself (docs/toolkit.md, Surfaces).
 func (t *Term) Surfaces() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()

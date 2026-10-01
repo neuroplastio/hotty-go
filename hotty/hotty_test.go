@@ -51,6 +51,8 @@ func TestRoundTrip(t *testing.T) {
 		payload string
 	}{
 		{"doc", Doc("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "q": "1"}, "<p>hello</p>"},
+		{"doc detached", DocDetached("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "d": "1", "q": "1"}, "<p>hello</p>"},
+		{"detach", Detach("card"), map[string]string{"a": "detach", "s": "card", "q": "2"}, ""},
 		{"text", SetText("card", "clock", "12:00"), map[string]string{"a": "patch", "s": "card", "op": "text", "t": "clock", "q": "2"}, "12:00"},
 		{"var", SetVar("dash", "cpu", "p", "42"), map[string]string{"a": "patch", "s": "dash", "op": "var", "t": "cpu", "k": "p", "q": "2"}, "42"},
 		{"place auto", Place("card", 40, 0, false, Reply), map[string]string{"a": "place", "s": "card", "c": "40", "r": "auto", "q": "0"}, ""},
@@ -99,6 +101,42 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 	rep := strings.Repeat("<li>row</li>", 500)
 	if c := Doc("list", rep); !strings.Contains(c, ":o=z") || len(c) > len(rep)/4 {
 		t.Errorf("repetitive markup was not compressed (%d bytes)", len(c))
+	}
+}
+
+// A document the program only shows is detached in the command that sends
+// it, and a surface is detached with no reply asked for (SPEC §5.5): a host
+// older than §5.5 answers detach with EINVAL, which nobody would read.
+func TestDetach(t *testing.T) {
+	if got, want := Detach("showhot-7-doc1"), "\x1b]7279;a=detach:s=showhot-7-doc1:q=2\x1b\\"; got != want {
+		t.Errorf("Detach = %q, want %q", got, want)
+	}
+	if got := DocDetached("card", "<p>hi</p>"); !strings.HasPrefix(got, "\x1b]7279;a=doc:s=card:d=1:q=1;") {
+		t.Errorf("DocDetached = %q", got)
+	}
+	if got := Doc("card", "<p>hi</p>"); strings.Contains(got, ":d=") {
+		t.Errorf("Doc is detached: %q", got)
+	}
+	// Chunked, d=1 is the first chunk's: the others carry m and q alone.
+	var b strings.Builder
+	x := uint32(7)
+	for b.Len() < 20000 {
+		x = x*1664525 + 1013904223
+		b.WriteByte(byte('a' + x>>24%26))
+	}
+	cmd := DocDetached("big", b.String())
+	seqs := split(cmd)
+	if len(seqs) < 2 || !strings.Contains(seqs[0], ":d=1:") {
+		t.Fatalf("%d chunks, the first %q", len(seqs), seqs[0][:min(40, len(seqs[0]))])
+	}
+	for _, s := range seqs[1:] {
+		if strings.Contains(s, "d=1") {
+			t.Errorf("a continuation chunk carries d: %q", s[:30])
+		}
+	}
+	ms := decodeAll(t, cmd)
+	if len(ms) != 1 || ms[0].Get("d") != "1" || string(ms[0].Payload) != b.String() {
+		t.Errorf("the chunks did not reassemble a detached document (%d messages)", len(ms))
 	}
 }
 
