@@ -54,7 +54,6 @@ of what it imports:
 | `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library |
 | `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
-| `github.com/neuroplastio/hotty-go/hottydoc` | `hottydoc` | goldmark, x/net/html |
 | `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
 
 ```
@@ -71,7 +70,6 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyte
 | [`braille`](docs/api/braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
 | [`chart`](docs/api/chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program patches as values arrive, and in cells for a terminal that is not a host (Spark). |
 | [`form`](docs/api/form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and patch), and what a submit event brings back, read into typed answers. |
-| [`hottydoc`](docs/api/hottydoc.md) | Package hottydoc turns files into HOTTY documents: Markdown, HTML, CSV and TSV, JSON, images and plain text become blocks of HTML that a program places as surfaces (SPEC §5), with the resources they refer to (§7.1). |
 | [`hottytea`](docs/api/hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
 | [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
@@ -100,7 +98,7 @@ go run ./dashboard https://example.com
 | [dashboard](examples/dashboard) | Dashboard watches HTTP endpoints, full screen: whether each is up, and its latency charted as the probes come back. | It is a Bubble Tea program, and each endpoint is a card on a surface that hottytea keeps in place as the frame changes. |
 | [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest HOTTY program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
 | [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
-| [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | hottydoc.Markdown converts the file into blocks; hottydoc.Pages groups them into surfaces that each fit the screen, so a host can show each whole. |
+| [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | The SDK has no Markdown in it: the program renders with a Markdown library (goldmark) and sends the HTML, the way it would any other. |
 | [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.SetVar) and text patches change the labels (hotty.SetText), a few dozen bytes each, in synchronized output so the host shows them together (SPEC §6). |
 <!-- /docgen:examples -->
 

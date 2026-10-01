@@ -63,7 +63,7 @@ func TestSurface(t *testing.T) {
 	}
 	// The image went first, as a resource the page refers to.
 	ids := resources(h)
-	if len(ids) != 1 || !strings.HasPrefix(ids[0], "markdown-res-img-") {
+	if len(ids) != 1 || !strings.HasPrefix(ids[0], "markdown-img-") {
 		t.Fatalf("resources: %v", ids)
 	}
 	if mime, data, _ := h.Resource(ids[0]); mime != "image/svg+xml" || string(data) != flow {
@@ -129,8 +129,31 @@ func TestImagesStayBelow(t *testing.T) {
 	if ids := resources(h); len(ids) != 0 {
 		t.Errorf("resources sent: %v", ids)
 	}
-	if h.Surface("markdown-page0") == nil {
-		t.Error("no page")
+	// Each shows its description instead.
+	if s := h.Surface("markdown-page0"); s == nil || s.Text() != "[a] [b] [c] [d]" {
+		t.Errorf("the page: %v", s)
+	}
+}
+
+// What the document cannot show stays out of the page: raw HTML, which
+// could be a form, and a link that would run script. A web image is its
+// description: a host fetches nothing (SPEC §12).
+func TestLeftOut(t *testing.T) {
+	h := hottytest.New(t)
+	e, errs := on(h)
+	e.stdin = strings.NewReader("<form><button id=b>Delete</button></form>\n\n" +
+		"[run](javascript:alert(1)) ![logo](https://example.com/logo.png)\n")
+	if code := run(context.Background(), nil, e); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	html := h.Surface("markdown-page0").HTML()
+	for _, bad := range []string{"<form", "<button", "javascript:", "https://example.com/logo.png"} {
+		if strings.Contains(html, bad) {
+			t.Errorf("the page has %s:\n%s", bad, html)
+		}
+	}
+	if !strings.Contains(html, "[logo]") {
+		t.Errorf("no description for the image:\n%s", html)
 	}
 }
 
@@ -163,32 +186,29 @@ func TestRefused(t *testing.T) {
 	}
 }
 
-// On a terminal that is not a host: the text, headings bold, an image its
-// description.
+// On a terminal that is not a host: the Markdown, as it is.
 func TestCells(t *testing.T) {
 	h := hottytest.New(t, hottytest.Text())
 	e, _ := on(h)
 	if code := run(context.Background(), []string{"docs/guide.md"}, e); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	want := "Deploys\n\nRun deploy with an environment; the runbook has the rest.\n\n[how a deploy goes]\n\n" +
-		"env  region\nstaging  eu-west\nproduction  us-east\n\n  • build\n  • push\n\n    deploy api production"
-	if got := h.Screen(); !strings.HasSuffix(got, want) {
-		t.Errorf("the screen:\n%s\nwant:\n%s", got, want)
+	if got := h.Output(); !strings.HasSuffix(got, guide) {
+		t.Errorf("the output:\n%q\nwant it to end with:\n%q", got, guide)
 	}
-	if !strings.Contains(h.Output(), "\x1b[1mDeploys\x1b[m") {
-		t.Error("the heading is not bold")
+	if len(h.Surfaces()) != 0 {
+		t.Errorf("surfaces: %v", h.Surfaces())
 	}
 }
 
-// Into a pipe: the same text, without escape codes; and from stdin.
+// Into a pipe: the Markdown, from stdin.
 func TestPipe(t *testing.T) {
 	var out, errs strings.Builder
 	e := env{stdin: strings.NewReader(guide), stdout: &out, stderr: &errs, files: files}
 	if code := run(context.Background(), []string{"-"}, e); code != 0 {
 		t.Fatalf("exit %d: %s", code, errs.String())
 	}
-	if got := out.String(); !strings.HasPrefix(got, "Deploys\n\nRun deploy") || strings.Contains(got, "\x1b") {
+	if got := out.String(); got != guide {
 		t.Errorf("stdout: %q", got)
 	}
 }
@@ -198,7 +218,7 @@ func TestNoTerminal(t *testing.T) {
 	var out strings.Builder
 	e := env{stdin: strings.NewReader("# Hi\n"), stdout: &out, stderr: &out, files: files, tty: true,
 		open: func() (*hottyterm.Term, error) { return nil, hottyterm.ErrNoTerminal }}
-	if code := run(context.Background(), nil, e); code != 0 || out.String() != "\x1b[1mHi\x1b[m\n" {
+	if code := run(context.Background(), nil, e); code != 0 || out.String() != "# Hi\n" {
 		t.Errorf("exit %d: %q", code, out.String())
 	}
 }

@@ -11,7 +11,6 @@ A page for each package of `github.com/neuroplastio/hotty-go`, written from the 
 | [`braille`](braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
 | [`chart`](chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program patches as values arrive, and in cells for a terminal that is not a host (Spark). |
 | [`form`](form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and patch), and what a submit event brings back, read into typed answers. |
-| [`hottydoc`](hottydoc.md) | Package hottydoc turns files into HOTTY documents: Markdown, HTML, CSV and TSV, JSON, images and plain text become blocks of HTML that a program places as surfaces (SPEC §5), with the resources they refer to (§7.1). |
 | [`hottytea`](hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
 | [`hottyterm`](hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |

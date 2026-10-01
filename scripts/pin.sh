@@ -6,7 +6,7 @@
 # `go mod tidy` fetches, say, hottytest at the version hottytea requires.
 #
 #   sh scripts/pin.sh v0.1.0       # a release: tag every module (v0.1.0,
-#                                  # term/v0.1.0, …) at the commit pinning it
+#                                  # hottyterm/v0.1.0, …) at the commit pinning it
 #   sh scripts/pin.sh origin/main  # before there is one: a pushed commit
 set -eu
 rev=${1:?usage: pin.sh VERSION|COMMIT}
