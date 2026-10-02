@@ -4,12 +4,12 @@ module github.com/neuroplastio/hotty-go/hottytea
 
 go 1.26.8
 
-require github.com/neuroplastio/hotty-go v0.0.0-20261002163405-6bc4f48bdba7
+require github.com/neuroplastio/hotty-go v0.0.0-20261002184341-1aa3809a5173
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261002163405-6bc4f48bdba7
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261002184341-1aa3809a5173
 )
 
 require (
