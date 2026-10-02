@@ -72,7 +72,8 @@ func TestCommandsRoundTrip(t *testing.T) {
 		payload string
 	}{
 		{"doc", Doc("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "q": "1"}, "<p>hello</p>"},
-		{"doc detached", DocDetached("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "d": "1", "q": "1"}, "<p>hello</p>"},
+		{"doc detached", Doc("card", "<p>hello</p>", Detached()), map[string]string{"a": "doc", "s": "card", "d": "1", "q": "1"}, "<p>hello</p>"},
+		{"doc detached, numbered", Doc("card", "<p>hello</p>", Detached(), N(3)), map[string]string{"a": "doc", "s": "card", "d": "1", "n": "3", "q": "0"}, "<p>hello</p>"},
 		{"place auto", Place("card", Placement{Cols: 40}), map[string]string{"a": "place", "s": "card", "c": "40", "r": "auto", "q": "1"}, ""},
 		{"place", Place("card", Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}),
 			map[string]string{"a": "place", "s": "card", "c": "40", "r": "3", "z": "-2", "p": "1", "C": "1", "q": "1"}, ""},
@@ -247,7 +248,7 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 // it; chunked, d=1 is the first chunk's alone.
 func TestDocDetachedChunked(t *testing.T) {
 	text := noise(20000, 7)
-	seqs := split(DocDetached("big", text))
+	seqs := split(Doc("big", text, Detached()))
 	if len(seqs) < 2 || !strings.Contains(seqs[0], ":d=1:") {
 		t.Fatalf("%d chunks", len(seqs))
 	}

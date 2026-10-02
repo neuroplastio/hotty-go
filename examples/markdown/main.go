@@ -192,7 +192,7 @@ func show(ctx context.Context, t *hottyterm.Term, src []byte, read func(string) 
 		}
 		name := t.Surface(fmt.Sprintf("page%d", i))
 		// Rows 0: the host makes the placement as tall as the page is.
-		cmds = append(cmds, hotty.DocDetached(name, style+body.String()), hotty.Place(name, hotty.Placement{Cols: size.Cols}))
+		cmds = append(cmds, hotty.Doc(name, style+body.String(), hotty.Detached()), hotty.Place(name, hotty.Placement{Cols: size.Cols}))
 		if err := t.Send(cmds...); err != nil {
 			return err
 		}

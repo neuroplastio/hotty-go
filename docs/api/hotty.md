@@ -33,26 +33,25 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 ## <a id="pkg-index"></a>Index
 
 - [Constants](#pkg-constants)
-- [`func Blur(surface string, opts ...Option) string`](#Blur)
-- [`func Del(surface string, opts ...Option) string`](#Del)
-- [`func DelAll(opts ...Option) string`](#DelAll)
-- [`func DelRes(id string, opts ...Option) string`](#DelRes)
-- [`func Detach(surface string, opts ...Option) string`](#Detach)
-- [`func Doc(surface, html string, opts ...Option) string`](#Doc)
-- [`func DocDetached(surface, html string, opts ...Option) string`](#DocDetached)
+- [`func Blur(surface string, opts ...ReplyOption) string`](#Blur)
+- [`func Del(surface string, opts ...ReplyOption) string`](#Del)
+- [`func DelAll(opts ...ReplyOption) string`](#DelAll)
+- [`func DelRes(id string, opts ...ReplyOption) string`](#DelRes)
+- [`func Detach(surface string, opts ...ReplyOption) string`](#Detach)
+- [`func Doc(surface, html string, opts ...DocOption) string`](#Doc)
 - [`func Encode(ctl Control, payload []byte) string`](#Encode)
-- [`func Focus(surface, target string, opts ...Option) string`](#Focus)
-- [`func Hide(surface string, opts ...Option) string`](#Hide)
-- [`func MorphTo(surface, target, html string, opts ...Option) string`](#MorphTo)
-- [`func Patch(surface string, op Op, target, key string, payload []byte, opts ...Option) string`](#Patch)
-- [`func Place(surface string, p Placement, opts ...Option) string`](#Place)
-- [`func PlaceAt(surface string, x, y int, p Placement, opts ...Option) string`](#PlaceAt)
+- [`func Focus(surface, target string, opts ...ReplyOption) string`](#Focus)
+- [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
+- [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
+- [`func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string`](#Patch)
+- [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
+- [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
 - [`func Query(n int) string`](#Query)
-- [`func RemoveAttr(surface, target, name string, opts ...Option) string`](#RemoveAttr)
-- [`func Res(id, mime string, data []byte, opts ...Option) string`](#Res)
-- [`func SetAttr(surface, target, name, value string, opts ...Option) string`](#SetAttr)
-- [`func SetText(surface, target, text string, opts ...Option) string`](#SetText)
-- [`func SetVar(surface, target, name, value string, opts ...Option) string`](#SetVar)
+- [`func RemoveAttr(surface, target, name string, opts ...ReplyOption) string`](#RemoveAttr)
+- [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
+- [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
+- [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
+- [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
@@ -67,6 +66,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (c Control) With(k, v string) Control`](#Control.With)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
+- [`type DocOption`](#DocOption)
+  - [`func Detached() DocOption`](#Detached)
 - [`type Drag`](#Drag)
   - [`func (d Drag) Has(key string) bool`](#Drag.Has)
 - [`type Error`](#Error)
@@ -84,14 +85,14 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m Message) Get(k string) string`](#Message.Get)
   - [`func (m Message) Reply() (Reply, bool)`](#Message.Reply)
 - [`type Op`](#Op)
-- [`type Option`](#Option)
-  - [`func N(n int) Option`](#N)
-  - [`func Q(q Quiet) Option`](#Q)
 - [`type Placement`](#Placement)
 - [`type Quiet`](#Quiet)
 - [`type Reply`](#Reply)
   - [`func (r Reply) Caps() (Caps, bool)`](#Reply.Caps)
   - [`func (r Reply) Err() error`](#Reply.Err)
+- [`type ReplyOption`](#ReplyOption)
+  - [`func N(n int) ReplyOption`](#N)
+  - [`func Q(q Quiet) ReplyOption`](#Q)
 - [`type Result`](#Result)
   - [`func (r Result) String() string`](#Result.String)
 - [`type Window`](#Window)
@@ -157,7 +158,7 @@ Error codes, in a reply's Code (SPEC §3.6).
 ## <a id="Blur"></a>func Blur
 
 ```go
-func Blur(surface string, opts ...Option) string
+func Blur(surface string, opts ...ReplyOption) string
 ```
 
 Blur takes the keyboard back from a surface. Its focused control commits its value first, so a change event may come before the blur event.
@@ -165,7 +166,7 @@ Blur takes the keyboard back from a surface. Its focused control commits its val
 ## <a id="Del"></a>func Del
 
 ```go
-func Del(surface string, opts ...Option) string
+func Del(surface string, opts ...ReplyOption) string
 ```
 
 Del deletes a surface and its placement (SPEC §5.4).
@@ -173,7 +174,7 @@ Del deletes a surface and its placement (SPEC §5.4).
 ## <a id="DelAll"></a>func DelAll
 
 ```go
-func DelAll(opts ...Option) string
+func DelAll(opts ...ReplyOption) string
 ```
 
 DelAll deletes every surface.
@@ -181,7 +182,7 @@ DelAll deletes every surface.
 ## <a id="DelRes"></a>func DelRes
 
 ```go
-func DelRes(id string, opts ...Option) string
+func DelRes(id string, opts ...ReplyOption) string
 ```
 
 DelRes deletes a resource.
@@ -189,30 +190,20 @@ DelRes deletes a resource.
 ## <a id="Detach"></a>func Detach
 
 ```go
-func Detach(surface string, opts ...Option) string
+func Detach(surface string, opts ...ReplyOption) string
 ```
 
-Detach gives a surface up (SPEC §5.5): it stays on the screen as text does, placed, patched and deleted as before, but sends no more events and never has the keyboard; if it has it, the keyboard goes back to the terminal with no blur. A program that leaves surfaces on the screen when it exits detaches them first, unless it sent them with DocDetached. The next Doc makes the surface the program's again.
+Detach gives a surface up (SPEC §5.5): it stays on the screen as text does, placed, patched and deleted as before, but sends no more events and never has the keyboard; if it has it, the keyboard goes back to the terminal with no blur. A program that leaves surfaces on the screen when it exits detaches them first, unless it sent them Detached. The next Doc sent without Detached makes the surface the program's again.
 
 It is never answered, unless an option asks: a host older than §5.5 refuses it (EINVAL), and a reply nobody reads would reach the shell as typing.
 
 ## <a id="Doc"></a>func Doc
 
 ```go
-func Doc(surface, html string, opts ...Option) string
+func Doc(surface, html string, opts ...DocOption) string
 ```
 
-Doc creates a surface, or replaces its document (SPEC §5.1). The surface is the program's, even one it had detached: it reports what the user does in it, and takes the keyboard on the program's behalf (SPEC §5.5). It is answered on error: EQUOTA when the host holds no more surfaces.
-
-## <a id="DocDetached"></a>func DocDetached
-
-```go
-func DocDetached(surface, html string, opts ...Option) string
-```
-
-DocDetached is Doc for a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, patched, hidden and deleted as before.
-
-It is what a command prints among its output, which outlives it: whatever reads the terminal next, a shell, would read the surface's events as typing. A host older than §5.5 ignores d=1.
+Doc creates a surface, or replaces its document (SPEC §5.1). The surface is the program's, even one it had detached: it reports what the user does in it, and takes the keyboard on the program's behalf (SPEC §5.5), unless the document is sent Detached. It is answered on error: EQUOTA when the host holds no more surfaces.
 
 ## <a id="Encode"></a>func Encode
 
@@ -225,7 +216,7 @@ Encode returns one command: the control and the payload, compressed when that ma
 ## <a id="Focus"></a>func Focus
 
 ```go
-func Focus(surface, target string, opts ...Option) string
+func Focus(surface, target string, opts ...ReplyOption) string
 ```
 
 Focus gives a surface the keyboard (SPEC §10.1), at an element if target is not empty; else its focused element keeps focus, or its first focusable element takes it.
@@ -233,7 +224,7 @@ Focus gives a surface the keyboard (SPEC §10.1), at an element if target is not
 ## <a id="Hide"></a>func Hide
 
 ```go
-func Hide(surface string, opts ...Option) string
+func Hide(surface string, opts ...ReplyOption) string
 ```
 
 Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Patches still apply to it.
@@ -241,7 +232,7 @@ Hide removes a surface's placement and keeps its document, to place it again wit
 ## <a id="MorphTo"></a>func MorphTo
 
 ```go
-func MorphTo(surface, target, html string, opts ...Option) string
+func MorphTo(surface, target, html string, opts ...ReplyOption) string
 ```
 
 MorphTo morphs an element into html, or with no target, each top-level element of html into the document's element with its id. Morphing keeps what the user is doing in what stays: focus, the text being typed, an open \<details> (SPEC §6.2).
@@ -249,7 +240,7 @@ MorphTo morphs an element into html, or with no target, each top-level element o
 ## <a id="Patch"></a>func Patch
 
 ```go
-func Patch(surface string, op Op, target, key string, payload []byte, opts ...Option) string
+func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string
 ```
 
 Patch changes one surface's document (SPEC §6). target is an element id, "" for a morph by top-level ids; key names the attribute or the custom property. It is never answered, unless an option asks.
@@ -257,7 +248,7 @@ Patch changes one surface's document (SPEC §6). target is an element id, "" for
 ## <a id="Place"></a>func Place
 
 ```go
-func Place(surface string, p Placement, opts ...Option) string
+func Place(surface string, p Placement, opts ...ReplyOption) string
 ```
 
 Place places a surface at the cursor (SPEC §5.2). Placing a surface that is placed moves it. It is answered on error: ENOENT when the host has no such surface (it may have dropped it), EINVAL for a size or window out of range. A reply to a placement with Rows 0 carries the rows chosen.
@@ -265,7 +256,7 @@ Place places a surface at the cursor (SPEC §5.2). Placing a surface that is pla
 ## <a id="PlaceAt"></a>func PlaceAt
 
 ```go
-func PlaceAt(surface string, x, y int, p Placement, opts ...Option) string
+func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string
 ```
 
 PlaceAt places a surface with its window's top-left corner at cell (x, y), counted from 0 at the screen's top-left, and leaves the cursor where it was: the way a full-screen program lays surfaces out without disturbing its own drawing. It saves the cursor (DECSC), moves it, places with C=1, and restores it (DECRC).
@@ -281,7 +272,7 @@ Query asks whether the terminal is a HOTTY host, fenced by Primary Device Attrib
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
 ```go
-func RemoveAttr(surface, target, name string, opts ...Option) string
+func RemoveAttr(surface, target, name string, opts ...ReplyOption) string
 ```
 
 RemoveAttr removes an attribute from an element.
@@ -289,7 +280,7 @@ RemoveAttr removes an attribute from an element.
 ## <a id="Res"></a>func Res
 
 ```go
-func Res(id, mime string, data []byte, opts ...Option) string
+func Res(id, mime string, data []byte, opts ...ReplyOption) string
 ```
 
 Res stores a resource that documents refer to as cid:\<id> (SPEC §7.1): a stylesheet shared by several surfaces, an image, a font. Sending it again replaces it, and redraws every surface that refers to it.
@@ -297,7 +288,7 @@ Res stores a resource that documents refer to as cid:\<id> (SPEC §7.1): a style
 ## <a id="SetAttr"></a>func SetAttr
 
 ```go
-func SetAttr(surface, target, name, value string, opts ...Option) string
+func SetAttr(surface, target, name, value string, opts ...ReplyOption) string
 ```
 
 SetAttr sets an attribute on an element.
@@ -305,7 +296,7 @@ SetAttr sets an attribute on an element.
 ## <a id="SetText"></a>func SetText
 
 ```go
-func SetText(surface, target, text string, opts ...Option) string
+func SetText(surface, target, text string, opts ...ReplyOption) string
 ```
 
 SetText replaces an element's children with one text node: a clock, a count. Hosts make it cheap (SPEC §6.1).
@@ -313,7 +304,7 @@ SetText replaces an element's children with one text node: a clock, a count. Hos
 ## <a id="SetVar"></a>func SetVar
 
 ```go
-func SetVar(surface, target, name, value string, opts ...Option) string
+func SetVar(surface, target, name, value string, opts ...ReplyOption) string
 ```
 
 SetVar sets the custom property --name on an element: the cheap way to move a bar or a needle every frame, with CSS that reads it.
@@ -461,6 +452,27 @@ func (d *Decoder) Feed(seq string) (m Message, r Result)
 Feed takes one complete OSC sequence, as a terminal-input parser delivers it: ESC ] … terminated by ST or BEL. When the result is Complete, m is the message.
 
 A malformed message (a control that does not parse, a payload that is not base64 or zlib) is Invalid. So is a chunked message that another message interrupts; the interrupting one is then decoded as usual, and its own result returned.
+
+## <a id="DocOption"></a>type DocOption
+
+```go
+type DocOption interface {
+	// contains filtered or unexported methods
+	// contains filtered or unexported fields
+}
+```
+
+DocOption is an option of Doc: a ReplyOption, or Detached.
+
+### <a id="Detached"></a>func Detached
+
+```go
+func Detached() DocOption
+```
+
+Detached sends a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, patched, hidden and deleted as before.
+
+It is what a command prints among its output, which outlives it: whatever reads the terminal next, a shell, would read the surface's events as typing. A host older than §5.5 ignores d=1.
 
 ## <a id="Drag"></a>type Drag
 
@@ -645,30 +657,6 @@ const (
 
 The patch operations.
 
-## <a id="Option"></a>type Option
-
-```go
-type Option func(*Control)
-```
-
-Option changes the reply a command asks for.
-
-### <a id="N"></a>func N
-
-```go
-func N(n int) Option
-```
-
-N numbers the command and asks for its reply whatever the outcome (ReplyAlways): the reply echoes n, so the program can tell which command it answers. Q after N asks for less.
-
-### <a id="Q"></a>func Q
-
-```go
-func Q(q Quiet) Option
-```
-
-Q sets the command's quiet level.
-
 ## <a id="Placement"></a>type Placement
 
 ```go
@@ -752,6 +740,30 @@ func (r Reply) Err() error
 ```
 
 Err is the reply as an error: nil when OK, else an \*Error.
+
+## <a id="ReplyOption"></a>type ReplyOption
+
+```go
+type ReplyOption func(*Control)
+```
+
+ReplyOption sets the reply a command asks for (SPEC §3.5): every command takes one, Doc as a DocOption.
+
+### <a id="N"></a>func N
+
+```go
+func N(n int) ReplyOption
+```
+
+N numbers the command and asks for its reply whatever the outcome (ReplyAlways): the reply echoes n, so the program can tell which command it answers. Q after N asks for less.
+
+### <a id="Q"></a>func Q
+
+```go
+func Q(q Quiet) ReplyOption
+```
+
+Q sets the command's quiet level.
 
 ## <a id="Result"></a>type Result
 

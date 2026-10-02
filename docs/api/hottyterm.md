@@ -32,7 +32,7 @@ Everything the terminal sends is read once, by the Term: keys, the mouse, pastes
 
 ### <a id="hdr-Leaving_the_terminal_clean"></a>Leaving the terminal clean
 
-A command that exits hands the terminal to whatever runs next, usually a shell, which reads what the terminal sends as typing. So before it exits, a program reads every reply its commands caused (Fence), and leaves no surface that still reports events: it sends documents with hotty.DocDetached (Print does), or detaches them (DetachAll).
+A command that exits hands the terminal to whatever runs next, usually a shell, which reads what the terminal sends as typing. So before it exits, a program reads every reply its commands caused (Fence), and leaves no surface that still reports events: it sends documents with hotty.Detached (Print does), or detaches them (DetachAll).
 
 ## <a id="pkg-index"></a>Index
 
@@ -59,7 +59,7 @@ A command that exits hands the terminal to whatever runs next, usually a shell, 
   - [`func (t *Term) OnClose(fn func() error)`](#Term.OnClose)
   - [`func (t *Term) Print(name, html string, p hotty.Placement) (string, error)`](#Term.Print)
   - [`func (t *Term) Raw() (restore func(), err error)`](#Term.Raw)
-  - [`func (t *Term) Request(ctx context.Context, build func(hotty.Option) string) (hotty.Reply, error)`](#Term.Request)
+  - [`func (t *Term) Request(ctx context.Context, build func(hotty.ReplyOption) string) (hotty.Reply, error)`](#Term.Request)
   - [`func (t *Term) Resized(s Size)`](#Term.Resized)
   - [`func (t *Term) Send(cmds ...string) error`](#Term.Send)
   - [`func (t *Term) Size() Size`](#Term.Size)
@@ -279,7 +279,7 @@ OnClose adds fn to what Close does, after what it did already: a host that runs 
 func (t *Term) Print(name, html string, p hotty.Placement) (string, error)
 ```
 
-Print shows a document at the cursor, to stay in the scrollback among the program's output: the surface named name (made this process's own with Surface) gets html, detached (hotty.DocDetached), and is placed with p. The host moves the cursor below it, unless p.KeepCursor. It returns the surface's full name, for patches.
+Print shows a document at the cursor, to stay in the scrollback among the program's output: the surface named name (made this process's own with Surface) gets html, detached (hotty.Detached), and is placed with p. The host moves the cursor below it, unless p.KeepCursor. It returns the surface's full name, for patches.
 
 Errors the host replies come back on the input: read them with Fence.
 
@@ -294,13 +294,13 @@ Raw puts a native terminal into raw mode: no echo, no line editing, keys as they
 ### <a id="Term.Request"></a>func (*Term) Request
 
 ```go
-func (t *Term) Request(ctx context.Context, build func(hotty.Option) string) (hotty.Reply, error)
+func (t *Term) Request(ctx context.Context, build func(hotty.ReplyOption) string) (hotty.Reply, error)
 ```
 
 Request sends one command and waits for its reply: build makes the command with the option it is given, which numbers it and asks for the reply (hotty.N). It returns the reply, or ErrNoAnswer if none comes within ReplyTimeout; an error reply is returned as a reply, not an error.
 
 ```go
-r, err := t.Request(ctx, func(o hotty.Option) string {
+r, err := t.Request(ctx, func(o hotty.ReplyOption) string {
 	return hotty.Place(name, hotty.Placement{Cols: 40}, o)
 })
 // r.Rows: the rows the host chose

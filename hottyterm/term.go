@@ -29,7 +29,7 @@
 // shell, which reads what the terminal sends as typing. So before it
 // exits, a program reads every reply its commands caused (Fence), and
 // leaves no surface that still reports events: it sends documents with
-// hotty.DocDetached (Print does), or detaches them (DetachAll).
+// hotty.Detached (Print does), or detaches them (DetachAll).
 package hottyterm
 
 import (
@@ -410,11 +410,11 @@ func (t *Term) setDetected(native bool, caps hotty.Caps) bool {
 // reply (hotty.N). It returns the reply, or ErrNoAnswer if none comes
 // within ReplyTimeout; an error reply is returned as a reply, not an error.
 //
-//	r, err := t.Request(ctx, func(o hotty.Option) string {
+//	r, err := t.Request(ctx, func(o hotty.ReplyOption) string {
 //		return hotty.Place(name, hotty.Placement{Cols: 40}, o)
 //	})
 //	// r.Rows: the rows the host chose
-func (t *Term) Request(ctx context.Context, build func(hotty.Option) string) (hotty.Reply, error) {
+func (t *Term) Request(ctx context.Context, build func(hotty.ReplyOption) string) (hotty.Reply, error) {
 	restore, err := t.Raw()
 	if err != nil {
 		return hotty.Reply{}, err
@@ -576,14 +576,14 @@ func (t *Term) LineStart(ctx context.Context) error {
 
 // Print shows a document at the cursor, to stay in the scrollback among the
 // program's output: the surface named name (made this process's own with
-// Surface) gets html, detached (hotty.DocDetached), and is placed with p.
+// Surface) gets html, detached (hotty.Detached), and is placed with p.
 // The host moves the cursor below it, unless p.KeepCursor. It returns the
 // surface's full name, for patches.
 //
 // Errors the host replies come back on the input: read them with Fence.
 func (t *Term) Print(name, html string, p hotty.Placement) (string, error) {
 	s := t.Surface(name)
-	return s, t.Send(hotty.DocDetached(s, html), hotty.Place(s, p))
+	return s, t.Send(hotty.Doc(s, html, hotty.Detached()), hotty.Place(s, p))
 }
 
 // DetachAll detaches every surface Surface has named (hotty.Detach), so

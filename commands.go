@@ -15,15 +15,29 @@ func Query(n int) string {
 
 // Doc creates a surface, or replaces its document (SPEC §5.1). The surface
 // is the program's, even one it had detached: it reports what the user does
-// in it, and takes the keyboard on the program's behalf (SPEC §5.5). It is
-// answered on error: EQUOTA when the host holds no more surfaces.
-func Doc(surface, html string, opts ...Option) string {
-	return command(Control{{"a", "doc"}, {"s", surface}}, []byte(html), ReplyOnError, opts)
+// in it, and takes the keyboard on the program's behalf (SPEC §5.5), unless
+// the document is sent Detached. It is answered on error: EQUOTA when the
+// host holds no more surfaces.
+func Doc(surface, html string, opts ...DocOption) string {
+	ctl := Control{{"a", "doc"}, {"s", surface}, {"q", strconv.Itoa(int(ReplyOnError))}}
+	for _, o := range opts {
+		o.doc(&ctl)
+	}
+	return Encode(ctl, []byte(html))
 }
 
-// DocDetached is Doc for a document the program only shows (d=1, SPEC
-// §5.5): the surface is created detached, or its document replaced and the
-// surface detached, in the one command. It reports nothing, never takes the
+// DocOption is an option of Doc: a ReplyOption, or Detached.
+type DocOption interface{ doc(*Control) }
+
+func (o ReplyOption) doc(c *Control) { o(c) }
+
+type detached struct{}
+
+func (detached) doc(c *Control) { c.set("d", "1") }
+
+// Detached sends a document the program only shows (d=1, SPEC §5.5): the
+// surface is created detached, or its document replaced and the surface
+// detached, in the one command. It reports nothing, never takes the
 // keyboard, and its controls act disabled; hover, selection, <details> and
 // hyperlinks still work, and it is placed, patched, hidden and deleted as
 // before.
@@ -31,9 +45,7 @@ func Doc(surface, html string, opts ...Option) string {
 // It is what a command prints among its output, which outlives it: whatever
 // reads the terminal next, a shell, would read the surface's events as
 // typing. A host older than §5.5 ignores d=1.
-func DocDetached(surface, html string, opts ...Option) string {
-	return command(Control{{"a", "doc"}, {"s", surface}, {"d", "1"}}, []byte(html), ReplyOnError, opts)
-}
+func Detached() DocOption { return detached{} }
 
 // Window is the part of a surface a placement shows, in cells from the
 // surface's top-left corner (SPEC §5.2). The zero Window shows all of it.
@@ -86,7 +98,7 @@ func (p Placement) control(surface string) Control {
 // is placed moves it. It is answered on error: ENOENT when the host has no
 // such surface (it may have dropped it), EINVAL for a size or window out of
 // range. A reply to a placement with Rows 0 carries the rows chosen.
-func Place(surface string, p Placement, opts ...Option) string {
+func Place(surface string, p Placement, opts ...ReplyOption) string {
 	return command(p.control(surface), nil, ReplyOnError, opts)
 }
 
@@ -95,7 +107,7 @@ func Place(surface string, p Placement, opts ...Option) string {
 // it was: the way a full-screen program lays surfaces out without
 // disturbing its own drawing. It saves the cursor (DECSC), moves it, places
 // with C=1, and restores it (DECRC).
-func PlaceAt(surface string, x, y int, p Placement, opts ...Option) string {
+func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string {
 	p.KeepCursor = true
 	return "\x1b7\x1b[" + strconv.Itoa(y+1) + ";" + strconv.Itoa(x+1) + "H" +
 		command(p.control(surface), nil, ReplyOnError, opts) + "\x1b8"
@@ -103,7 +115,7 @@ func PlaceAt(surface string, x, y int, p Placement, opts ...Option) string {
 
 // Hide removes a surface's placement and keeps its document, to place it
 // again without sending it (SPEC §5.4). Patches still apply to it.
-func Hide(surface string, opts ...Option) string {
+func Hide(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "hide"}, {"s", surface}}, nil, NoReply, opts)
 }
 
@@ -129,7 +141,7 @@ const (
 // Patch changes one surface's document (SPEC §6). target is an element id,
 // "" for a morph by top-level ids; key names the attribute or the custom
 // property. It is never answered, unless an option asks.
-func Patch(surface string, op Op, target, key string, payload []byte, opts ...Option) string {
+func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string {
 	ctl := Control{{"a", "patch"}, {"s", surface}, {"op", string(op)}}
 	if target != "" {
 		ctl = ctl.With("t", target)
@@ -142,23 +154,23 @@ func Patch(surface string, op Op, target, key string, payload []byte, opts ...Op
 
 // SetText replaces an element's children with one text node: a clock, a
 // count. Hosts make it cheap (SPEC §6.1).
-func SetText(surface, target, text string, opts ...Option) string {
+func SetText(surface, target, text string, opts ...ReplyOption) string {
 	return Patch(surface, OpText, target, "", []byte(text), opts...)
 }
 
 // SetVar sets the custom property --name on an element: the cheap way to
 // move a bar or a needle every frame, with CSS that reads it.
-func SetVar(surface, target, name, value string, opts ...Option) string {
+func SetVar(surface, target, name, value string, opts ...ReplyOption) string {
 	return Patch(surface, OpVar, target, name, []byte(value), opts...)
 }
 
 // SetAttr sets an attribute on an element.
-func SetAttr(surface, target, name, value string, opts ...Option) string {
+func SetAttr(surface, target, name, value string, opts ...ReplyOption) string {
 	return Patch(surface, OpAttr, target, name, []byte(value), opts...)
 }
 
 // RemoveAttr removes an attribute from an element.
-func RemoveAttr(surface, target, name string, opts ...Option) string {
+func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
 	return Patch(surface, OpUnattr, target, name, nil, opts...)
 }
 
@@ -166,29 +178,29 @@ func RemoveAttr(surface, target, name string, opts ...Option) string {
 // element of html into the document's element with its id. Morphing keeps
 // what the user is doing in what stays: focus, the text being typed, an
 // open <details> (SPEC §6.2).
-func MorphTo(surface, target, html string, opts ...Option) string {
+func MorphTo(surface, target, html string, opts ...ReplyOption) string {
 	return Patch(surface, OpMorph, target, "", []byte(html), opts...)
 }
 
 // Res stores a resource that documents refer to as cid:<id> (SPEC §7.1): a
 // stylesheet shared by several surfaces, an image, a font. Sending it again
 // replaces it, and redraws every surface that refers to it.
-func Res(id, mime string, data []byte, opts ...Option) string {
+func Res(id, mime string, data []byte, opts ...ReplyOption) string {
 	return command(Control{{"a", "res"}, {"id", id}, {"type", mime}}, data, NoReply, opts)
 }
 
 // DelRes deletes a resource.
-func DelRes(id string, opts ...Option) string {
+func DelRes(id string, opts ...ReplyOption) string {
 	return command(Control{{"a", "del"}, {"id", id}}, nil, NoReply, opts)
 }
 
 // Del deletes a surface and its placement (SPEC §5.4).
-func Del(surface string, opts ...Option) string {
+func Del(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "del"}, {"s", surface}}, nil, NoReply, opts)
 }
 
 // DelAll deletes every surface.
-func DelAll(opts ...Option) string {
+func DelAll(opts ...ReplyOption) string {
 	return command(Control{{"a", "del"}}, nil, NoReply, opts)
 }
 
@@ -196,20 +208,20 @@ func DelAll(opts ...Option) string {
 // does, placed, patched and deleted as before, but sends no more events and
 // never has the keyboard; if it has it, the keyboard goes back to the
 // terminal with no blur. A program that leaves surfaces on the screen when
-// it exits detaches them first, unless it sent them with DocDetached. The
-// next Doc makes the surface the program's again.
+// it exits detaches them first, unless it sent them Detached. The next
+// Doc sent without Detached makes the surface the program's again.
 //
 // It is never answered, unless an option asks: a host older than §5.5
 // refuses it (EINVAL), and a reply nobody reads would reach the shell as
 // typing.
-func Detach(surface string, opts ...Option) string {
+func Detach(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "detach"}, {"s", surface}}, nil, NoReply, opts)
 }
 
 // Focus gives a surface the keyboard (SPEC §10.1), at an element if target
 // is not empty; else its focused element keeps focus, or its first
 // focusable element takes it.
-func Focus(surface, target string, opts ...Option) string {
+func Focus(surface, target string, opts ...ReplyOption) string {
 	ctl := Control{{"a", "focus"}, {"s", surface}}
 	if target != "" {
 		ctl = ctl.With("t", target)
@@ -219,7 +231,7 @@ func Focus(surface, target string, opts ...Option) string {
 
 // Blur takes the keyboard back from a surface. Its focused control commits
 // its value first, so a change event may come before the blur event.
-func Blur(surface string, opts ...Option) string {
+func Blur(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "blur"}, {"s", surface}}, nil, NoReply, opts)
 }
 

@@ -27,7 +27,7 @@ func Example_liveChart() {
 	values := []float64{20, 35, 30, 60}
 
 	doc := "<style>" + chart.CSS + "</style><div style=\"height:54px\">" + c.SVG(values) + "</div>"
-	_ = hotty.DocDetached("dash", doc) // and a placement, once
+	_ = hotty.Doc("dash", doc, hotty.Detached()) // and a placement, once
 
 	// The next tick: a value in, the oldest out.
 	values = append(values[1:], 80)

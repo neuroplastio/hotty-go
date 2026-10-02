@@ -145,7 +145,7 @@ func askSurface(ctx context.Context, t *hottyterm.Term, in *input) *form.Answers
 	}
 	// The form gives way to what was decided, detached: replacing a
 	// document keeps its placement (SPEC §5.1).
-	_ = t.Send(hotty.DocDetached(name, summary(answers)))
+	_ = t.Send(hotty.Doc(name, summary(answers), hotty.Detached()))
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hottyterm.FenceTimeout)
 	defer cancel()
 	_, _ = t.Fence(fctx)

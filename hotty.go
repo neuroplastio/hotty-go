@@ -104,18 +104,19 @@ func (c *Control) set(k, v string) {
 	*c = append(*c, KV{k, v})
 }
 
-// Option changes the reply a command asks for.
-type Option func(*Control)
+// ReplyOption sets the reply a command asks for (SPEC §3.5): every command
+// takes one, Doc as a DocOption.
+type ReplyOption func(*Control)
 
 // Q sets the command's quiet level.
-func Q(q Quiet) Option {
+func Q(q Quiet) ReplyOption {
 	return func(c *Control) { c.set("q", strconv.Itoa(int(q))) }
 }
 
 // N numbers the command and asks for its reply whatever the outcome
 // (ReplyAlways): the reply echoes n, so the program can tell which command
 // it answers. Q after N asks for less.
-func N(n int) Option {
+func N(n int) ReplyOption {
 	return func(c *Control) {
 		c.set("n", strconv.Itoa(n))
 		c.set("q", strconv.Itoa(int(ReplyAlways)))
@@ -123,7 +124,7 @@ func N(n int) Option {
 }
 
 // command encodes a command with its default quiet level and the options.
-func command(ctl Control, payload []byte, def Quiet, opts []Option) string {
+func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string {
 	ctl.set("q", strconv.Itoa(int(def)))
 	for _, o := range opts {
 		o(&ctl)

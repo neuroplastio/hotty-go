@@ -284,7 +284,7 @@ func newSurface(ctx context.Context, t *hottyterm.Term, rows int) *surface {
 	_ = t.LineStart(ctx)
 	// Detached from the start: it reports nothing, so nothing is left to
 	// report to the shell, whatever way livechart exits (SPEC §5.5).
-	_ = t.Send(hotty.DocDetached(s.name, s.page(`<p class="wait">waiting for numbers…</p>`)),
+	_ = t.Send(hotty.Doc(s.name, s.page(`<p class="wait">waiting for numbers…</p>`), hotty.Detached()),
 		hotty.Place(s.name, hotty.Placement{Cols: s.cols, Rows: rows}))
 	return s
 }
@@ -331,7 +331,7 @@ func (s *surface) frame(d *data) {
 	if len(values) != s.n {
 		// The first sample, or a series more: the document again, which
 		// keeps its placement (SPEC §5.1).
-		_ = s.t.Send(hotty.DocDetached(s.name, s.page(s.body(d, lines, values, legend, axis))))
+		_ = s.t.Send(hotty.Doc(s.name, s.page(s.body(d, lines, values, legend, axis)), hotty.Detached()))
 		s.n, s.axis, s.values = len(values), axis, legend
 		return
 	}
@@ -412,7 +412,7 @@ func (s *surface) ticks(d *data, axis series.Axis) string {
 // everything, so that livechart exits with the chart drawn.
 func (s *surface) end(d *data, summary []string) {
 	if s.n < 0 {
-		_ = s.t.Send(hotty.DocDetached(s.name, s.page(`<p class="wait">`+html.EscapeString(summary[0])+`</p>`)))
+		_ = s.t.Send(hotty.Doc(s.name, s.page(`<p class="wait">`+html.EscapeString(summary[0])+`</p>`), hotty.Detached()))
 	}
 	_ = s.t.Send(strings.Join(summary, "\r\n") + "\r\n")
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.ctx), hottyterm.FenceTimeout)

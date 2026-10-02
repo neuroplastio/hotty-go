@@ -330,7 +330,7 @@ func TestAlternateScreenBuffer(t *testing.T) {
 
 func TestPlacementAndCursor(t *testing.T) {
 	h := New(t)
-	send(h, "> ", hotty.DocDetached("a", "<p>one</p><p>two</p>"), hotty.Place("a", hotty.Placement{Cols: 20}))
+	send(h, "> ", hotty.Doc("a", "<p>one</p><p>two</p>", hotty.Detached()), hotty.Place("a", hotty.Placement{Cols: 20}))
 	expect(t, sent(h))
 	a := h.Surface("a")
 	if p := a.Placement(); !a.Placed() || p.Cols != 20 || p.Rows != 1 || !a.Detached() {

@@ -87,19 +87,19 @@ func TestRequest(t *testing.T) {
 	tm.Detect(ctx(t))
 	name := tm.Surface("doc")
 	_ = tm.Send(hotty.Doc(name, "<p>long</p>"))
-	r, err := tm.Request(ctx(t), func(o hotty.Option) string {
+	r, err := tm.Request(ctx(t), func(o hotty.ReplyOption) string {
 		return hotty.Place(name, hotty.Placement{Cols: 40}, o)
 	})
 	if err != nil || !r.OK || r.Rows != 7 || r.Cols != 40 || r.N == 0 {
 		t.Fatalf("Request: %+v %v", r, err)
 	}
 	// An error reply is a reply.
-	r, err = tm.Request(ctx(t), func(o hotty.Option) string { return hotty.Focus("nope", "", o) })
+	r, err = tm.Request(ctx(t), func(o hotty.ReplyOption) string { return hotty.Focus("nope", "", o) })
 	if err != nil || r.OK || r.Code != hotty.ENOENT {
 		t.Errorf("an error reply: %+v %v", r, err)
 	}
 	// Two requests never share a number.
-	r2, _ := tm.Request(ctx(t), func(o hotty.Option) string { return hotty.Hide(name, o) })
+	r2, _ := tm.Request(ctx(t), func(o hotty.ReplyOption) string { return hotty.Hide(name, o) })
 	if r2.N == r.N || r2.Re != "hide" {
 		t.Errorf("numbers %d and %d", r.N, r2.N)
 	}
@@ -117,7 +117,7 @@ func TestRequestOnATerminalThatIsNotAHost(t *testing.T) {
 	}
 	c, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, err := tm.Request(c, func(o hotty.Option) string { return hotty.Hide("x", o) })
+	_, err := tm.Request(c, func(o hotty.ReplyOption) string { return hotty.Hide("x", o) })
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Request: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestEventsWhileRequesting(t *testing.T) {
 	if err := h.Click(name, "go"); err != nil {
 		t.Fatal(err)
 	}
-	r, err := tm.Request(ctx(t), func(o hotty.Option) string { return hotty.Blur(name, o) })
+	r, err := tm.Request(ctx(t), func(o hotty.ReplyOption) string { return hotty.Blur(name, o) })
 	if err != nil || r.Re != "blur" {
 		t.Fatalf("Request: %+v %v", r, err)
 	}
