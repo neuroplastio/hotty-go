@@ -56,6 +56,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Errors() []string`](#Host.Errors)
   - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
   - [`func (h *Host) Fill(surface, id, text string) error`](#Host.Fill)
+  - [`func (h *Host) Hover(surface, id string, c, r int) error`](#Host.Hover)
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
   - [`func (h *Host) Lines() []string`](#Host.Lines)
   - [`func (h *Host) Opened() []string`](#Host.Opened)
@@ -70,6 +71,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Surfaces() []*Surface`](#Host.Surfaces)
   - [`func (h *Host) TermSize() (cols, rows int)`](#Host.TermSize)
   - [`func (h *Host) Type(keys string)`](#Host.Type)
+  - [`func (h *Host) Unhover()`](#Host.Unhover)
   - [`func (h *Host) Write(p []byte) (int, error)`](#Host.Write)
 - [`type Option`](#Option)
   - [`func AutoRows(f func(s *Surface, cols int) int) Option`](#AutoRows)
@@ -309,6 +311,16 @@ func (h *Host) Fill(surface, id, text string) error
 
 Fill types text into a text control, as the user does: the surface takes the keyboard there (a focus event, if it did not have it), the control's value becomes text (an input event, with data-on~=input), and the change is committed when focus leaves it (Blur, another control, Submit).
 
+### <a id="Host.Hover"></a>func (*Host) Hover
+
+```go
+func (h *Host) Hover(surface, id string, c, r int) error
+```
+
+Hover moves the pointer onto a placed surface, over the element with an id (or "" for a point over nothing with an id), at the surface's cell c, r. The surface the pointer was on is left first. A placement made with Hover hears hover when the element differs from what it heard last; moves within an element send nothing.
+
+The host lays nothing out, so a test names what is under the pointer, as for drags.
+
 ### <a id="Host.Invalid"></a>func (*Host) Invalid
 
 ```go
@@ -420,6 +432,14 @@ func (h *Host) Type(keys string)
 ```
 
 Type sends text to the program as keys typed: "q", "\\r" for Enter, "\\x03" for Ctrl-C, "\\x1b" for Escape.
+
+### <a id="Host.Unhover"></a>func (*Host) Unhover
+
+```go
+func (h *Host) Unhover()
+```
+
+Unhover takes the pointer off the surface it is on: onto the cells, or out of the terminal's window. A placement made with Hover hears it is out.
 
 ### <a id="Host.Write"></a>func (*Host) Write
 

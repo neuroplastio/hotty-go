@@ -20,10 +20,11 @@ type Surface struct {
 	detached bool
 	placed   bool
 	place    hotty.Placement
-	fitRows  int  // with place.Fit: the rows the program last heard (SPEC §5.2)
-	col, row int  // where the placement's top-left cell is on the screen
-	alt      bool // placed on the alternate screen
-	created  int  // the order of creation, for stacking
+	fitRows  int     // with place.Fit: the rows the program last heard (SPEC §5.2)
+	heard    *string // with place.Hover: the element it last heard the pointer is over; nil: out (SPEC §9.4)
+	col, row int     // where the placement's top-left cell is on the screen
+	alt      bool    // placed on the alternate screen
+	created  int     // the order of creation, for stacking
 
 	// The controls' state, which the user changes and the program's
 	// attributes set (SPEC §6.2): a control's value, a box's checked.

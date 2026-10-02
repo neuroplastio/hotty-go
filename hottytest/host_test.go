@@ -786,6 +786,56 @@ func TestFit(t *testing.T) {
 	expect(t, sent(h))
 }
 
+// Hover (SPEC §9.4): each change of the element under the pointer, out
+// when it leaves, only to a placement that asked.
+func TestHover(t *testing.T) {
+	h := New(t)
+	list := `<div id=l><p id=a>a</p><p id=b>b</p></div>`
+	send(h, hotty.Doc("l", list), hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: true}),
+		hotty.Doc("m", list), hotty.Place("m", hotty.Placement{Cols: 10, Rows: 2}))
+	sent(h)
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(h.Hover("l", "a", 1, 0))
+	expect(t, sent(h), `ev hover t=a {"c":1,"r":0}`)
+	must(h.Hover("l", "a", 2, 0))
+	expect(t, sent(h))
+	must(h.Hover("l", "", 2, 1))
+	expect(t, sent(h), `ev hover t= {"c":2,"r":1}`)
+	// Onto a surface that did not ask: this one is left, that one is silent.
+	must(h.Hover("m", "b", 1, 1))
+	expect(t, sent(h), `ev hover t= {"out":true}`)
+	must(h.Hover("l", "b", 1, 1))
+	expect(t, sent(h), `ev hover t=b {"c":1,"r":1}`)
+	h.Unhover()
+	expect(t, sent(h), `ev hover t= {"out":true}`)
+	h.Unhover()
+	expect(t, sent(h))
+	if err := h.Hover("l", "nope", 0, 0); !errors.Is(err, ErrNoElement) {
+		t.Errorf("Hover on no element = %v", err)
+	}
+
+	// Placed again without v=1: no more; with it again, from out.
+	must(h.Hover("l", "a", 1, 0))
+	sent(h)
+	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2}))
+	must(h.Hover("l", "b", 1, 1))
+	expect(t, sent(h))
+	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: true}))
+	must(h.Hover("l", "b", 1, 1))
+	expect(t, sent(h), `ev hover t=b {"c":1,"r":1}`)
+
+	// Detached: nothing.
+	send(h, hotty.Detach("l"))
+	must(h.Hover("l", "a", 1, 0))
+	h.Unhover()
+	expect(t, sent(h))
+}
+
 // A drag (SPEC §9.1): dragstart, drag each time the element under the
 // pointer changes (or, over none, the cell), dragend, and a click only
 // where it began.

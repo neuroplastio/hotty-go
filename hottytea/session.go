@@ -156,6 +156,11 @@ type Surface struct {
 	// by its content, and lays out again when a late image makes it
 	// taller (SPEC §5.2).
 	Fit bool
+	// Hover asks for an EventMsg of kind hover each time the element with
+	// an id under the pointer changes, and when the pointer leaves the
+	// surface: for a hint of the program's own, or to clear what it lit
+	// outside the surface (SPEC §9.4).
+	Hover bool
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.
@@ -169,6 +174,7 @@ type placement struct {
 	win        hotty.Window
 	z          int
 	press, fit bool
+	hover      bool
 }
 
 // DefaultLimit is how many surfaces a Session keeps at most, shown and
@@ -414,10 +420,10 @@ func (h *Session) Layout(want []Surface) {
 			delete(h.placed, s.Name)
 		}
 		p := placement{at: at, cols: s.Rect.W, rows: s.Rect.H,
-			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press, fit: s.Fit}
+			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press, fit: s.Fit, hover: s.Hover}
 		if old, ok := h.placed[s.Name]; !ok || old != p {
 			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y,
-				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press, Fit: p.fit}))
+				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press, Fit: p.fit, Hover: p.hover}))
 			h.Count.Places++
 			h.placed[s.Name] = p
 		}

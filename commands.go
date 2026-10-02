@@ -72,6 +72,11 @@ type Placement struct {
 	// replaced, a patch landed. The placement keeps its size; placing the
 	// surface again is the program's to do (SPEC §5.2).
 	Fit bool
+	// Hover asks for a hover event each time the element with an id under
+	// the pointer changes, and when the pointer leaves the window (v=1):
+	// for a hint of the program's own, or to clear what it lit outside
+	// the surface when the pointer goes onto it (SPEC §9.4).
+	Hover bool
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool
@@ -96,6 +101,9 @@ func (p Placement) control(surface string) Control {
 	}
 	if p.Fit {
 		ctl = ctl.With("f", "1")
+	}
+	if p.Hover {
+		ctl = ctl.With("v", "1")
 	}
 	if p.KeepCursor {
 		ctl = ctl.With("C", "1")

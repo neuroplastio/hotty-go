@@ -58,6 +58,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type Caps`](#Caps)
   - [`func (c Caps) CellCSS() (w, h float64)`](#Caps.CellCSS)
   - [`func (c Caps) Drags() bool`](#Caps.Drags)
+  - [`func (c Caps) Hovers() bool`](#Caps.Hovers)
   - [`func (c Caps) Light() bool`](#Caps.Light)
   - [`func (c Caps) Sends(kind string) bool`](#Caps.Sends)
   - [`func (c Caps) Supports(op Op) bool`](#Caps.Supports)
@@ -77,9 +78,11 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
   - [`func (e Event) Fields() map[string]string`](#Event.Fields)
   - [`func (e Event) FitRows() (rows int, ok bool)`](#Event.FitRows)
+  - [`func (e Event) Hover() (Hover, bool)`](#Event.Hover)
   - [`func (e Event) Link() (href, url string, ok bool)`](#Event.Link)
   - [`func (e Event) Size() (w, h float64, ok bool)`](#Event.Size)
   - [`func (e Event) Value() string`](#Event.Value)
+- [`type Hover`](#Hover)
 - [`type KV`](#KV)
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
@@ -118,7 +121,7 @@ const (
 )
 ```
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
@@ -131,6 +134,7 @@ const (
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
+	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Caps.Drags), EventDrag stands for all three.
@@ -383,6 +387,14 @@ func (c Caps) Drags() bool
 
 Drags reports whether the host sends drags (SPEC §9.1): drag in its events, which stands for dragstart, drag and dragend. Unlike Sends, a host that lists no kinds is taken not to, since drags came after the first hosts: a program offers another way to do what its drags do.
 
+### <a id="Caps.Hovers"></a>func (Caps) Hovers
+
+```go
+func (c Caps) Hovers() bool
+```
+
+Hovers reports whether the host sends hover (SPEC §9.4). Like Drags, a host that lists no kinds is taken not to: without it a program never hears the pointer leave for a surface, and clears what it lit on the next key or press instead.
+
 ### <a id="Caps.Light"></a>func (Caps) Light
 
 ```go
@@ -571,6 +583,14 @@ func (e Event) FitRows() (rows int, ok bool)
 
 FitRows is the rows a fit event says the document needs now; ok is false for any other event.
 
+### <a id="Event.Hover"></a>func (Event) Hover
+
+```go
+func (e Event) Hover() (Hover, bool)
+```
+
+Hover is a hover event's detail; the element is the event's Target, empty over nothing with an id and when Out. ok is false for any other event.
+
 ### <a id="Event.Link"></a>func (Event) Link
 
 ```go
@@ -594,6 +614,22 @@ func (e Event) Value() string
 ```
 
 Value is the "value" of the event's detail: a control's value, or the value attribute of what was clicked. "" when it has none.
+
+## <a id="Hover"></a>type Hover
+
+```go
+type Hover struct {
+	// Out is true when the pointer left the window: onto the cells or
+	// another surface, through a part that lets it through, out of the
+	// terminal, or pressed with Alt. Col and Row are then 0.
+	Out bool
+	// Col and Row are the surface's cell under the pointer when the
+	// element changed, from 0 at its top left (not its window's).
+	Col, Row int
+}
+```
+
+Hover is where a hover event says the pointer is (SPEC §9.4).
 
 ## <a id="KV"></a>type KV
 
@@ -690,6 +726,11 @@ type Placement struct {
 	// replaced, a patch landed. The placement keeps its size; placing the
 	// surface again is the program's to do (SPEC §5.2).
 	Fit bool
+	// Hover asks for a hover event each time the element with an id under
+	// the pointer changes, and when the pointer leaves the window (v=1):
+	// for a hint of the program's own, or to clear what it lit outside
+	// the surface when the pointer goes onto it (SPEC §9.4).
+	Hover bool
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool

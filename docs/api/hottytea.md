@@ -556,6 +556,11 @@ type Surface struct {
 	// by its content, and lays out again when a late image makes it
 	// taller (SPEC §5.2).
 	Fit bool
+	// Hover asks for an EventMsg of kind hover each time the element with
+	// an id under the pointer changes, and when the pointer leaves the
+	// surface: for a hint of the program's own, or to clear what it lit
+	// outside the surface (SPEC §9.4).
+	Hover bool
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.

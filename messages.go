@@ -17,6 +17,7 @@ const (
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
+	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Caps.Drags), EventDrag stands for all three.
@@ -103,6 +104,40 @@ func (e Event) FitRows() (rows int, ok bool) {
 		return 0, false
 	}
 	return *d.R, true
+}
+
+// Hover is where a hover event says the pointer is (SPEC §9.4).
+type Hover struct {
+	// Out is true when the pointer left the window: onto the cells or
+	// another surface, through a part that lets it through, out of the
+	// terminal, or pressed with Alt. Col and Row are then 0.
+	Out bool
+	// Col and Row are the surface's cell under the pointer when the
+	// element changed, from 0 at its top left (not its window's).
+	Col, Row int
+}
+
+// Hover is a hover event's detail; the element is the event's Target,
+// empty over nothing with an id and when Out. ok is false for any other
+// event.
+func (e Event) Hover() (Hover, bool) {
+	if e.Kind != EventHover {
+		return Hover{}, false
+	}
+	var d struct {
+		C, R *int
+		Out  bool
+	}
+	if json.Unmarshal(e.Detail, &d) != nil {
+		return Hover{}, false
+	}
+	if d.Out {
+		return Hover{Out: true}, true
+	}
+	if d.C == nil || d.R == nil {
+		return Hover{}, false
+	}
+	return Hover{Col: *d.C, Row: *d.R}, true
 }
 
 // Drag is where a drag's pointer is, and the modifier keys held
@@ -332,6 +367,19 @@ func (c Caps) Sends(kind string) bool {
 func (c Caps) Drags() bool {
 	for _, k := range c.Events {
 		if k == EventDrag {
+			return true
+		}
+	}
+	return false
+}
+
+// Hovers reports whether the host sends hover (SPEC §9.4). Like Drags, a
+// host that lists no kinds is taken not to: without it a program never
+// hears the pointer leave for a surface, and clears what it lit on the
+// next key or press instead.
+func (c Caps) Hovers() bool {
+	for _, k := range c.Events {
+		if k == EventHover {
 			return true
 		}
 	}

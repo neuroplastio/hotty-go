@@ -134,7 +134,7 @@ func DefaultCaps() hotty.Caps {
 		c.Ops = append(c.Ops, string(op))
 	}
 	c.Events = []string{hotty.EventClick, hotty.EventChange, hotty.EventInput, hotty.EventSubmit,
-		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag, hotty.EventFit}
+		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag, hotty.EventFit, hotty.EventHover}
 	return c
 }
 
@@ -167,6 +167,7 @@ type Host struct {
 	res      map[string]resource
 	keyboard *Surface // the surface that has the keyboard
 	drag     *drag    // the drag in progress, if any (SPEC §9.1)
+	hovered  *Surface // the surface the pointer is on (Hover), if any
 	alt      bool     // the alternate screen is on
 	commands []hotty.Message
 	replies  []hotty.Message
@@ -579,6 +580,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			h.blur(s)
 		}
 		s.placed = false
+		s.heard = nil
 	case "patch":
 		op := hotty.Op(m.Get("op"))
 		if op == "" {
@@ -684,7 +686,11 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 		return hotty.EINVAL, "z out of range", nil
 	}
 	s.placed = true
-	s.place = hotty.Placement{Cols: c, Rows: r, Z: z, Press: m.Get("p") == "1", Fit: m.Get("f") == "1", KeepCursor: m.Get("C") == "1"}
+	s.place = hotty.Placement{Cols: c, Rows: r, Z: z, Press: m.Get("p") == "1", Fit: m.Get("f") == "1",
+		Hover: m.Get("v") == "1", KeepCursor: m.Get("C") == "1"}
+	if !s.place.Hover {
+		s.heard = nil // v=1 again starts from out (SPEC §9.4)
+	}
 	s.fitRows = r
 	if _, ok := m.Control["x"]; ok || m.Control["y"] != "" || m.Control["w"] != "" || m.Control["h"] != "" {
 		s.place.Window = hotty.Window{X: x, Y: y, W: w, H: hh}
@@ -1395,6 +1401,60 @@ func (h *Host) Blur(surface string) error {
 		h.blur(s)
 	}
 	return nil
+}
+
+// --- hover (SPEC §9.4) ----------------------------------------------------------
+
+// Hover moves the pointer onto a placed surface, over the element with an
+// id (or "" for a point over nothing with an id), at the surface's cell c,
+// r. The surface the pointer was on is left first. A placement made with
+// Hover hears hover when the element differs from what it heard last;
+// moves within an element send nothing.
+//
+// The host lays nothing out, so a test names what is under the pointer,
+// as for drags.
+func (h *Host) Hover(surface, id string, c, r int) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, err := h.target(surface)
+	if err != nil {
+		return err
+	}
+	if id != "" {
+		if _, err := h.element(s, id); err != nil {
+			return err
+		}
+	}
+	if h.hovered != nil && h.hovered != s {
+		h.leave(h.hovered)
+	}
+	h.hovered = s
+	if s.place.Hover && !s.detached && (s.heard == nil || *s.heard != id) {
+		s.heard = &id
+		h.event(s, hotty.EventHover, id, map[string]int{"c": c, "r": r})
+	}
+	return nil
+}
+
+// Unhover takes the pointer off the surface it is on: onto the cells, or
+// out of the terminal's window. A placement made with Hover hears it is
+// out.
+func (h *Host) Unhover() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.hovered != nil {
+		h.leave(h.hovered)
+		h.hovered = nil
+	}
+}
+
+// leave tells a surface's program the pointer left it, if it asked and
+// had not heard so.
+func (h *Host) leave(s *Surface) {
+	if s.placed && s.place.Hover && !s.detached && s.heard != nil {
+		s.heard = nil
+		h.event(s, hotty.EventHover, "", map[string]bool{"out": true})
+	}
 }
 
 // Emit sends any event from a surface, for what the other actions do not
