@@ -42,7 +42,8 @@ func TestDefaults(t *testing.T) {
 	}
 }
 
-// A chart with no ID has no ids: it is drawn once and never patched.
+// A chart with no ID has no ids: it is drawn once and never changed by
+// deltas.
 func TestNoID(t *testing.T) {
 	c := Line{W: 10, H: 10, Hi: 1, Fill: 0.5, Grid: []float64{0.5}}
 	if got := c.SVG([]float64{0, 1}); strings.Contains(got, "id=") {
@@ -115,24 +116,24 @@ func TestNum(t *testing.T) {
 	}
 }
 
-// patches decodes commands into "target key=value" lines.
-func patches(t *testing.T, cmds []string) []string {
+// deltas decodes commands into "target key=value" lines.
+func deltas(t *testing.T, cmds []string) []string {
 	t.Helper()
 	var out []string
 	var d hotty.Decoder
 	for _, cmd := range cmds {
 		m, r := d.Feed(cmd)
-		if r != hotty.Complete || m.Get("a") != "patch" || m.Get("op") != "attr" || m.Get("s") != "dash" || m.Get("q") != "2" {
-			t.Fatalf("not an attr patch to dash: %v", m.Control)
+		if r != hotty.Complete || m.Get("a") != "delta" || m.Get("op") != "attr" || m.Get("s") != "dash" || m.Get("q") != "2" {
+			t.Fatalf("not an attr delta to dash: %v", m.Control)
 		}
 		out = append(out, m.Get("t")+" "+m.Get("k")+"="+string(m.Payload))
 	}
 	return out
 }
 
-func TestPatch(t *testing.T) {
+func TestDelta(t *testing.T) {
 	c := Line{ID: "cpu", W: 100, H: 40, Fill: 0.2, Lo: 0, Hi: 100, Color: "#f07a7a", Grid: []float64{0.5}}
-	got := patches(t, c.Patch("dash", []float64{0, 100}))
+	got := deltas(t, c.Delta("dash", []float64{0, 100}))
 	want := []string{
 		"cpuV viewBox=0 0 100 40",
 		"cpuG d=M0,20h100v1h-100Z",
@@ -142,22 +143,22 @@ func TestPatch(t *testing.T) {
 		"cpuA fill=#f07a7a",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Patch =\n%q\nwant\n%q", got, want)
+		t.Errorf("Delta =\n%q\nwant\n%q", got, want)
 	}
 
-	got = patches(t, c.PatchShapes("dash", []float64{100, 0}))
+	got = deltas(t, c.DeltaShapes("dash", []float64{100, 0}))
 	want = []string{"cpuL d=M0,0L100,40", "cpuA d=M0,40L0,0L100,40L100,40Z"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("PatchShapes = %q", got)
+		t.Errorf("DeltaShapes = %q", got)
 	}
 
-	// No area, no grid: no patches for them.
+	// No area, no grid: no deltas for them.
 	c.Fill, c.Grid = 0, nil
-	if got := patches(t, c.Patch("dash", nil)); len(got) != 3 {
-		t.Errorf("Patch without area and grid = %q", got)
+	if got := deltas(t, c.Delta("dash", nil)); len(got) != 3 {
+		t.Errorf("Delta without area and grid = %q", got)
 	}
-	if got := patches(t, c.PatchShapes("dash", nil)); !reflect.DeepEqual(got, []string{"cpuL d="}) {
-		t.Errorf("PatchShapes without area = %q", got)
+	if got := deltas(t, c.DeltaShapes("dash", nil)); !reflect.DeepEqual(got, []string{"cpuL d="}) {
+		t.Errorf("DeltaShapes without area = %q", got)
 	}
 }
 

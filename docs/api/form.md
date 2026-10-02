@@ -12,7 +12,7 @@ import "github.com/neuroplastio/hotty-go/form"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and patch), and what a submit event brings back, read into typed answers.
+Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers.
 
 The order of use:
 
@@ -131,7 +131,7 @@ const (
 )
 ```
 
-Ids in the document. A program focuses and patches them; they are the same for every form, so a document is known without reading it.
+Ids in the document. A program focuses them and changes them with deltas; they are the same for every form, so a document is known without reading it.
 
 <a id="CheckMark"></a><a id="RadioMark"></a>
 
@@ -462,7 +462,7 @@ Output:
 
 ```
 version: required
-patch text e1 "! required"
+delta text e1 "! required"
 focus  f1 ""
 ```
 

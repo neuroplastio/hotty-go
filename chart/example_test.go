@@ -8,7 +8,7 @@ import (
 	"github.com/neuroplastio/hotty-go/chart"
 )
 
-// show prints what commands do: each patch's target, key and value.
+// show prints what commands do: each delta's target, key and value.
 func show(cmds []string) {
 	var d hotty.Decoder
 	for _, cmd := range cmds {
@@ -18,7 +18,7 @@ func show(cmds []string) {
 }
 
 // A chart that streams: the document goes once, with the chart in it, and
-// every tick after that sends a patch of a few dozen bytes that moves the
+// every tick after that sends a delta of a few dozen bytes that moves the
 // line and the area.
 func Example_liveChart() {
 	// The box is 12×3 cells; at 9×18 CSS pixels a cell
@@ -31,21 +31,21 @@ func Example_liveChart() {
 
 	// The next tick: a value in, the oldest out.
 	values = append(values[1:], 80)
-	show(c.PatchShapes("dash", values))
+	show(c.DeltaShapes("dash", values))
 	// Output:
 	// rpsL d=M0,35.1L36,37.8L72,21.6L108,10.8
 	// rpsA d=M0,54L0,35.1L36,37.8L72,21.6L108,10.8L108,54Z
 }
 
 // When the box changes size (the terminal was resized), or the colour says
-// something new, Patch sends the size and the colour too.
-func ExampleLine_Patch() {
+// something new, Delta sends the size and the colour too.
+func ExampleLine_Delta() {
 	c := chart.Line{ID: "p99", W: 90, H: 36, Lo: 0, Hi: 200, Color: "#e8c872"}
 	latency := []float64{120, 180, 240}
 	if latency[len(latency)-1] > c.Hi {
 		c.Color = "#f07a7a" // over budget
 	}
-	show(c.Patch("svc", latency))
+	show(c.Delta("svc", latency))
 	// Output:
 	// p99V viewBox=0 0 90 36
 	// p99L d=M0,14.4L45,3.6L90,0

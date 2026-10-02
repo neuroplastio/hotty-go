@@ -13,11 +13,11 @@ import "github.com/neuroplastio/hotty-go"
 
 Package hotty speaks HOTTY, HTML Over The TTY ([https://github.com/neuroplastio/hotty](https://github.com/neuroplastio/hotty)), from a Go program.
 
-A HOTTY host is a terminal that shows surfaces: small HTML documents placed on rectangles of cells. A program sends documents, placements and patches as escape sequences in its ordinary output, and hears replies and the user's events on its input.
+A HOTTY host is a terminal that shows surfaces: small HTML documents placed on rectangles of cells. A program sends documents, placements and deltas as escape sequences in its ordinary output, and hears replies and the user's events on its input.
 
 This package is the wire, and does no I/O:
 
-  - The command functions (Doc, Place, Patch, …) return escape sequences as strings. Write them to the terminal like any other output; in a Bubble Tea program, through tea.Raw, so they stay in order with its frames.
+  - The command functions (Doc, Place, Delta, …) return escape sequences as strings. Write them to the terminal like any other output; in a Bubble Tea program, through tea.Raw, so they stay in order with its frames.
   - A Decoder turns the OSC sequences the program reads back into Messages: replies (Message.Reply) and events (Message.Event).
 
 The packages beside it do the I/O: term for a command that prints and exits or asks a question, hottytea for a full-screen Bubble Tea program, and hottytest for testing either against a host that runs in the test.
@@ -37,13 +37,13 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Del(surface string, opts ...ReplyOption) string`](#Del)
 - [`func DelAll(opts ...ReplyOption) string`](#DelAll)
 - [`func DelRes(id string, opts ...ReplyOption) string`](#DelRes)
+- [`func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string`](#Delta)
 - [`func Detach(surface string, opts ...ReplyOption) string`](#Detach)
 - [`func Doc(surface, html string, opts ...DocOption) string`](#Doc)
 - [`func Encode(ctl Control, payload []byte) string`](#Encode)
 - [`func Focus(surface, target string, opts ...ReplyOption) string`](#Focus)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
-- [`func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string`](#Patch)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
 - [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
 - [`func Query(n int) string`](#Query)
@@ -193,13 +193,21 @@ func DelRes(id string, opts ...ReplyOption) string
 
 DelRes deletes a resource.
 
+## <a id="Delta"></a>func Delta
+
+```go
+func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string
+```
+
+Delta changes one surface's document (SPEC §6). target is an element id, "" for a morph by top-level ids; key names the attribute or the custom property. It is never answered, unless an option asks.
+
 ## <a id="Detach"></a>func Detach
 
 ```go
 func Detach(surface string, opts ...ReplyOption) string
 ```
 
-Detach gives a surface up (SPEC §5.5): it stays on the screen as text does, placed, patched and deleted as before, but sends no more events and never has the keyboard; if it has it, the keyboard goes back to the terminal with no blur. A program that leaves surfaces on the screen when it exits detaches them first, unless it sent them Detached. The next Doc sent without Detached makes the surface the program's again.
+Detach gives a surface up (SPEC §5.5): it stays on the screen as text does, placed, changed by deltas and deleted as before, but sends no more events and never has the keyboard; if it has it, the keyboard goes back to the terminal with no blur. A program that leaves surfaces on the screen when it exits detaches them first, unless it sent them Detached. The next Doc sent without Detached makes the surface the program's again.
 
 It is never answered, unless an option asks: a host older than §5.5 refuses it (EINVAL), and a reply nobody reads would reach the shell as typing.
 
@@ -233,7 +241,7 @@ Focus gives a surface the keyboard (SPEC §10.1), at an element if target is not
 func Hide(surface string, opts ...ReplyOption) string
 ```
 
-Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Patches still apply to it.
+Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Deltas still apply to it.
 
 ## <a id="MorphTo"></a>func MorphTo
 
@@ -242,14 +250,6 @@ func MorphTo(surface, target, html string, opts ...ReplyOption) string
 ```
 
 MorphTo morphs an element into html, or with no target, each top-level element of html into the document's element with its id. Morphing keeps what the user is doing in what stays: focus, the text being typed, an open \<details> (SPEC §6.2).
-
-## <a id="Patch"></a>func Patch
-
-```go
-func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string
-```
-
-Patch changes one surface's document (SPEC §6). target is an element id, "" for a morph by top-level ids; key names the attribute or the custom property. It is never answered, unless an option asks.
 
 ## <a id="Place"></a>func Place
 
@@ -345,7 +345,7 @@ ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, 
 type Caps struct {
 	// V is the protocol version the host implements: "0.1".
 	V string `json:"v"`
-	// Ops are the patch ops it supports.
+	// Ops are the delta ops it supports.
 	Ops []string `json:"ops"`
 	// Events are the event kinds it sends.
 	Events []string `json:"events"`
@@ -417,7 +417,7 @@ Sends reports whether the host sends an event kind. A host that lists no kinds i
 func (c Caps) Supports(op Op) bool
 ```
 
-Supports reports whether the host supports a patch op. A host that lists no ops is taken to support them all.
+Supports reports whether the host supports a delta op. A host that lists no ops is taken to support them all.
 
 ## <a id="Control"></a>type Control
 
@@ -484,7 +484,7 @@ DocOption is an option of Doc: a ReplyOption, or Detached.
 func Detached() DocOption
 ```
 
-Detached sends a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, patched, hidden and deleted as before.
+Detached sends a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, changed by deltas, hidden and deleted as before.
 
 It is what a command prints among its output, which outlives it: whatever reads the terminal next, a shell, would read the surface's events as typing. A host older than §5.5 ignores d=1.
 
@@ -531,7 +531,7 @@ Error is an error reply (SPEC §3.6).
 func (e *Error) Error() string
 ```
 
-Error says what was refused and why: "hotty: patch card: ENOTARGET (go)".
+Error says what was refused and why: "hotty: delta card: ENOTARGET (go)".
 
 ## <a id="Event"></a>type Event
 
@@ -680,7 +680,7 @@ Reply returns the message as a reply, if it is one.
 type Op string
 ```
 
-Op is a patch operation (SPEC §6.1).
+Op is a delta operation (SPEC §6.1).
 
 <a id="OpMorph"></a><a id="OpInner"></a><a id="OpReplace"></a><a id="OpAppend"></a><a id="OpPrepend"></a><a id="OpBefore"></a><a id="OpAfter"></a><a id="OpRemove"></a><a id="OpAttr"></a><a id="OpUnattr"></a><a id="OpText"></a><a id="OpVar"></a>
 
@@ -701,7 +701,7 @@ const (
 )
 ```
 
-The patch operations.
+The delta operations.
 
 ## <a id="Placement"></a>type Placement
 
@@ -723,7 +723,7 @@ type Placement struct {
 	// Fit asks for a fit event whenever the rows the document needs at
 	// this width change from the rows last heard, starting from this
 	// placement's (f=1): an image or font arrived, a resource was
-	// replaced, a patch landed. The placement keeps its size; placing the
+	// replaced, a delta landed. The placement keeps its size; placing the
 	// surface again is the program's to do (SPEC §5.2).
 	Fit bool
 	// Hover asks for a hover event each time the element with an id under

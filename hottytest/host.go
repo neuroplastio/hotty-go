@@ -9,7 +9,7 @@
 //	h.Click("tool-card", "retry")                 // what the user does
 //
 // The host keeps every surface's document as the program's commands leave
-// it, with the patch operations and the morph of SPEC §6, and answers each
+// it, with the delta operations and the morph of SPEC §6, and answers each
 // command as SPEC §3.6 has hosts do. It passes the HOTTY conformance
 // vectors. It lays nothing out and draws no pixels: a placement with auto
 // rows gets an estimate (AutoRows).
@@ -533,7 +533,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		}
 	}
 	switch a {
-	case "doc", "place", "hide", "patch", "del", "detach", "focus", "blur":
+	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur":
 	default:
 		return hotty.EINVAL, "unknown action " + a, nil
 	}
@@ -581,7 +581,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		}
 		s.placed = false
 		s.heard = nil
-	case "patch":
+	case "delta":
 		op := hotty.Op(m.Get("op"))
 		if op == "" {
 			op = hotty.OpMorph
@@ -596,7 +596,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if k == "" && (op == hotty.OpAttr || op == hotty.OpUnattr || op == hotty.OpVar) {
 			return hotty.EINVAL, "missing k", nil
 		}
-		code, detail = s.patch(op, t, k, string(m.Payload))
+		code, detail = s.delta(op, t, k, string(m.Payload))
 		if h.keyboard == s && !s.keyb {
 			h.keyboard = nil // the focused element went
 		}
@@ -734,7 +734,7 @@ func (h *Host) refit(a string, m hotty.Message) {
 		for _, name := range slices.Sorted(maps.Keys(h.surfaces)) {
 			check = append(check, h.surfaces[name])
 		}
-	case "doc", "patch", "place":
+	case "doc", "delta", "place":
 		if s := h.surfaces[m.Get("s")]; s != nil {
 			check = append(check, s)
 		}

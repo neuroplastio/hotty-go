@@ -6,8 +6,9 @@ import (
 	"strings"
 )
 
-// Ids in the document. A program focuses and patches them; they are the
-// same for every form, so a document is known without reading it.
+// Ids in the document. A program focuses them and changes them with
+// deltas; they are the same for every form, so a document is known
+// without reading it.
 const (
 	// FormID is the <form>: submit events name it.
 	FormID = "form"

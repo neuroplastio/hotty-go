@@ -39,8 +39,8 @@ func (detached) doc(c *Control) { c.set("d", "1") }
 // surface is created detached, or its document replaced and the surface
 // detached, in the one command. It reports nothing, never takes the
 // keyboard, and its controls act disabled; hover, selection, <details> and
-// hyperlinks still work, and it is placed, patched, hidden and deleted as
-// before.
+// hyperlinks still work, and it is placed, changed by deltas, hidden and
+// deleted as before.
 //
 // It is what a command prints among its output, which outlives it: whatever
 // reads the terminal next, a shell, would read the surface's events as
@@ -69,7 +69,7 @@ type Placement struct {
 	// Fit asks for a fit event whenever the rows the document needs at
 	// this width change from the rows last heard, starting from this
 	// placement's (f=1): an image or font arrived, a resource was
-	// replaced, a patch landed. The placement keeps its size; placing the
+	// replaced, a delta landed. The placement keeps its size; placing the
 	// surface again is the program's to do (SPEC §5.2).
 	Fit bool
 	// Hover asks for a hover event each time the element with an id under
@@ -131,15 +131,15 @@ func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string 
 }
 
 // Hide removes a surface's placement and keeps its document, to place it
-// again without sending it (SPEC §5.4). Patches still apply to it.
+// again without sending it (SPEC §5.4). Deltas still apply to it.
 func Hide(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "hide"}, {"s", surface}}, nil, NoReply, opts)
 }
 
-// Op is a patch operation (SPEC §6.1).
+// Op is a delta operation (SPEC §6.1).
 type Op string
 
-// The patch operations.
+// The delta operations.
 const (
 	OpMorph   Op = "morph"   // morph the target into the payload; without a target, top-level elements by id
 	OpInner   Op = "inner"   // morph the target's children into the payload's nodes
@@ -155,11 +155,11 @@ const (
 	OpVar     Op = "var"     // set the custom property --key on the target
 )
 
-// Patch changes one surface's document (SPEC §6). target is an element id,
+// Delta changes one surface's document (SPEC §6). target is an element id,
 // "" for a morph by top-level ids; key names the attribute or the custom
 // property. It is never answered, unless an option asks.
-func Patch(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string {
-	ctl := Control{{"a", "patch"}, {"s", surface}, {"op", string(op)}}
+func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string {
+	ctl := Control{{"a", "delta"}, {"s", surface}, {"op", string(op)}}
 	if target != "" {
 		ctl = ctl.With("t", target)
 	}
@@ -172,23 +172,23 @@ func Patch(surface string, op Op, target, key string, payload []byte, opts ...Re
 // SetText replaces an element's children with one text node: a clock, a
 // count. Hosts make it cheap (SPEC §6.1).
 func SetText(surface, target, text string, opts ...ReplyOption) string {
-	return Patch(surface, OpText, target, "", []byte(text), opts...)
+	return Delta(surface, OpText, target, "", []byte(text), opts...)
 }
 
 // SetVar sets the custom property --name on an element: the cheap way to
 // move a bar or a needle every frame, with CSS that reads it.
 func SetVar(surface, target, name, value string, opts ...ReplyOption) string {
-	return Patch(surface, OpVar, target, name, []byte(value), opts...)
+	return Delta(surface, OpVar, target, name, []byte(value), opts...)
 }
 
 // SetAttr sets an attribute on an element.
 func SetAttr(surface, target, name, value string, opts ...ReplyOption) string {
-	return Patch(surface, OpAttr, target, name, []byte(value), opts...)
+	return Delta(surface, OpAttr, target, name, []byte(value), opts...)
 }
 
 // RemoveAttr removes an attribute from an element.
 func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
-	return Patch(surface, OpUnattr, target, name, nil, opts...)
+	return Delta(surface, OpUnattr, target, name, nil, opts...)
 }
 
 // MorphTo morphs an element into html, or with no target, each top-level
@@ -196,7 +196,7 @@ func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
 // what the user is doing in what stays: focus, the text being typed, an
 // open <details> (SPEC §6.2).
 func MorphTo(surface, target, html string, opts ...ReplyOption) string {
-	return Patch(surface, OpMorph, target, "", []byte(html), opts...)
+	return Delta(surface, OpMorph, target, "", []byte(html), opts...)
 }
 
 // Res stores a resource that documents refer to as cid:<id> (SPEC §7.1): a
@@ -222,11 +222,11 @@ func DelAll(opts ...ReplyOption) string {
 }
 
 // Detach gives a surface up (SPEC §5.5): it stays on the screen as text
-// does, placed, patched and deleted as before, but sends no more events and
-// never has the keyboard; if it has it, the keyboard goes back to the
-// terminal with no blur. A program that leaves surfaces on the screen when
-// it exits detaches them first, unless it sent them Detached. The next
-// Doc sent without Detached makes the surface the program's again.
+// does, placed, changed by deltas and deleted as before, but sends no more
+// events and never has the keyboard; if it has it, the keyboard goes back
+// to the terminal with no blur. A program that leaves surfaces on the
+// screen when it exits detaches them first, unless it sent them Detached.
+// The next Doc sent without Detached makes the surface the program's again.
 //
 // It is never answered, unless an option asks: a host older than §5.5
 // refuses it (EINVAL), and a reply nobody reads would reach the shell as

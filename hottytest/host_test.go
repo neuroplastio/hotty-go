@@ -463,7 +463,7 @@ func TestLimits(t *testing.T) {
 	}
 }
 
-func TestPatchesAndInspection(t *testing.T) {
+func TestDeltasAndInspection(t *testing.T) {
 	h := shown(t, "x", `<div id=bar style="width: 1px"></div><p id=p class=a>old</p><textarea id=ta>t</textarea>`+
 		`<select id=sel><option>a<option selected value=bee>b</select><input id=in value=v><input id=box type=checkbox>`)
 	send(h, hotty.SetVar("x", "bar", "p", "42"), hotty.SetVar("x", "bar", "--q", "1"), hotty.SetVar("x", "bar", "p", "43"))
@@ -485,7 +485,7 @@ func TestPatchesAndInspection(t *testing.T) {
 	if _, ok := s.Value("nope"); ok {
 		t.Error("Value of nothing")
 	}
-	send(h, hotty.Patch("x", hotty.OpText, "ta", "", []byte("new")), hotty.SetAttr("x", "box", "checked", ""))
+	send(h, hotty.Delta("x", hotty.OpText, "ta", "", []byte("new")), hotty.SetAttr("x", "box", "checked", ""))
 	if v, _ := s.Value("ta"); v != "new" {
 		t.Errorf("a textarea's text is its value: %q", v)
 	}
@@ -496,7 +496,7 @@ func TestPatchesAndInspection(t *testing.T) {
 		t.Errorf("TextOf, HTML: %s", s.HTML())
 	}
 	send(h, hotty.MorphTo("x", "", `<p id=p>new</p><b id=gone>x</b>`, hotty.Q(hotty.ReplyOnError)))
-	expect(t, sent(h), "err re=patch s=x ENOTARGET")
+	expect(t, sent(h), "err re=delta s=x ENOTARGET")
 	if s.TextOf("p") != "new" {
 		t.Error("morph by ids applies what it can")
 	}
@@ -695,7 +695,7 @@ func TestProgramFocusAndBlur(t *testing.T) {
 	if h.Surface("f").Focused() != "" {
 		t.Error("a new document has no focus")
 	}
-	send(h, hotty.Focus("f", "a"), hotty.Patch("f", hotty.OpRemove, "a", "", nil))
+	send(h, hotty.Focus("f", "a"), hotty.Delta("f", hotty.OpRemove, "a", "", nil))
 	if h.Surface("f").Focused() != "" {
 		t.Error("the focused element went")
 	}
@@ -758,11 +758,11 @@ func TestFit(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("f", `<p id=a>one</p>`), hotty.Place("f", hotty.Placement{Cols: 10, Fit: true}))
 	expect(t, sent(h))
-	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("one\ntwo")))
+	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("one\ntwo")))
 	expect(t, sent(h), `ev fit t= {"r":2}`)
-	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("one")))
+	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("one")))
 	expect(t, sent(h), `ev fit t= {"r":1}`)
-	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("uno")))
+	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("uno")))
 	expect(t, sent(h))
 
 	// Placed at rows the document does not need: told at once.
@@ -782,7 +782,7 @@ func TestFit(t *testing.T) {
 	send(h, hotty.Place("f", hotty.Placement{Cols: 10}), hotty.Hide("g"))
 	sent(h)
 	tall = 2
-	send(h, hotty.Res("img", "image/png", []byte("y")), hotty.Patch("f", hotty.OpText, "a", "", []byte("x")))
+	send(h, hotty.Res("img", "image/png", []byte("y")), hotty.Delta("f", hotty.OpText, "a", "", []byte("x")))
 	expect(t, sent(h))
 }
 
@@ -910,7 +910,7 @@ func TestDrag(t *testing.T) {
 func TestReplies(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("x", "<p id=p>p</p>", hotty.N(1)), hotty.SetText("x", "p", "q", hotty.Q(hotty.ReplyAlways)))
-	expect(t, sent(h), "ok re=doc s=x", "ok re=patch s=x")
+	expect(t, sent(h), "ok re=doc s=x", "ok re=delta s=x")
 	if n := len(h.Replies()); n != 2 {
 		t.Errorf("%d replies", n)
 	}

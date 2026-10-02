@@ -67,7 +67,7 @@ func ExampleSpec_Show() {
 	}
 	// Output:
 	// version: required
-	// patch text e1 "! required"
+	// delta text e1 "! required"
 	// focus  f1 ""
 }
 

@@ -21,7 +21,7 @@ card.TextOf("status")                         // what it shows
 h.Click("tool-card", "retry")                 // what the user does
 ```
 
-The host keeps every surface's document as the program's commands leave it, with the patch operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors. It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows).
+The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors. It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows).
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
@@ -618,4 +618,4 @@ Value is a control's current value: what the program set, or the user typed (Fil
 func (s *Surface) Var(id, name string) (string, bool)
 ```
 
-Var is the custom property --name set on the element with an id, by the document's style attribute or a var patch.
+Var is the custom property --name set on the element with an id, by the document's style attribute or a var delta.

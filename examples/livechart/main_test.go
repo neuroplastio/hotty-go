@@ -79,7 +79,7 @@ func docs(h *hottytest.Host) int {
 
 var first = chart.Line{ID: "s0"}
 
-// ping's times, charted as they come: one document, then patches.
+// ping's times, charted as they come: one document, then deltas.
 func TestStream(t *testing.T) {
 	h := hottytest.New(t)
 	in, feed := io.Pipe()
@@ -103,7 +103,7 @@ func TestStream(t *testing.T) {
 		ping(feed, i+2, ms)
 		shows(t, h, "v0", fmt.Sprintf("%.1f", ms))
 	}
-	// The waiting document and the first sample's; the rest were patches.
+	// The waiting document and the first sample's; the rest were deltas.
 	if n := docs(h); n != 2 {
 		t.Errorf("%d documents", n)
 	}
@@ -152,7 +152,7 @@ func TestColumns(t *testing.T) {
 }
 
 // The axis grows when a value falls outside it: the grid and its labels
-// change, by patches still.
+// change, by deltas still.
 func TestAxis(t *testing.T) {
 	h := hottytest.New(t)
 	in, feed := io.Pipe()

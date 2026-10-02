@@ -32,7 +32,7 @@ func TestBar(t *testing.T) {
 	if class, _ := s.Attr("row", "class"); class != "row done" {
 		t.Errorf("class %q", class)
 	}
-	// Each step is one synchronized batch of three small patches.
+	// Each step is one synchronized batch of three small deltas.
 	var steps int
 	for _, cmd := range h.Commands() {
 		if cmd.Get("op") == "var" {
@@ -41,7 +41,7 @@ func TestBar(t *testing.T) {
 	}
 	out := h.Output()
 	if steps != 8 || strings.Count(out, "\x1b[?2026h") != 9 {
-		t.Errorf("%d var patches, %d batches", steps, strings.Count(out, "\x1b[?2026h"))
+		t.Errorf("%d var deltas, %d batches", steps, strings.Count(out, "\x1b[?2026h"))
 	}
 	first := out[strings.Index(out, "\x1b[?2026h"):]
 	first = first[:strings.Index(first, "\x1b[?2026l")]

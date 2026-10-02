@@ -126,8 +126,8 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return PlaceAt(str("surface"), num("x"), num("y"), placement(args["placement"]), opts...)
 	case "hide":
 		return Hide(str("surface"), opts...)
-	case "patch":
-		return Patch(str("surface"), Op(str("op")), str("target"), str("key"), []byte(str("payload")), opts...)
+	case "delta":
+		return Delta(str("surface"), Op(str("op")), str("target"), str("key"), []byte(str("payload")), opts...)
 	case "set_text":
 		return SetText(str("surface"), str("target"), str("text"), opts...)
 	case "set_var":

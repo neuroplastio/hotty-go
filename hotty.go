@@ -3,12 +3,12 @@
 //
 // A HOTTY host is a terminal that shows surfaces: small HTML documents
 // placed on rectangles of cells. A program sends documents, placements and
-// patches as escape sequences in its ordinary output, and hears replies and
+// deltas as escape sequences in its ordinary output, and hears replies and
 // the user's events on its input.
 //
 // This package is the wire, and does no I/O:
 //
-//   - The command functions (Doc, Place, Patch, …) return escape sequences
+//   - The command functions (Doc, Place, Delta, …) return escape sequences
 //     as strings. Write them to the terminal like any other output; in a
 //     Bubble Tea program, through tea.Raw, so they stay in order with its
 //     frames.

@@ -2,7 +2,7 @@
 // its last state in the scrollback.
 //
 // It shows the cheap way to change a surface many times a second: a custom
-// property moves the bar (hotty.SetVar) and text patches change the labels
+// property moves the bar (hotty.SetVar) and text deltas change the labels
 // (hotty.SetText), a few dozen bytes each, in synchronized output so the
 // host shows them together (SPEC §6). Where the terminal is not a HOTTY
 // host, the line is redrawn with a carriage return; into a pipe, a line per
@@ -90,7 +90,7 @@ func run(ctx context.Context, args []string, e env) int {
 	return 0
 }
 
-// bar is the surface: placed once, then patched.
+// bar is the surface: placed once, then changed by deltas.
 type bar struct {
 	ctx  context.Context
 	t    *hottyterm.Term

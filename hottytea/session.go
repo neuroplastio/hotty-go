@@ -21,7 +21,7 @@
 //     changed: a document once, a placement when a surface moves, a hide
 //     or a delete when it goes. View then returns the cells, with room
 //     left where the surfaces go.
-//   - Patches go out with Send, and leave with the next Flush, as one
+//   - Deltas go out with Send, and leave with the next Flush, as one
 //     tea.Raw, so that HOTTY commands stay in order with Bubble Tea's
 //     frames.
 //
@@ -542,7 +542,7 @@ func (h *Session) DetachAll() {
 }
 
 // Has reports whether the host has a surface's document, on screen or
-// hidden, so that patches to it make sense: a hidden surface takes them,
+// hidden, so that deltas to it make sense: a hidden surface takes them,
 // and shows them when it is placed again.
 func (h *Session) Has(name string) bool { return h.hasDoc[name] }
 
@@ -553,7 +553,7 @@ func (h *Session) Placed(name string) bool {
 	return ok
 }
 
-// Send queues commands (patches, focus) for the next Flush. It does
+// Send queues commands (deltas, focus) for the next Flush. It does
 // nothing when the terminal is not a host, or after Close.
 func (h *Session) Send(cmds ...string) {
 	if h.Mode != Native || h.closed {

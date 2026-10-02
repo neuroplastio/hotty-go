@@ -265,7 +265,7 @@ type Error struct {
 	Surface string
 }
 
-// Error says what was refused and why: "hotty: patch card: ENOTARGET (go)".
+// Error says what was refused and why: "hotty: delta card: ENOTARGET (go)".
 func (e *Error) Error() string {
 	s := "hotty: " + e.Re
 	if e.Surface != "" {
@@ -282,7 +282,7 @@ func (e *Error) Error() string {
 type Caps struct {
 	// V is the protocol version the host implements: "0.1".
 	V string `json:"v"`
-	// Ops are the patch ops it supports.
+	// Ops are the delta ops it supports.
 	Ops []string `json:"ops"`
 	// Events are the event kinds it sends.
 	Events []string `json:"events"`
@@ -332,7 +332,7 @@ func (c Caps) CellCSS() (w, h float64) {
 	return w, h
 }
 
-// Supports reports whether the host supports a patch op. A host that lists
+// Supports reports whether the host supports a delta op. A host that lists
 // no ops is taken to support them all.
 func (c Caps) Supports(op Op) bool {
 	if len(c.Ops) == 0 {

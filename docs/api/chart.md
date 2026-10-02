@@ -12,21 +12,21 @@ import "github.com/neuroplastio/hotty-go/chart"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package chart draws line charts for HOTTY surfaces, as inline SVG that a program patches as values arrive, and in cells for a terminal that is not a host (Spark).
+Package chart draws line charts for HOTTY surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark).
 
-A Line is one series: its box, its scale and its colour. SVG is the chart in a box of its own. For a box several series share (Box), each draws its Shapes, its line and area, and one of them its Rules, the grid. Patch and PatchShapes are the commands that bring a chart already sent to new values: a few hundred bytes a tick, where a new document would be thousands (SPEC §6).
+A Line is one series: its box, its scale and its colour. SVG is the chart in a box of its own. For a box several series share (Box), each draws its Shapes, its line and area, and one of them its Rules, the grid. Delta and DeltaShapes are the commands that bring a chart already sent to new values: a few hundred bytes a tick, where a new document would be thousands (SPEC §6).
 
 The SVG keeps to rules that make it draw the same in every host:
 
   - Presentation attributes only (fill, stroke, stroke-width), never CSS. Some hosts hand inline SVG to an SVG library: hotty-blitz gives it to usvg, which the document's stylesheet never reaches.
-  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.Caps.CellCSS), and send new ones with Patch when it changes.
+  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
   - The \<svg> is absolutely positioned in its .chart-box (CSS), which has the size: as a grid or flex item, an \<svg> is sized by its aspect ratio in some engines (Blitz) instead of stretched.
 
-Values that change over time go best in buckets fixed in time (Xs), so that what was drawn stays put and a tick's patch moves the line along rather than reshaping it.
+Values that change over time go best in buckets fixed in time (Xs), so that what was drawn stays put and a tick's delta moves the line along rather than reshaping it.
 
 ### <a id="example-package-liveChart"></a>Example (LiveChart)
 
-A chart that streams: the document goes once, with the chart in it, and every tick after that sends a patch of a few dozen bytes that moves the line and the area.
+A chart that streams: the document goes once, with the chart in it, and every tick after that sends a delta of a few dozen bytes that moves the line and the area.
 
 ```go
 // The box is 12×3 cells; at 9×18 CSS pixels a cell
@@ -39,7 +39,7 @@ _ = hotty.Doc("dash", doc, hotty.Detached()) // and a placement, once
 
 // The next tick: a value in, the oldest out.
 values = append(values[1:], 80)
-show(c.PatchShapes("dash", values))
+show(c.DeltaShapes("dash", values))
 ```
 
 Output:
@@ -59,11 +59,11 @@ rpsA d=M0,54L0,35.1L36,37.8L72,21.6L108,10.8L108,54Z
   - [`func (c Line) AreaID() string`](#Line.AreaID)
   - [`func (c Line) AreaPath(values []float64) string`](#Line.AreaPath)
   - [`func (c Line) BoxID() string`](#Line.BoxID)
+  - [`func (c Line) Delta(surface string, values []float64) []string`](#Line.Delta)
+  - [`func (c Line) DeltaShapes(surface string, values []float64) []string`](#Line.DeltaShapes)
   - [`func (c Line) GridID() string`](#Line.GridID)
   - [`func (c Line) GridPath() string`](#Line.GridPath)
   - [`func (c Line) LineID() string`](#Line.LineID)
-  - [`func (c Line) Patch(surface string, values []float64) []string`](#Line.Patch)
-  - [`func (c Line) PatchShapes(surface string, values []float64) []string`](#Line.PatchShapes)
   - [`func (c Line) Path(values []float64) string`](#Line.Path)
   - [`func (c Line) Rules() string`](#Line.Rules)
   - [`func (c Line) SVG(values []float64) string`](#Line.SVG)
@@ -75,7 +75,7 @@ rpsA d=M0,54L0,35.1L36,37.8L72,21.6L108,10.8L108,54Z
 - [Bounds](#example-Bounds)
 - [Box](#example-Box)
 - [Spark](#example-Spark)
-- [Line.Patch](#example-Line.Patch)
+- [Line.Delta](#example-Line.Delta)
 - [Line.Path (Gaps)](#example-Line.Path-gaps)
 - [Line.Path (TimeAxis)](#example-Line.Path-timeAxis)
 
@@ -140,7 +140,7 @@ Output:
 func Box(id string, w, h float64, shapes string) string
 ```
 
-Box is an SVG box w×h in its units, stretched over its .chart-box (CSS): shapes drawn in a viewBox of the box's size in CSS pixels. id, if not "", lets a patch change its viewBox when the box changes size.
+Box is an SVG box w×h in its units, stretched over its .chart-box (CSS): shapes drawn in a viewBox of the box's size in CSS pixels. id, if not "", lets a delta change its viewBox when the box changes size.
 
 ### <a id="example-Box"></a>Example
 
@@ -219,7 +219,7 @@ type Line struct {
 
 Line is a line chart of one series, with an optional area under it.
 
-Its elements have ids made from ID, for patches: the box's \<svg> (BoxID), the line (LineID), the area (AreaID) and the grid (GridID). A chart with no ID has no ids, and cannot be patched.
+Its elements have ids made from ID, for deltas: the box's \<svg> (BoxID), the line (LineID), the area (AreaID) and the grid (GridID). A chart with no ID has no ids, and cannot be changed by deltas.
 
 ### <a id="Line.AreaID"></a>func (Line) AreaID
 
@@ -245,6 +245,43 @@ func (c Line) BoxID() string
 
 BoxID is the id of the chart's \<svg>, which SVG draws: its viewBox is the chart's size.
 
+### <a id="Line.Delta"></a>func (Line) Delta
+
+```go
+func (c Line) Delta(surface string, values []float64) []string
+```
+
+Delta is the commands that bring a chart drawn by SVG to values, and to its size, colour and grid now: for a chart whose box changed, or whose colour says something (a state). Send them as they are (hotty.Sync for several charts at once).
+
+#### <a id="example-Line.Delta"></a>Example
+
+When the box changes size (the terminal was resized), or the colour says something new, Delta sends the size and the colour too.
+
+```go
+c := chart.Line{ID: "p99", W: 90, H: 36, Lo: 0, Hi: 200, Color: "#e8c872"}
+latency := []float64{120, 180, 240}
+if latency[len(latency)-1] > c.Hi {
+	c.Color = "#f07a7a" // over budget
+}
+show(c.Delta("svc", latency))
+```
+
+Output:
+
+```
+p99V viewBox=0 0 90 36
+p99L d=M0,14.4L45,3.6L90,0
+p99L stroke=#f07a7a
+```
+
+### <a id="Line.DeltaShapes"></a>func (Line) DeltaShapes
+
+```go
+func (c Line) DeltaShapes(surface string, values []float64) []string
+```
+
+DeltaShapes is the commands that move the line, and the area if there is one, to values, and nothing else: the cheap delta of every tick, for a chart whose box and colour stay as they were.
+
 ### <a id="Line.GridID"></a>func (Line) GridID
 
 ```go
@@ -268,43 +305,6 @@ func (c Line) LineID() string
 ```
 
 LineID is the id of the line, a \<path>.
-
-### <a id="Line.Patch"></a>func (Line) Patch
-
-```go
-func (c Line) Patch(surface string, values []float64) []string
-```
-
-Patch is the commands that bring a chart drawn by SVG to values, and to its size, colour and grid now: for a chart whose box changed, or whose colour says something (a state). Send them as they are (hotty.Sync for several charts at once).
-
-#### <a id="example-Line.Patch"></a>Example
-
-When the box changes size (the terminal was resized), or the colour says something new, Patch sends the size and the colour too.
-
-```go
-c := chart.Line{ID: "p99", W: 90, H: 36, Lo: 0, Hi: 200, Color: "#e8c872"}
-latency := []float64{120, 180, 240}
-if latency[len(latency)-1] > c.Hi {
-	c.Color = "#f07a7a" // over budget
-}
-show(c.Patch("svc", latency))
-```
-
-Output:
-
-```
-p99V viewBox=0 0 90 36
-p99L d=M0,14.4L45,3.6L90,0
-p99L stroke=#f07a7a
-```
-
-### <a id="Line.PatchShapes"></a>func (Line) PatchShapes
-
-```go
-func (c Line) PatchShapes(surface string, values []float64) []string
-```
-
-PatchShapes is the commands that move the line, and the area if there is one, to values, and nothing else: the cheap patch of every tick, for a chart whose box and colour stay as they were.
 
 ### <a id="Line.Path"></a>func (Line) Path
 

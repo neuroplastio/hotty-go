@@ -578,7 +578,7 @@ func (t *Term) LineStart(ctx context.Context) error {
 // program's output: the surface named name (made this process's own with
 // Surface) gets html, detached (hotty.Detached), and is placed with p.
 // The host moves the cursor below it, unless p.KeepCursor. It returns the
-// surface's full name, for patches.
+// surface's full name, for deltas.
 //
 // Errors the host replies come back on the input: read them with Fence.
 func (t *Term) Print(name, html string, p hotty.Placement) (string, error) {

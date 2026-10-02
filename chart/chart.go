@@ -1,11 +1,11 @@
 // Package chart draws line charts for HOTTY surfaces, as inline SVG that a
-// program patches as values arrive, and in cells for a terminal that is not
-// a host (Spark).
+// program changes with deltas as values arrive, and in cells for a terminal
+// that is not a host (Spark).
 //
 // A Line is one series: its box, its scale and its colour. SVG is the chart
 // in a box of its own. For a box several series share (Box), each draws its
-// Shapes, its line and area, and one of them its Rules, the grid. Patch and
-// PatchShapes are the commands that bring a chart already sent to new
+// Shapes, its line and area, and one of them its Rules, the grid. Delta and
+// DeltaShapes are the commands that bring a chart already sent to new
 // values: a few hundred bytes a tick, where a new document would be
 // thousands (SPEC §6).
 //
@@ -19,13 +19,13 @@
 //     any angle, and its joins stay round. usvg has no
 //     vector-effect: non-scaling-stroke, and a viewBox far from the box's
 //     shape draws steep segments thin. Take W and H from the box's cells
-//     (hotty.Caps.CellCSS), and send new ones with Patch when it changes.
+//     (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
 //   - The <svg> is absolutely positioned in its .chart-box (CSS), which has
 //     the size: as a grid or flex item, an <svg> is sized by its aspect
 //     ratio in some engines (Blitz) instead of stretched.
 //
 // Values that change over time go best in buckets fixed in time (Xs), so
-// that what was drawn stays put and a tick's patch moves the line along
+// that what was drawn stays put and a tick's delta moves the line along
 // rather than reshaping it.
 package chart
 
@@ -62,9 +62,9 @@ const CSS = `
 
 // Line is a line chart of one series, with an optional area under it.
 //
-// Its elements have ids made from ID, for patches: the box's <svg>
+// Its elements have ids made from ID, for deltas: the box's <svg>
 // (BoxID), the line (LineID), the area (AreaID) and the grid (GridID). A
-// chart with no ID has no ids, and cannot be patched.
+// chart with no ID has no ids, and cannot be changed by deltas.
 type Line struct {
 	ID string
 	// W and H are the box's size in CSS pixels, and the viewBox's. Less
@@ -191,17 +191,17 @@ func (c Line) Shapes(values []float64) string {
 
 // Box is an SVG box w×h in its units, stretched over its .chart-box (CSS):
 // shapes drawn in a viewBox of the box's size in CSS pixels. id, if not
-// "", lets a patch change its viewBox when the box changes size.
+// "", lets a delta change its viewBox when the box changes size.
 func Box(id string, w, h float64, shapes string) string {
 	return `<div class="chart-box"><svg` + idAttr(id) + ` viewBox="0 0 ` + num(w) + ` ` + num(h) +
 		`" preserveAspectRatio="none">` + shapes + `</svg></div>`
 }
 
-// Patch is the commands that bring a chart drawn by SVG to values, and to
+// Delta is the commands that bring a chart drawn by SVG to values, and to
 // its size, colour and grid now: for a chart whose box changed, or whose
 // colour says something (a state). Send them as they are (hotty.Sync for
 // several charts at once).
-func (c Line) Patch(surface string, values []float64) []string {
+func (c Line) Delta(surface string, values []float64) []string {
 	w, h := c.size()
 	col := c.color()
 	out := []string{hotty.SetAttr(surface, c.BoxID(), "viewBox", "0 0 "+num(w)+" "+num(h))}
@@ -219,10 +219,10 @@ func (c Line) Patch(surface string, values []float64) []string {
 	return out
 }
 
-// PatchShapes is the commands that move the line, and the area if there is
-// one, to values, and nothing else: the cheap patch of every tick, for a
+// DeltaShapes is the commands that move the line, and the area if there is
+// one, to values, and nothing else: the cheap delta of every tick, for a
 // chart whose box and colour stay as they were.
-func (c Line) PatchShapes(surface string, values []float64) []string {
+func (c Line) DeltaShapes(surface string, values []float64) []string {
 	out := []string{hotty.SetAttr(surface, c.LineID(), "d", c.Path(values))}
 	if c.Fill > 0 {
 		out = append(out, hotty.SetAttr(surface, c.AreaID(), "d", c.AreaPath(values)))

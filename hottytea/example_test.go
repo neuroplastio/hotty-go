@@ -43,7 +43,8 @@ func (m *counter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, m.draw())
 }
 
-// add counts one, and patches the surface: a few bytes, not a document.
+// add counts one, and changes the surface with a delta: a few bytes, not a
+// document.
 func (m *counter) add() {
 	m.n++
 	m.s.Send(hotty.SetText("counter", "count", strconv.Itoa(m.n)))
@@ -98,13 +99,13 @@ func Example() {
 	}
 
 	// What the program sent the host, placements aside: one document, two
-	// patches, and the delete on its way out.
+	// deltas, and the delete on its way out.
 	for _, c := range h.Commands() {
 		switch c.Get("a") {
 		case "doc":
 			fmt.Println("doc", c.Get("s"))
-		case "patch":
-			fmt.Println("patch", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
+		case "delta":
+			fmt.Println("delta", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
 		case "del":
 			fmt.Println("del", c.Get("s"))
 		}
@@ -112,7 +113,7 @@ func Example() {
 	// Output:
 	// ready: native
 	// doc counter
-	// patch counter #count 1
-	// patch counter #count 2
+	// delta counter #count 1
+	// delta counter #count 2
 	// del counter
 }

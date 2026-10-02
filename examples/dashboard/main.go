@@ -4,12 +4,12 @@
 //	dashboard https://example.com https://api.example.com/healthz
 //
 // It is a Bubble Tea program, and each endpoint is a card on a surface that
-// hottytea keeps in place as the frame changes. A probe patches its card:
-// the chart's line (chart.Line.PatchShapes) and whatever numbers changed,
-// a few hundred bytes where a new document would be thousands. A card
-// scrolled off the screen is hidden rather than deleted, so it comes back
-// without its document being sent again. A press on a card selects it, and
-// the footer, drawn in cells, says more about it.
+// hottytea keeps in place as the frame changes. A probe changes its card
+// with deltas: the chart's line (chart.Line.DeltaShapes) and whatever
+// numbers changed, a few hundred bytes where a new document would be
+// thousands. A card scrolled off the screen is hidden rather than deleted,
+// so it comes back without its document being sent again. A press on a card
+// selects it, and the footer, drawn in cells, says more about it.
 //
 // On a terminal that is not a HOTTY host, each endpoint is a line of cells
 // with a sparkline (chart.Spark).
@@ -103,7 +103,7 @@ type endpoint struct {
 	probes, downs int    // the probes, and those that found it down
 	busy          bool   // a probe is on its way
 
-	// What the host's card shows, so that a patch sends only what changed.
+	// What the host's card shows, so that a delta sends only what changed.
 	shown struct {
 		w, h  float64 // the chart's size
 		state string
@@ -111,7 +111,7 @@ type endpoint struct {
 		scale string
 		sel   bool
 	}
-	dirty bool // probed since the card was sent or patched
+	dirty bool // probed since the card was sent or changed by deltas
 }
 
 // The states of an endpoint, and their icons: a status is never told by
@@ -367,12 +367,12 @@ func (m *model) draw() tea.Cmd {
 		})
 	}
 	m.s.Layout(want)
-	// The cards the host has, shown or hidden, take patches: a hidden one
+	// The cards the host has, shown or hidden, take deltas: a hidden one
 	// shows them when it is placed again.
 	for i := range m.eps {
 		if m.s.Has(m.name(i)) {
-			if p := m.patch(i, w, h); p != "" {
-				m.s.Send(p)
+			if d := m.delta(i, w, h); d != "" {
+				m.s.Send(d)
 			}
 		}
 	}
@@ -472,17 +472,17 @@ func cardClass(sel bool) string {
 	return "card"
 }
 
-// patch is what brings endpoint i's card up to date, as one synchronized
+// delta is what brings endpoint i's card up to date, as one synchronized
 // update; "" when it is.
-func (m *model) patch(i int, w, h float64) string {
+func (m *model) delta(i int, w, h float64) string {
 	e, name := m.eps[i], m.name(i)
 	var cmds []string
 	if e.dirty || e.shown.w != w || e.shown.h != h {
 		c := m.line(e, w, h)
 		if e.shown.w != w || e.shown.h != h {
-			cmds = append(cmds, c.Patch(name, e.lat)...) // the box, its grid and line
+			cmds = append(cmds, c.Delta(name, e.lat)...) // the box, its grid and line
 		} else {
-			cmds = append(cmds, c.PatchShapes(name, e.lat)...) // the line alone
+			cmds = append(cmds, c.DeltaShapes(name, e.lat)...) // the line alone
 		}
 		if s := e.scale(); s != e.shown.scale {
 			cmds = append(cmds, hotty.SetText(name, "scale", s))

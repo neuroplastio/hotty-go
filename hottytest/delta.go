@@ -9,9 +9,9 @@ import (
 	"github.com/neuroplastio/hotty-go"
 )
 
-// patch applies a patch to the surface's document (SPEC §6), and returns
+// delta applies a delta to the surface's document (SPEC §6), and returns
 // the error code and detail when it cannot.
-func (s *Surface) patch(op hotty.Op, target, key string, payload string) (code, detail string) {
+func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, detail string) {
 	if op == hotty.OpMorph && target == "" {
 		return s.morphByIDs(payload)
 	}

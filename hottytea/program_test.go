@@ -214,8 +214,8 @@ func TestAProgramOnAHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The user clicks Go: a press first (the card asked for them), the
-	// keyboard (a button takes focus), then the click; the app patches its
-	// status.
+	// keyboard (a button takes focus), then the click; the app changes its
+	// status with a delta.
 	var kinds []string
 	for _, want := range []string{hotty.EventPress, hotty.EventFocus, hotty.EventClick} {
 		ev := next[hottytea.EventMsg](t, seen)
@@ -224,8 +224,8 @@ func TestAProgramOnAHost(t *testing.T) {
 			t.Errorf("events %v, want press, focus, click on #go: %+v", kinds, ev.Event)
 		}
 	}
-	eventually(t, "the status is patched", func() bool {
-		m, ok := command(h, "a", "patch", "s", cardName, "op", "text", "t", "status")
+	eventually(t, "the status is changed by a delta", func() bool {
+		m, ok := command(h, "a", "delta", "s", cardName, "op", "text", "t", "status")
 		return ok && string(m.Payload) == "clicked"
 	})
 

@@ -123,13 +123,13 @@ func TestMessages(t *testing.T) {
 	} else if e, ok := msg.(EventMsg); !ok || e.Surface != "card" || e.Kind != hotty.EventClick || e.Target != "go" || e.Value() != "1" {
 		t.Errorf("event: %#v", msg)
 	}
-	refused := from(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "card"}, {K: "re", V: "patch"}}, `{"code":"ENOTARGET","detail":"nope"}`)
+	refused := from(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "card"}, {K: "re", V: "delta"}}, `{"code":"ENOTARGET","detail":"nope"}`)
 	if msg, _ := s.Update(refused); msg == nil {
 		t.Fatal("an error was swallowed")
 	} else if e, ok := msg.(ErrorMsg); !ok || e.Code != hotty.ENOTARGET || e.Detail != "nope" || e.Err() == nil {
 		t.Errorf("error: %#v", msg)
 	}
-	ok := from(hotty.Control{{K: "a", V: "ok"}, {K: "s", V: "card"}, {K: "re", V: "patch"}}, "")
+	ok := from(hotty.Control{{K: "a", V: "ok"}, {K: "s", V: "card"}, {K: "re", V: "delta"}}, "")
 	if msg, _ := s.Update(ok); msg != nil {
 		t.Errorf("an ok reply: %#v", msg)
 	}
@@ -344,7 +344,7 @@ func TestFlushKeepsTheOrderWhicheverRunsFirst(t *testing.T) {
 	second := s.Flush()
 	raw, ok := second().(tea.RawMsg)
 	if want := hotty.SetText("a", "t", "1") + hotty.SetText("a", "t", "2"); !ok || raw.Msg != want {
-		t.Fatalf("the later command wrote %#v, want both patches in order", second())
+		t.Fatalf("the later command wrote %#v, want both deltas in order", second())
 	}
 	if msg := first(); msg != nil {
 		t.Fatalf("the earlier command wrote again: %#v", msg)

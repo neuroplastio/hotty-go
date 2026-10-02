@@ -208,7 +208,7 @@ func (s *Surface) Attr(id, name string) (string, bool) {
 }
 
 // Var is the custom property --name set on the element with an id, by the
-// document's style attribute or a var patch.
+// document's style attribute or a var delta.
 func (s *Surface) Var(id, name string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

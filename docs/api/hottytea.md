@@ -20,7 +20,7 @@ A Session is the program's side. Its life in a program:
   - Init returns s.Detect().
   - Update hands every message to s.Update first. What is HOTTY's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
-  - Patches go out with Send, and leave with the next Flush, as one tea.Raw, so that HOTTY commands stay in order with Bubble Tea's frames.
+  - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that HOTTY commands stay in order with Bubble Tea's frames.
 
 Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit.
 
@@ -81,7 +81,8 @@ func (m *counter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, m.draw())
 }
 
-// add counts one, and patches the surface: a few bytes, not a document.
+// add counts one, and changes the surface with a delta: a few bytes, not a
+// document.
 func (m *counter) add() {
 	m.n++
 	m.s.Send(hotty.SetText("counter", "count", strconv.Itoa(m.n)))
@@ -136,13 +137,13 @@ func main() {
 	}
 
 	// What the program sent the host, placements aside: one document, two
-	// patches, and the delete on its way out.
+	// deltas, and the delete on its way out.
 	for _, c := range h.Commands() {
 		switch c.Get("a") {
 		case "doc":
 			fmt.Println("doc", c.Get("s"))
-		case "patch":
-			fmt.Println("patch", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
+		case "delta":
+			fmt.Println("delta", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
 		case "del":
 			fmt.Println("del", c.Get("s"))
 		}
@@ -155,8 +156,8 @@ Output:
 ```
 ready: native
 doc counter
-patch counter #count 1
-patch counter #count 2
+delta counter #count 1
+delta counter #count 2
 del counter
 ```
 
@@ -459,7 +460,7 @@ Bubble Tea runs each command on a goroutine of its own, so two updates' commands
 func (h *Session) Has(name string) bool
 ```
 
-Has reports whether the host has a surface's document, on screen or hidden, so that patches to it make sense: a hidden surface takes them, and shows them when it is placed again.
+Has reports whether the host has a surface's document, on screen or hidden, so that deltas to it make sense: a hidden surface takes them, and shows them when it is placed again.
 
 ### <a id="Session.Layout"></a>func (*Session) Layout
 
@@ -491,7 +492,7 @@ Placed reports whether a surface is on screen: placed by the last Layout, and no
 func (h *Session) Send(cmds ...string)
 ```
 
-Send queues commands (patches, focus) for the next Flush. It does nothing when the terminal is not a host, or after Close.
+Send queues commands (deltas, focus) for the next Flush. It does nothing when the terminal is not a host, or after Close.
 
 ### <a id="Session.Update"></a>func (*Session) Update
 

@@ -78,12 +78,12 @@ func TestCommandsRoundTrip(t *testing.T) {
 		{"place", Place("card", Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}),
 			map[string]string{"a": "place", "s": "card", "c": "40", "r": "3", "z": "-2", "p": "1", "C": "1", "q": "1"}, ""},
 		{"hide", Hide("card"), map[string]string{"a": "hide", "s": "card", "q": "2"}, ""},
-		{"text", SetText("card", "clock", "12:00"), map[string]string{"a": "patch", "s": "card", "op": "text", "t": "clock", "q": "2"}, "12:00"},
-		{"var", SetVar("dash", "cpu", "p", "42"), map[string]string{"a": "patch", "s": "dash", "op": "var", "t": "cpu", "k": "p", "q": "2"}, "42"},
-		{"attr", SetAttr("dash", "cpu", "class", "hot"), map[string]string{"a": "patch", "s": "dash", "op": "attr", "t": "cpu", "k": "class", "q": "2"}, "hot"},
-		{"unattr", RemoveAttr("dash", "cpu", "class"), map[string]string{"a": "patch", "s": "dash", "op": "unattr", "t": "cpu", "k": "class", "q": "2"}, ""},
-		{"morph by ids", MorphTo("dash", "", "<b id=x>1</b>"), map[string]string{"a": "patch", "s": "dash", "op": "morph", "q": "2"}, "<b id=x>1</b>"},
-		{"append", Patch("log", OpAppend, "lines", "", []byte("<li>x</li>")), map[string]string{"a": "patch", "s": "log", "op": "append", "t": "lines", "q": "2"}, "<li>x</li>"},
+		{"text", SetText("card", "clock", "12:00"), map[string]string{"a": "delta", "s": "card", "op": "text", "t": "clock", "q": "2"}, "12:00"},
+		{"var", SetVar("dash", "cpu", "p", "42"), map[string]string{"a": "delta", "s": "dash", "op": "var", "t": "cpu", "k": "p", "q": "2"}, "42"},
+		{"attr", SetAttr("dash", "cpu", "class", "hot"), map[string]string{"a": "delta", "s": "dash", "op": "attr", "t": "cpu", "k": "class", "q": "2"}, "hot"},
+		{"unattr", RemoveAttr("dash", "cpu", "class"), map[string]string{"a": "delta", "s": "dash", "op": "unattr", "t": "cpu", "k": "class", "q": "2"}, ""},
+		{"morph by ids", MorphTo("dash", "", "<b id=x>1</b>"), map[string]string{"a": "delta", "s": "dash", "op": "morph", "q": "2"}, "<b id=x>1</b>"},
+		{"append", Delta("log", OpAppend, "lines", "", []byte("<li>x</li>")), map[string]string{"a": "delta", "s": "log", "op": "append", "t": "lines", "q": "2"}, "<li>x</li>"},
 		{"res", Res("logo", "image/svg+xml", []byte("<svg/>")), map[string]string{"a": "res", "id": "logo", "type": "image/svg+xml", "q": "2"}, "<svg/>"},
 		{"del res", DelRes("logo"), map[string]string{"a": "del", "id": "logo", "q": "2"}, ""},
 		{"del", Del("card"), map[string]string{"a": "del", "s": "card", "q": "2"}, ""},
@@ -428,14 +428,14 @@ func TestEvents(t *testing.T) {
 }
 
 func TestReplies(t *testing.T) {
-	m := host(Control{{"a", "err"}, {"s", "x"}, {"re", "patch"}}, `{"code":"ENOTARGET","detail":"gone"}`)
+	m := host(Control{{"a", "err"}, {"s", "x"}, {"re", "delta"}}, `{"code":"ENOTARGET","detail":"gone"}`)
 	r, ok := m.Reply()
-	if !ok || r.OK || r.Code != ENOTARGET || r.Detail != "gone" || r.Re != "patch" || r.Surface != "x" {
+	if !ok || r.OK || r.Code != ENOTARGET || r.Detail != "gone" || r.Re != "delta" || r.Surface != "x" {
 		t.Fatalf("error reply: %+v", r)
 	}
 	err := r.Err()
 	var he *Error
-	if !errors.As(err, &he) || he.Code != ENOTARGET || err.Error() != "hotty: patch x: ENOTARGET (gone)" {
+	if !errors.As(err, &he) || he.Code != ENOTARGET || err.Error() != "hotty: delta x: ENOTARGET (gone)" {
 		t.Errorf("Err = %v", err)
 	}
 	if err := (Reply{OK: false, Re: "q", Code: EINVAL}).Err(); err.Error() != "hotty: q: EINVAL" {

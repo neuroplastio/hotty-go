@@ -123,7 +123,7 @@ func TestCards(t *testing.T) {
 	if s, _ := card(h, 1).Attr("status", "data-state"); s != "down" {
 		t.Errorf("the failing endpoint's state: %q", s)
 	}
-	// The probes come as patches: the line grows, and no document is sent
+	// The probes come as deltas: the line grows, and no document is sent
 	// again.
 	eventually(t, "five probes charted", func() bool {
 		d, _ := card(h, 0).Attr(lat.LineID(), "d")
@@ -191,7 +191,7 @@ func TestScrolling(t *testing.T) {
 	if n := docs(h); n["dash-ep0"] != 1 {
 		t.Errorf("the first card's document was sent %d times", n["dash-ep0"])
 	}
-	// What it missed while hidden came as patches.
+	// What it missed while hidden came as deltas.
 	if !selected(h, 0) || selected(h, 2) {
 		t.Error("the selection did not follow")
 	}

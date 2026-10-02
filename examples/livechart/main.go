@@ -6,13 +6,13 @@
 //
 // series.Parser reads the numbers: a column a series, named by a first
 // line with no numbers, or with -key the number after KEY=. On a HOTTY host
-// the chart is a detached surface, sent once: each frame patches its lines
-// (chart.Line.PatchShapes) and the values in its legend, and the grid only
-// when the axis changes, which series.Scale keeps from happening on every
-// sample. On a terminal that is not a host the chart is braille cells,
-// redrawn in place. When stdout is not the terminal, livechart passes its
-// input through, so it can sit in a pipeline; with no terminal at all, it
-// only does that, and sums up on stderr.
+// the chart is a detached surface, sent once: each frame's deltas change
+// its lines (chart.Line.DeltaShapes) and the values in its legend, and the
+// grid only when the axis changes, which series.Scale keeps from happening
+// on every sample. On a terminal that is not a host the chart is braille
+// cells, redrawn in place. When stdout is not the terminal, livechart
+// passes its input through, so it can sit in a pipeline; with no terminal
+// at all, it only does that, and sums up on stderr.
 package main
 
 import (
@@ -268,8 +268,8 @@ type surface struct {
 	light      bool
 	scale      *series.Scale
 
-	// What the host's document has, so that a frame patches only what
-	// changed.
+	// What the host's document has, so that a frame sends deltas only
+	// for what changed.
 	n      int // the series drawn; -1 before the first sample
 	axis   series.Axis
 	values []string // the legend's
@@ -342,7 +342,7 @@ func (s *surface) frame(d *data) {
 		s.axis = axis
 	}
 	for i, l := range lines {
-		cmds = append(cmds, l.PatchShapes(s.name, values[i])...)
+		cmds = append(cmds, l.DeltaShapes(s.name, values[i])...)
 		if legend[i] != s.values[i] {
 			cmds = append(cmds, hotty.SetText(s.name, "v"+strconv.Itoa(i), legend[i]))
 		}
