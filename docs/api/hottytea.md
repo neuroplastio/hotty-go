@@ -551,6 +551,11 @@ type Surface struct {
 	// in the surface, on text and empty space too: for a program that moves
 	// its selection to the card pressed.
 	Press bool
+	// Fit asks for an EventMsg of kind fit whenever the rows the document
+	// needs at Rect's width change: for a program that sizes the surface
+	// by its content, and lays out again when a late image makes it
+	// taller (SPEC §5.2).
+	Fit bool
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.

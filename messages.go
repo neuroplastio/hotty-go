@@ -16,6 +16,7 @@ const (
 	EventFocus  = "focus"  // the surface took the keyboard
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
+	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Caps.Drags), EventDrag stands for all three.
@@ -92,6 +93,16 @@ func (e Event) Size() (w, h float64, ok bool) {
 		return 0, 0, false
 	}
 	return *d.W, *d.H, true
+}
+
+// FitRows is the rows a fit event says the document needs now; ok is false
+// for any other event.
+func (e Event) FitRows() (rows int, ok bool) {
+	var d struct{ R *int }
+	if e.Kind != EventFit || json.Unmarshal(e.Detail, &d) != nil || d.R == nil || *d.R < 1 {
+		return 0, false
+	}
+	return *d.R, true
 }
 
 // Drag is where a drag's pointer is, and the modifier keys held

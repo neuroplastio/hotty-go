@@ -20,6 +20,7 @@ type Surface struct {
 	detached bool
 	placed   bool
 	place    hotty.Placement
+	fitRows  int  // with place.Fit: the rows the program last heard (SPEC §5.2)
 	col, row int  // where the placement's top-left cell is on the screen
 	alt      bool // placed on the alternate screen
 	created  int  // the order of creation, for stacking

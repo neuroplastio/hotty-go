@@ -151,6 +151,11 @@ type Surface struct {
 	// in the surface, on text and empty space too: for a program that moves
 	// its selection to the card pressed.
 	Press bool
+	// Fit asks for an EventMsg of kind fit whenever the rows the document
+	// needs at Rect's width change: for a program that sizes the surface
+	// by its content, and lays out again when a late image makes it
+	// taller (SPEC §5.2).
+	Fit bool
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.
@@ -163,7 +168,7 @@ type placement struct {
 	cols, rows int  // the whole surface
 	win        hotty.Window
 	z          int
-	press      bool
+	press, fit bool
 }
 
 // DefaultLimit is how many surfaces a Session keeps at most, shown and
@@ -409,10 +414,10 @@ func (h *Session) Layout(want []Surface) {
 			delete(h.placed, s.Name)
 		}
 		p := placement{at: at, cols: s.Rect.W, rows: s.Rect.H,
-			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press}
+			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press, fit: s.Fit}
 		if old, ok := h.placed[s.Name]; !ok || old != p {
 			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y,
-				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press}))
+				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press, Fit: p.fit}))
 			h.Count.Places++
 			h.placed[s.Name] = p
 		}

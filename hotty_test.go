@@ -169,6 +169,7 @@ func TestPlacement(t *testing.T) {
 		// With auto rows nothing is whole, so a window is always sent.
 		{"window on auto", Placement{Cols: 30, Window: Window{0, 0, 1, 1}}, "c=30:r=auto:x=0:y=0:w=1:h=1"},
 		{"z, press, cursor", Placement{Cols: 5, Rows: 1, Z: 1, Press: true, KeepCursor: true}, "c=5:r=1:z=1:p=1:C=1"},
+		{"fit", Placement{Cols: 5, Press: true, Fit: true}, "c=5:r=auto:p=1:f=1"},
 	}
 	for _, c := range cases {
 		want := "\x1b]7279;a=place:s=x:" + c.want + ":q=1\x1b\\"
@@ -373,6 +374,19 @@ func TestEvents(t *testing.T) {
 	}
 	if _, _, ok := button.Size(); ok {
 		t.Error("a click has no size")
+	}
+
+	fit, _ := host(Control{{"a", "ev"}, {"s", "card"}, {"e", "fit"}, {"t", ""}}, `{"r":7}`).Event()
+	if r, ok := fit.FitRows(); !ok || r != 7 {
+		t.Errorf("FitRows = %v %v", r, ok)
+	}
+	for _, bad := range []string{`{"r":0}`, `{}`, `{"r":"7"}`} {
+		if _, ok := (Event{Kind: EventFit, Detail: []byte(bad)}).FitRows(); ok {
+			t.Errorf("FitRows on %s", bad)
+		}
+	}
+	if _, ok := resize.FitRows(); ok {
+		t.Error("a resize has no fit rows")
 	}
 
 	drag, _ := host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"keys":["shift","ctrl"]}`).Event()

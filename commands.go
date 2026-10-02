@@ -66,6 +66,12 @@ type Placement struct {
 	// Press asks for a press event wherever the user presses in the
 	// placement, on text and empty space too (p=1).
 	Press bool
+	// Fit asks for a fit event whenever the rows the document needs at
+	// this width change from the rows last heard, starting from this
+	// placement's (f=1): an image or font arrived, a resource was
+	// replaced, a patch landed. The placement keeps its size; placing the
+	// surface again is the program's to do (SPEC §5.2).
+	Fit bool
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool
@@ -87,6 +93,9 @@ func (p Placement) control(surface string) Control {
 	}
 	if p.Press {
 		ctl = ctl.With("p", "1")
+	}
+	if p.Fit {
+		ctl = ctl.With("f", "1")
 	}
 	if p.KeepCursor {
 		ctl = ctl.With("C", "1")

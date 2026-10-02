@@ -76,6 +76,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (e Event) Checked() (checked, ok bool)`](#Event.Checked)
   - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
   - [`func (e Event) Fields() map[string]string`](#Event.Fields)
+  - [`func (e Event) FitRows() (rows int, ok bool)`](#Event.FitRows)
   - [`func (e Event) Link() (href, url string, ok bool)`](#Event.Link)
   - [`func (e Event) Size() (w, h float64, ok bool)`](#Event.Size)
   - [`func (e Event) Value() string`](#Event.Value)
@@ -117,7 +118,7 @@ const (
 )
 ```
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
@@ -129,6 +130,7 @@ const (
 	EventFocus  = "focus"  // the surface took the keyboard
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
+	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Caps.Drags), EventDrag stands for all three.
@@ -561,6 +563,14 @@ func (e Event) Fields() map[string]string
 
 Fields is a submit event's detail: the form's fields by name. A value that is not a string is given as its JSON, a null as nothing.
 
+### <a id="Event.FitRows"></a>func (Event) FitRows
+
+```go
+func (e Event) FitRows() (rows int, ok bool)
+```
+
+FitRows is the rows a fit event says the document needs now; ok is false for any other event.
+
 ### <a id="Event.Link"></a>func (Event) Link
 
 ```go
@@ -674,6 +684,12 @@ type Placement struct {
 	// Press asks for a press event wherever the user presses in the
 	// placement, on text and empty space too (p=1).
 	Press bool
+	// Fit asks for a fit event whenever the rows the document needs at
+	// this width change from the rows last heard, starting from this
+	// placement's (f=1): an image or font arrived, a resource was
+	// replaced, a patch landed. The placement keeps its size; placing the
+	// surface again is the program's to do (SPEC §5.2).
+	Fit bool
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool

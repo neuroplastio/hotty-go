@@ -286,16 +286,16 @@ func TestLayoutIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestPressAndZArePlaced(t *testing.T) {
+func TestPressFitAndZArePlaced(t *testing.T) {
 	s := native()
 	c := card("a", 1)
-	c.Press, c.Z = true, -3
+	c.Press, c.Fit, c.Z = true, true, -3
 	s.Layout([]Surface{c})
-	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=-3:p=1:C=1") {
+	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=-3:p=1:f=1:C=1") {
 		t.Fatalf("placement: %q", out)
 	}
-	// Asking for presses no more places it again.
-	c.Press = false
+	// Asking for presses and fit no more places it again.
+	c.Press, c.Fit = false, false
 	s.Layout([]Surface{c})
 	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=-3:C=1") {
 		t.Fatalf("without press: %q", out)

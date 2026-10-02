@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"slices"
 	"strconv"
@@ -133,7 +134,7 @@ func DefaultCaps() hotty.Caps {
 		c.Ops = append(c.Ops, string(op))
 	}
 	c.Events = []string{hotty.EventClick, hotty.EventChange, hotty.EventInput, hotty.EventSubmit,
-		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag}
+		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag, hotty.EventFit}
 	return c
 }
 
@@ -455,6 +456,11 @@ func (h *Host) protocol(format string, args ...any) {
 func (h *Host) command(m hotty.Message) {
 	a := m.Get("a")
 	code, detail, extra := h.do(a, m)
+	if code == "" {
+		// After the reply: the host lays the document out on its next
+		// frame, and fit comes from that layout.
+		defer h.refit(a, m)
+	}
 	if code == hotty.EINVAL {
 		h.protocol("%s refused: EINVAL (%s): %v", a, detail, m.Control)
 	}
@@ -678,7 +684,8 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 		return hotty.EINVAL, "z out of range", nil
 	}
 	s.placed = true
-	s.place = hotty.Placement{Cols: c, Rows: r, Z: z, Press: m.Get("p") == "1", KeepCursor: m.Get("C") == "1"}
+	s.place = hotty.Placement{Cols: c, Rows: r, Z: z, Press: m.Get("p") == "1", Fit: m.Get("f") == "1", KeepCursor: m.Get("C") == "1"}
+	s.fitRows = r
 	if _, ok := m.Control["x"]; ok || m.Control["y"] != "" || m.Control["w"] != "" || m.Control["h"] != "" {
 		s.place.Window = hotty.Window{X: x, Y: y, W: w, H: hh}
 	}
@@ -709,6 +716,33 @@ func estimateRows(s *Surface, cols int) int {
 }
 
 // --- events -------------------------------------------------------------------
+
+// refit sends fit to each surface a command may have changed the height of
+// whose placement asked for it (SPEC §5.2): the rows its document needs
+// now, by AutoRows, when they differ from the rows it last heard. A
+// resource can change any document that refers to it, so it checks all.
+func (h *Host) refit(a string, m hotty.Message) {
+	var check []*Surface
+	switch a {
+	case "res":
+		for _, name := range slices.Sorted(maps.Keys(h.surfaces)) {
+			check = append(check, h.surfaces[name])
+		}
+	case "doc", "patch", "place":
+		if s := h.surfaces[m.Get("s")]; s != nil {
+			check = append(check, s)
+		}
+	}
+	for _, s := range check {
+		if !s.placed || !s.place.Fit || s.detached {
+			continue
+		}
+		if n := max(1, min(hotty.MaxSize, h.autoRows(s, s.place.Cols))); n != s.fitRows {
+			s.fitRows = n
+			h.event(s, hotty.EventFit, "", map[string]int{"r": n})
+		}
+	}
+}
 
 func (h *Host) event(s *Surface, kind, target string, detail any) {
 	var payload []byte

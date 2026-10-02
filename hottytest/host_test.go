@@ -752,6 +752,40 @@ func TestPressAndEmit(t *testing.T) {
 	expect(t, sent(h), "ev press t=b", "ev focus t=", "ev click t=b")
 }
 
+// fit (SPEC §5.2): after whatever changed the rows the document needs, on
+// placements that asked, once for each change, from the rows placed.
+func TestFit(t *testing.T) {
+	h := New(t)
+	send(h, hotty.Doc("f", `<p id=a>one</p>`), hotty.Place("f", hotty.Placement{Cols: 10, Fit: true}))
+	expect(t, sent(h))
+	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("one\ntwo")))
+	expect(t, sent(h), `ev fit t= {"r":2}`)
+	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("one")))
+	expect(t, sent(h), `ev fit t= {"r":1}`)
+	send(h, hotty.Patch("f", hotty.OpText, "a", "", []byte("uno")))
+	expect(t, sent(h))
+
+	// Placed at rows the document does not need: told at once.
+	send(h, hotty.Place("f", hotty.Placement{Cols: 10, Rows: 4, Fit: true}))
+	expect(t, sent(h), `ev fit t= {"r":1}`)
+
+	// A resource can change any document: each one that asked is checked.
+	send(h, hotty.Doc("g", `<p>one</p>`), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 3, Fit: true}))
+	expect(t, sent(h), `ev fit t= {"r":1}`)
+	tall := 1
+	h.autoRows = func(*Surface, int) int { return tall }
+	tall = 5
+	send(h, hotty.Res("img", "image/png", []byte("x")))
+	expect(t, sent(h), `ev fit t= {"r":5}`, `ev fit t= {"r":5}`)
+
+	// Placed again without f=1: no more.
+	send(h, hotty.Place("f", hotty.Placement{Cols: 10}), hotty.Hide("g"))
+	sent(h)
+	tall = 2
+	send(h, hotty.Res("img", "image/png", []byte("y")), hotty.Patch("f", hotty.OpText, "a", "", []byte("x")))
+	expect(t, sent(h))
+}
+
 // A drag (SPEC §9.1): dragstart, drag each time the element under the
 // pointer changes (or, over none, the cell), dragend, and a click only
 // where it began.
