@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
@@ -103,7 +106,76 @@ func TestStopped(t *testing.T) {
 
 func TestFlags(t *testing.T) {
 	var out strings.Builder
-	if code := run(context.Background(), []string{"-cols", "0"}, env{stdout: &out, stderr: &out}); code != 2 {
+	if code := run(context.Background(), []string{"-cols", "-1"}, env{stdout: &out, stderr: &out}); code != 2 {
 		t.Fatalf("exit %d", code)
+	}
+}
+
+// A recording: its markers caption the window, and its long pause is cut
+// to its idle time limit.
+const cast = `{"version": 3, "term": {"cols": 20, "rows": 3, "type": "xterm-256color"}, "title": "demo", "idle_time_limit": 0.5}
+[0.0, "o", "$ "]
+[0.1, "m", "Type a command"]
+[0.2, "o", "make\r\nok"]
+[5.0, "m", "Done"]
+[0.1, "i", "q"]
+`
+
+func castFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "demo.cast")
+	if err := os.WriteFile(path, []byte(cast), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestCast(t *testing.T) {
+	h := hottytest.New(t)
+	e, errs := on(h)
+	if code := run(context.Background(), []string{"-cast", castFile(t), "-speed", "0"}, e); code != 0 {
+		t.Fatalf("exit %d: %s", code, errs.String())
+	}
+	s := h.Surface("replay-screen")
+	if s == nil || s.Placement().Cols != 24 {
+		t.Fatalf("surfaces %v: want one placed 20 columns wide and the window's 4", h.Surfaces())
+	}
+	// The cursor's cell, after "ok", is a space.
+	if got := s.TextOf("vt-r0") + "|" + s.TextOf("vt-r1"); got != "$ make|ok " {
+		t.Errorf("rows %q", got)
+	}
+	var titles []string
+	for _, cmd := range h.Commands() {
+		if cmd.Get("a") == "delta" && cmd.Get("t") == "title" {
+			titles = append(titles, string(cmd.Payload))
+		}
+	}
+	if want := []string{"Type a command", "Done"}; strings.Join(titles, "|") != strings.Join(want, "|") {
+		t.Errorf("titles %q, want %q after the recording's own", titles, want)
+	}
+	if got := s.TextOf("title"); got != "Done" {
+		t.Errorf("title at the end %q", got)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	rec, err := load(castFile(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.cols != 20 || rec.rows != 3 || rec.title != "demo" || len(rec.events) != 4 {
+		t.Fatalf("recording %+v", rec)
+	}
+	// The 4.8s before "Done" is cut to the limit; what was typed is not played.
+	if ev := rec.events[3]; ev.caption != "Done" || ev.after != 500*time.Millisecond {
+		t.Errorf("last event %+v", ev)
+	}
+}
+
+func TestCastNotThere(t *testing.T) {
+	var out strings.Builder
+	code := run(context.Background(), []string{"-cast", filepath.Join(t.TempDir(), "none.cast")}, env{stdout: &out, stderr: &out})
+	if code != 1 || !strings.HasPrefix(out.String(), "replay: ") {
+		t.Fatalf("exit %d: %q", code, out.String())
 	}
 }

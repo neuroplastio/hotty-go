@@ -55,7 +55,7 @@ of what it imports:
 | `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
 | `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
-| `github.com/neuroplastio/hotty-go/hottyvt` | `hottyvt` | x/vt, a terminal emulator |
+| `github.com/neuroplastio/hotty-go/hottyvt` | `hottyvt`, `asciicast` | x/vt, a terminal emulator; asciicast, the standard library |
 
 ```
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
@@ -75,6 +75,7 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyte
 | [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
 | [`hottyvt`](docs/api/hottyvt.md) | Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
+| [`hottyvt/asciicast`](docs/api/hottyvt-asciicast.md) | Package asciicast reads terminal recordings in asciinema's asciicast format, versions 2 and 3: a header with the terminal's size, then what the recorded program wrote, each piece at the time it wrote it, with markers a recording may carry between them. |
 | [`series`](docs/api/series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |
 <!-- /docgen:packages -->
 
