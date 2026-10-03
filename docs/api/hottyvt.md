@@ -30,7 +30,7 @@ for chunk := range output {
 
 The screen takes the terminal's look from the host stylesheet (SPEC §8): its font (--hotty-font), its font size, its row height (--hotty-cell-h), its foreground and background, and its 16 colours (--hotty-ansi-0 to 15), so a screen looks like the terminal it is shown in. The colours of the 256-colour palette above 15 and 24-bit colours are drawn as given. Add CSS to the document's stylesheet.
 
-The custom property --vt-scale on the screen's element sizes it: at 1 (the default) a cell of the screen is a cell of the terminal, at 0.5 it is half one. For a screen of 120 columns in a placement of 80, set it to 80/120 (SetScale, or Scale before HTML). The screen's columns are the terminal's cells, scaled, so the fit is exact; the font's own shapes fill them as well as they fit a cell.
+The custom property --vt-scale on the screen's element sizes it: at 1 (the default) a cell of the screen is a cell of the terminal, at 0.5 it is half one. For a screen of 120 columns in a placement of 80, set it to 80/120 (SetScale, or Scale before HTML). The screen's columns are the terminal's cells, scaled, so the fit is exact; the font's own shapes fill them as well as they fit a cell. Box-drawing characters and block elements are drawn to fill their cells, as a terminal draws them, so borders and bars meet across rows; the dashed lines and the diagonals are the font's.
 
 ### <a id="hdr-What_it_leaves_out"></a>What it leaves out
 
@@ -116,10 +116,10 @@ const CSS = `
 .vt .vt-u4 { text-decoration-style: dotted; }
 .vt .vt-u5 { text-decoration-style: dashed; }
 .vt .vt-cur { color: var(--hotty-bg); background: var(--hotty-fg); }
-`
+` + drawCSS
 ```
 
-CSS lays a screen out: a block of its rows, in the terminal's font, scaled by --vt-scale. Its columns are the terminal's cells (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing makes up the difference, so the screen keeps its width and its columns line up as they do in a terminal, which draws each character in its cell. Add it to the document's stylesheet once, however many screens it shows.
+CSS lays a screen out: a block of its rows, in the terminal's font, scaled by --vt-scale. Its columns are the terminal's cells (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing makes up the difference, so the screen keeps its width and its columns line up as they do in a terminal, which draws each character in its cell. Box-drawing characters and block elements are drawn by it (draw.go). Add it to the document's stylesheet once, however many screens it shows.
 
 <a id="DefaultID"></a>
 

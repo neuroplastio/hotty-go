@@ -32,7 +32,10 @@
 // is half one. For a screen of 120 columns in a placement of 80, set it to
 // 80/120 (SetScale, or Scale before HTML). The screen's columns are the
 // terminal's cells, scaled, so the fit is exact; the font's own shapes fill
-// them as well as they fit a cell.
+// them as well as they fit a cell. Box-drawing characters and block
+// elements are drawn to fill their cells, as a terminal draws them, so
+// borders and bars meet across rows; the dashed lines and the diagonals
+// are the font's.
 //
 // # What it leaves out
 //
@@ -70,6 +73,7 @@ const DefaultID = "vt"
 // (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing
 // makes up the difference, so the screen keeps its width and its columns
 // line up as they do in a terminal, which draws each character in its cell.
+// Box-drawing characters and block elements are drawn by it (draw.go).
 // Add it to the document's stylesheet once, however many screens it shows.
 const CSS = `
 .vt { --vt-scale: 1; display: block; box-sizing: content-box; overflow: hidden;
@@ -93,7 +97,7 @@ const CSS = `
 .vt .vt-u4 { text-decoration-style: dotted; }
 .vt .vt-u5 { text-decoration-style: dashed; }
 .vt .vt-cur { color: var(--hotty-bg); background: var(--hotty-fg); }
-`
+` + drawCSS
 
 // Screen is a terminal's screen shown on a surface. It is not safe for
 // concurrent use: Write, HTML and Delta from one goroutine, or under one
@@ -294,6 +298,32 @@ type run struct {
 	wide   bool
 	cursor bool
 	text   strings.Builder
+	// The drawn character the run ends with (draw.go), and how many of it,
+	// while more of it may follow.
+	k rune
+	n int
+}
+
+// add puts a cell's content at the run's end.
+func (r *run) add(content string) {
+	k, kind := drawKind(content)
+	if kind&tiles != 0 && k == r.k {
+		r.n++
+		return
+	}
+	r.flushDrawn()
+	if kind != 0 {
+		r.k, r.n = k, 1
+		return
+	}
+	r.text.WriteString(html.EscapeString(content))
+}
+
+func (r *run) flushDrawn() {
+	if r.n > 0 {
+		r.text.WriteString(drawElement(r.k, r.n))
+		r.k, r.n = 0, 0
+	}
 }
 
 // row is the markup of row y: its cells as text, in spans where they are
@@ -334,7 +364,7 @@ func (s *Screen) row(y int) string {
 			flush()
 			r = &run{style: c.Style, link: link, wide: wide, cursor: atCursor}
 		}
-		r.text.WriteString(html.EscapeString(content(c)))
+		r.add(content(c))
 	}
 	flush()
 	return b.String()
@@ -365,6 +395,7 @@ func linkURL(u string) string {
 }
 
 func (r *run) write(b *strings.Builder) {
+	r.flushDrawn()
 	var class []string
 	var style []string
 	st := r.style

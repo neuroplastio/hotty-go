@@ -43,7 +43,7 @@ func screen(t *testing.T, cols, rows int, opts ...hottyvt.Option) *hottyvt.Scree
 
 // What a session draws, in the chunks a pty would hand over: text and
 // styles, the cursor moving, scrolling, clearing, the alternate screen, wide
-// characters, hyperlinks, and markup in the text.
+// characters, hyperlinks, markup in the text, and a box with a bar in it.
 var session = []string{
 	"$ ls\r\n",
 	"\x1b[1;34mdir\x1b[0m  \x1b[32mrun.sh\x1b[0m  <a&b>.txt\r\n$ ",
@@ -56,6 +56,7 @@ var session = []string{
 	"界面 wide\r\n",
 	"line\r\nline\r\nline\r\nscrolled\r\n",
 	"\x1b[2J\x1b[Hcleared",
+	"\r\n╭──╮\r\n│\x1b[34m█\x1b[0m░│\r\n╰──╯",
 	"\x1b[?25l",
 	"\x1b[?25h\x1b[2;3H",
 }
@@ -134,6 +135,12 @@ func TestStyles(t *testing.T) {
 		{"wide", "界x", `<span class="vt-w">界</span>x`},
 		{"link", "\x1b]8;;https://e.com/?a=1&b=2\x1b\\go\x1b]8;;\x1b\\", `<a href="https://e.com/?a=1&amp;b=2" target="_blank">go</a>`},
 		{"link not shown", "\x1b]8;;file:///etc/passwd\x1b\\f\x1b]8;;\x1b\\", `f`},
+		{"box drawing", "╭─╮", `<span class="vt-k vt-k256d">╭</span><span class="vt-k vt-k2500">─</span><span class="vt-k vt-k256e">╮</span>`},
+		{"a line's run is one element", "├───┤", `<span class="vt-k vt-k251c">├</span><span class="vt-k vt-k2500" style="--vt-n:3">───</span><span class="vt-k vt-k2524">┤</span>`},
+		{"a corner's is not", "┼┼", `<span class="vt-k vt-k253c">┼</span><span class="vt-k vt-k253c">┼</span>`},
+		{"text between", "│a│", `<span class="vt-k vt-k2502">│</span>a<span class="vt-k vt-k2502">│</span>`},
+		{"a bar in colour", "\x1b[34m██\x1b[0m░", `<span style="color:var(--hotty-ansi-4)"><span class="vt-k vt-k2588" style="--vt-n:2">██</span></span><span class="vt-k vt-k2591">░</span>`},
+		{"dashes and diagonals are the font's", "┄╱", `┄╱`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s := screen(t, 10, 2, hottyvt.HideCursor())
@@ -143,6 +150,20 @@ func TestStyles(t *testing.T) {
 				t.Errorf("\n got %s\nwant %s", got, want)
 			}
 		})
+	}
+}
+
+// A drawn character stays in its element, for the text a reader copies.
+func TestDrawnKeepTheirText(t *testing.T) {
+	s := screen(t, 8, 2, hottyvt.HideCursor())
+	_, _ = s.WriteString("╭──╮ ok\r\n│█░│")
+	h := hottytest.New(t)
+	send(t, h, hotty.Doc("box", "<style>"+hottyvt.CSS+"</style>"+s.HTML()))
+	if got := h.Surface("box").TextOf(s.RowID(0)) + "\n" + h.Surface("box").TextOf(s.RowID(1)); got != "╭──╮ ok\n│█░│" {
+		t.Errorf("the surface's text is %q", got)
+	}
+	if got := s.Text(); got != "╭──╮ ok\n│█░│" {
+		t.Errorf("Text() = %q", got)
 	}
 }
 
