@@ -8,8 +8,8 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285
-	github.com/neuroplastio/hotty-go v0.0.0-20261002232631-57fdbb0d11e5
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-00010101000000-000000000000
+	github.com/neuroplastio/hotty-go v0.0.0-20261003200607-8d270e552b02
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261003200607-8d270e552b02
 )
 
 require (
