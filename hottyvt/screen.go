@@ -83,7 +83,6 @@ const CSS = `
 .vt .vt-w { display: inline-block; letter-spacing: 0; text-align: center;
   width: calc(2 * var(--vt-scale) * var(--hotty-cell-w)); }
 .vt .vt-b { font-weight: bold; }
-.vt .vt-f { opacity: 0.6; }
 .vt .vt-i { font-style: italic; }
 .vt .vt-h { visibility: hidden; }
 .vt .vt-s { text-decoration-line: line-through; }
@@ -114,6 +113,8 @@ type Screen struct {
 
 	// hidden is whether the program hid the cursor (DECTCEM).
 	hidden bool
+	// title is the title the program last set (OSC 0, 2).
+	title string
 }
 
 // Option sets up a Screen.
@@ -147,7 +148,10 @@ func New(cols, rows int, opts ...Option) *Screen {
 		o(s)
 	}
 	s.emu = vt.NewEmulator(max(cols, 1), max(rows, 1))
-	s.emu.SetCallbacks(vt.Callbacks{CursorVisibility: func(visible bool) { s.hidden = !visible }})
+	s.emu.SetCallbacks(vt.Callbacks{
+		CursorVisibility: func(visible bool) { s.hidden = !visible },
+		Title:            func(t string) { s.title = t },
+	})
 	// The emulator writes its answers to a pipe, and Write waits until
 	// they are read.
 	go func() {
@@ -183,6 +187,11 @@ func (s *Screen) ElementID() string { return s.id }
 
 // RowID is the id of the screen's row y, counted from 0 at the top.
 func (s *Screen) RowID(y int) string { return s.id + "-r" + strconv.Itoa(y) }
+
+// Title is the title the program last gave its window (OSC 0 or 2), ""
+// before it gives one: for a frame around the screen to show, as a
+// terminal's window does.
+func (s *Screen) Title() string { return s.title }
 
 // Size is the screen's size in cells.
 func (s *Screen) Size() (cols, rows int) { return s.emu.Width(), s.emu.Height() }
@@ -363,6 +372,12 @@ func (r *run) write(b *strings.Builder) {
 	if st.Attrs&uv.AttrReverse != 0 {
 		fg, bg = or(bg, "var(--hotty-bg)"), or(fg, "var(--hotty-fg)")
 	}
+	if st.Attrs&uv.AttrFaint != 0 {
+		// Faint is the colour part of the way to the background, as
+		// terminals draw it: opacity would fade the background too, and
+		// some hosts leave it out on text.
+		fg = "color-mix(in srgb, " + or(fg, "var(--hotty-fg)") + " 60%, " + or(bg, "var(--hotty-bg)") + ")"
+	}
 	if r.cursor {
 		class = append(class, "vt-cur")
 	} else {
@@ -379,7 +394,7 @@ func (r *run) write(b *strings.Builder) {
 	for _, a := range [...]struct {
 		bit   uint8
 		class string
-	}{{uv.AttrBold, "vt-b"}, {uv.AttrFaint, "vt-f"}, {uv.AttrItalic, "vt-i"}, {uv.AttrConceal, "vt-h"}, {uv.AttrStrikethrough, "vt-s"}} {
+	}{{uv.AttrBold, "vt-b"}, {uv.AttrItalic, "vt-i"}, {uv.AttrConceal, "vt-h"}, {uv.AttrStrikethrough, "vt-s"}} {
 		if st.Attrs&a.bit != 0 {
 			class = append(class, a.class)
 		}

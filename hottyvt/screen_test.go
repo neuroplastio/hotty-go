@@ -122,7 +122,9 @@ func TestStyles(t *testing.T) {
 		{"truecolor", "\x1b[38;2;1;2;255mt", `<span style="color:#0102ff">t</span>`},
 		{"reverse", "\x1b[7mr", `<span style="color:var(--hotty-bg);background:var(--hotty-fg)">r</span>`},
 		{"reverse colours", "\x1b[7;31;42mr", `<span style="color:var(--hotty-ansi-2);background:var(--hotty-ansi-1)">r</span>`},
-		{"attributes", "\x1b[1;2;3;8;9ma", `<span class="vt-b vt-f vt-i vt-h vt-s">a</span>`},
+		{"attributes", "\x1b[1;3;8;9ma", `<span class="vt-b vt-i vt-h vt-s">a</span>`},
+		{"faint", "\x1b[2mf", `<span style="color:color-mix(in srgb, var(--hotty-fg) 60%, var(--hotty-bg))">f</span>`},
+		{"faint in colour", "\x1b[2;31;44mf", `<span style="color:color-mix(in srgb, var(--hotty-ansi-1) 60%, var(--hotty-ansi-4));background:var(--hotty-ansi-4)">f</span>`},
 		{"underline", "\x1b[4mu", `<span class="vt-u">u</span>`},
 		{"curly underline in colour", "\x1b[4:3;58;2;255;0;0mu", `<span class="vt-u vt-u3" style="text-decoration-color:#ff0000">u</span>`},
 		{"a run", "\x1b[32mabc\x1b[0md", `<span style="color:var(--hotty-ansi-2)">abc</span>d`},
@@ -220,6 +222,21 @@ func TestScale(t *testing.T) {
 	one := screen(t, 4, 1, hottyvt.Scale(1))
 	if got := one.HTML(); strings.Contains(got, "vt-scale") {
 		t.Errorf("scale 1 is the default: %s", got)
+	}
+}
+
+func TestTitle(t *testing.T) {
+	s := screen(t, 4, 1)
+	if s.Title() != "" {
+		t.Errorf("before one: %q", s.Title())
+	}
+	_, _ = s.WriteString("\x1b]2;make test\x07")
+	if s.Title() != "make test" {
+		t.Errorf("OSC 2: %q", s.Title())
+	}
+	_, _ = s.WriteString("\x1b]0;vim\x1b\\")
+	if s.Title() != "vim" {
+		t.Errorf("OSC 0: %q", s.Title())
 	}
 }
 

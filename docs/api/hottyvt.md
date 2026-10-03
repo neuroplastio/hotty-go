@@ -79,6 +79,7 @@ inner vt-r1 <span style="color:var(--hotty-ansi-2)">ok</span>  build 0.4s
   - [`func (s *Screen) SetScale(surface string, scale float64) string`](#Screen.SetScale)
   - [`func (s *Screen) Size() (cols, rows int)`](#Screen.Size)
   - [`func (s *Screen) Text() string`](#Screen.Text)
+  - [`func (s *Screen) Title() string`](#Screen.Title)
   - [`func (s *Screen) Write(p []byte) (int, error)`](#Screen.Write)
   - [`func (s *Screen) WriteString(p string) (int, error)`](#Screen.WriteString)
 
@@ -105,7 +106,6 @@ const CSS = `
 .vt .vt-w { display: inline-block; letter-spacing: 0; text-align: center;
   width: calc(2 * var(--vt-scale) * var(--hotty-cell-w)); }
 .vt .vt-b { font-weight: bold; }
-.vt .vt-f { opacity: 0.6; }
 .vt .vt-i { font-style: italic; }
 .vt .vt-h { visibility: hidden; }
 .vt .vt-s { text-decoration-line: line-through; }
@@ -294,6 +294,14 @@ Output:
 total 3
 done
 ```
+
+### <a id="Screen.Title"></a>func (*Screen) Title
+
+```go
+func (s *Screen) Title() string
+```
+
+Title is the title the program last gave its window (OSC 0 or 2), "" before it gives one: for a frame around the screen to show, as a terminal's window does.
 
 ### <a id="Screen.Write"></a>func (*Screen) Write
 

@@ -16,15 +16,17 @@ func on(h *hottytest.Host) (env, *strings.Builder) {
 }
 
 // The last frame of the session, as text.
-const last = `~/acme $ make test
-go test ./...
-ok   acme/api       0.412s
-ok   acme/store     1.031s
-ok   acme/auth      0.088s
-FAIL acme/web       0.207s
-lint   ████████████████████ 100%
-make: *** [test] Error 1
-~/acme $`
+const last = `~/acme main ❯ make test
+✓ acme/api     0.41s
+✓ acme/store   1.03s
+✓ acme/auth    0.09s
+✗ acme/web     0.21s
+  web_test.go:42 expected 200, got 500
+
+✓ lint ━━━━━━━━━━━━━━━━━━━━━━━━ 100%
+
+3 passed · 1 failed · 1.8s
+~/acme main ❯`
 
 func TestSurface(t *testing.T) {
 	h := hottytest.New(t)
@@ -36,24 +38,35 @@ func TestSurface(t *testing.T) {
 	if s == nil || !s.Detached() || s.Placement().Cols != 34 {
 		t.Fatalf("surfaces %v", h.Surfaces())
 	}
-	if got := s.TextOf("vt-r6"); got != "lint   ████████████████████ 100%" {
+	if got := s.TextOf("vt-r7"); got != "✓ lint ━━━━━━━━━━━━━━━━━━━━━━━━ 100%" {
 		t.Errorf("the progress row at the end: %q", got)
 	}
-	// Scaled to the placement: 32 of its columns hold the session's 64.
-	if got := s.HTML(); !strings.Contains(got, "--vt-scale:0.5") {
+	// Scaled to the placement: 32 of its columns, past the margins, hold
+	// the session's 54 and the padding's 2; the window with it.
+	if got := s.HTML(); !strings.Contains(got, "--vt-scale:0.571") || !strings.Contains(got, `style="--s:0.571"`) {
 		t.Errorf("not scaled: %s", got)
 	}
-	// Each frame went as deltas of the rows it changed: row 6 changed when
-	// the cursor came to it, at each of the progress line's eleven
-	// rewrites, and when the cursor left it, a command each.
-	var rows6 int
+	// Each frame went as deltas of what it changed: the progress row at
+	// each of its thirteen steps, and the title each time the session
+	// named its window.
+	var lint []string
+	var titles []string
 	for _, cmd := range h.Commands() {
-		if cmd.Get("a") == "delta" && cmd.Get("t") == "vt-r6" {
-			rows6++
+		switch {
+		case cmd.Get("a") == "delta" && cmd.Get("t") == "vt-r7":
+			lint = append(lint, cmd.Get("op"))
+		case cmd.Get("a") == "delta" && cmd.Get("t") == "title":
+			titles = append(titles, string(cmd.Payload))
 		}
 	}
-	if rows6 != 13 {
-		t.Errorf("%d deltas to row 6, want 13", rows6)
+	if len(lint) < 13 {
+		t.Errorf("%d deltas to the progress row, want at least 13", len(lint))
+	}
+	if want := []string{"~/acme", "make test — ~/acme", "~/acme"}; strings.Join(titles, "|") != strings.Join(want, "|") {
+		t.Errorf("titles %q, want %q", titles, want)
+	}
+	if got := s.TextOf("title"); got != "~/acme" {
+		t.Errorf("title at the end %q", got)
 	}
 }
 
