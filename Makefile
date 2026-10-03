@@ -9,7 +9,7 @@ STATICCHECK ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
 # standard library are modules of their own, so that a program takes on
 # only what it imports; the example programs are one too. Each target below
 # that runs Go runs it in every module.
-SDK         := . hottyterm hottytea hottytest
+SDK         := . hottyterm hottytea hottytest hottyvt
 MODULES     := $(SDK) examples
 
 .PHONY: check fmt tidy vet lint test cover docs docs-check examples pin vectors clean

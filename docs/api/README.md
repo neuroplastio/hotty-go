@@ -14,4 +14,5 @@ A page for each package of `github.com/neuroplastio/hotty-go`, written from the 
 | [`hottytea`](hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
 | [`hottyterm`](hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
+| [`hottyvt`](hottyvt.md) | Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
 | [`series`](series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |

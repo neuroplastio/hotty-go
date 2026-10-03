@@ -55,6 +55,7 @@ of what it imports:
 | `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
 | `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
+| `github.com/neuroplastio/hotty-go/hottyvt` | `hottyvt` | x/vt, a terminal emulator |
 
 ```
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
@@ -73,6 +74,7 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyte
 | [`hottytea`](docs/api/hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
 | [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
+| [`hottyvt`](docs/api/hottyvt.md) | Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
 | [`series`](docs/api/series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |
 <!-- /docgen:packages -->
 
@@ -100,6 +102,7 @@ go run ./dashboard https://example.com
 | [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
 | [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | The SDK has no Markdown in it: the program renders with a Markdown library (goldmark) and sends the HTML, the way it would any other. |
 | [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.SetVar) and text deltas change the labels (hotty.SetText), a few dozen bytes each, in synchronized output so the host shows them together (SPEC §6). |
+| [replay](examples/replay) | Replay plays a terminal session back on a surface, at the size it was recorded and scaled to fit, and leaves its last frame in the scrollback. | It shows a terminal inside a document: hottyvt keeps a terminal emulator of the session's size, apart from the terminal the program runs in, and sends its screen as HTML, then a delta per row that changes, in synchronized output so the host shows each frame whole (SPEC §6). |
 <!-- /docgen:examples -->
 
 ## Documentation

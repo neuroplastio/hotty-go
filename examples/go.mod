@@ -15,6 +15,11 @@ require (
 )
 
 require (
+	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
+	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285 // indirect
+)
+
+require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/x/ansi v0.11.8 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -25,6 +30,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
+	github.com/neuroplastio/hotty-go/hottyvt v0.0.0-20261002232631-57fdbb0d11e5
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/net v0.39.0 // indirect
@@ -37,4 +43,5 @@ replace (
 	github.com/neuroplastio/hotty-go/hottytea => ../hottytea
 	github.com/neuroplastio/hotty-go/hottyterm => ../hottyterm
 	github.com/neuroplastio/hotty-go/hottytest => ../hottytest
+	github.com/neuroplastio/hotty-go/hottyvt => ../hottyvt
 )
