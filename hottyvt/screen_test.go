@@ -3,6 +3,8 @@ package hottyvt_test
 import (
 	"bytes"
 	"io"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -61,6 +63,24 @@ var session = []string{
 	"\x1b[?25h\x1b[2;3H",
 }
 
+// attrs is an element's start tag and its attributes.
+var attrs = regexp.MustCompile(`<([a-z]+)((?: [a-z-]+="[^"]*")+)>`)
+
+// sorted is markup with each element's attributes in order: a delta morphs
+// an element, which adds an attribute after those it has, as a browser does.
+func sorted(markup string) string {
+	return attrs.ReplaceAllStringFunc(markup, func(tag string) string {
+		m := attrs.FindStringSubmatch(tag)
+		as := strings.SplitAfter(m[2], `"`)
+		var pairs []string
+		for i := 0; i+1 < len(as); i += 2 {
+			pairs = append(pairs, as[i]+as[i+1])
+		}
+		sort.Strings(pairs)
+		return "<" + m[1] + strings.Join(pairs, "") + ">"
+	})
+}
+
 // The surface, given the screen once and its deltas after every chunk, is
 // at every step the document the screen makes from scratch.
 func TestDeltasKeepTheSurfaceCurrent(t *testing.T) {
@@ -73,7 +93,7 @@ func TestDeltasKeepTheSurfaceCurrent(t *testing.T) {
 		_, _ = twin.WriteString(chunk)
 		send(t, h, hotty.Sync(s.Delta("vt")...))
 		send(t, h, hotty.Doc("fresh", twin.HTML()))
-		if got, want := h.Surface("vt").HTML(), h.Surface("fresh").HTML(); got != want {
+		if got, want := sorted(h.Surface("vt").HTML()), sorted(h.Surface("fresh").HTML()); got != want {
 			t.Fatalf("after chunk %d %q:\n got %s\nwant %s", i, chunk, got, want)
 		}
 	}
@@ -98,7 +118,7 @@ func TestDeltaIsTheRowsThatChanged(t *testing.T) {
 		}
 	}
 	if m := ms[0]; m.Get("t") != "vt-r1" || m.Get("op") != "inner" ||
-		!strings.Contains(string(m.Payload), `two!<span class="vt-cur">`) {
+		!strings.Contains(string(m.Payload), `<span class="vt-t" style="--vt-n:4">two!</span><span class="vt-cur">`) {
 		t.Errorf("row 1: %v %s", m.Control, m.Payload)
 	}
 	if m := ms[1]; m.Get("t") != "vt-r2" || m.Get("op") != "text" || string(m.Payload) != "three" {
@@ -128,19 +148,23 @@ func TestStyles(t *testing.T) {
 		{"faint in colour", "\x1b[2;31;44mf", `<span style="color:color-mix(in srgb, var(--hotty-ansi-1) 60%, var(--hotty-ansi-4));background:var(--hotty-ansi-4)">f</span>`},
 		{"underline", "\x1b[4mu", `<span class="vt-u">u</span>`},
 		{"curly underline in colour", "\x1b[4:3;58;2;255;0;0mu", `<span class="vt-u vt-u3" style="text-decoration-color:#ff0000">u</span>`},
-		{"a run", "\x1b[32mabc\x1b[0md", `<span style="color:var(--hotty-ansi-2)">abc</span>d`},
+		{"a run", "\x1b[32mabc\x1b[0md", `<span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:3">abc</span>d`},
 		{"markup", "<b>&amp;", `&lt;b&gt;&amp;amp;`},
-		{"background to the end", "a\x1b[41m  \x1b[0m", `a<span style="background:var(--hotty-ansi-1)">  </span>`},
+		{"background to the end", "a\x1b[41m  \x1b[0m", `<span class="vt-t">a</span><span style="background:var(--hotty-ansi-1)">  </span>`},
 		{"blank end dropped", "a   ", `a`},
 		{"wide", "界x", `<span class="vt-w">界</span>x`},
+		{"a glyph from another font", "▸ x", `<span class="vt-t">▸</span> x`},
+		{"each its own", "··x", `<span class="vt-t">·</span><span class="vt-t">·</span>x`},
+		{"bold", "\x1b[1mab\x1b[0m c", `<span class="vt-t vt-b" style="--vt-n:2">ab</span> c`},
 		{"link", "\x1b]8;;https://e.com/?a=1&b=2\x1b\\go\x1b]8;;\x1b\\", `<a href="https://e.com/?a=1&amp;b=2" target="_blank">go</a>`},
+		{"a link is its box", "\x1b]8;;https://e.com\x1b\\\x1b[31mgo\x1b]8;;\x1b\\!", `<a href="https://e.com" target="_blank" class="vt-t" style="color:var(--hotty-ansi-1);--vt-n:2">go</a><span style="color:var(--hotty-ansi-1)">!</span>`},
 		{"link not shown", "\x1b]8;;file:///etc/passwd\x1b\\f\x1b]8;;\x1b\\", `f`},
 		{"box drawing", "╭─╮", `<span class="vt-k vt-k256d">╭</span><span class="vt-k vt-k2500">─</span><span class="vt-k vt-k256e">╮</span>`},
 		{"a line's run is one element", "├───┤", `<span class="vt-k vt-k251c">├</span><span class="vt-k vt-k2500" style="--vt-n:3">───</span><span class="vt-k vt-k2524">┤</span>`},
 		{"a corner's is not", "┼┼", `<span class="vt-k vt-k253c">┼</span><span class="vt-k vt-k253c">┼</span>`},
-		{"text between", "│a│", `<span class="vt-k vt-k2502">│</span>a<span class="vt-k vt-k2502">│</span>`},
+		{"text between", "│a│", `<span class="vt-k vt-k2502">│</span><span class="vt-t">a</span><span class="vt-k vt-k2502">│</span>`},
 		{"a bar in colour", "\x1b[34m██\x1b[0m░", `<span style="color:var(--hotty-ansi-4)"><span class="vt-k vt-k2588" style="--vt-n:2">██</span></span><span class="vt-k vt-k2591">░</span>`},
-		{"dashes and diagonals are the font's", "┄╱", `┄╱`},
+		{"dashes and diagonals are the font's", "┄╱", `<span class="vt-t">┄</span>╱`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s := screen(t, 10, 2, hottyvt.HideCursor())
@@ -170,11 +194,11 @@ func TestDrawnKeepTheirText(t *testing.T) {
 func TestCursor(t *testing.T) {
 	s := screen(t, 6, 2)
 	_, _ = s.WriteString("ab\x1b[1;2H")
-	if got := s.HTML(); !strings.Contains(got, `a<span class="vt-cur">b</span>`) {
+	if got := s.HTML(); !strings.Contains(got, `<span class="vt-t">a</span><span class="vt-cur">b</span>`) {
 		t.Errorf("on a character: %s", got)
 	}
 	_, _ = s.WriteString("\x1b[2;4H")
-	if got := s.HTML(); !strings.Contains(got, `<div id="vt-r1">   <span class="vt-cur"> </span></div>`) {
+	if got := s.HTML(); !strings.Contains(got, `<div id="vt-r1"><span class="vt-t" style="--vt-n:3">   </span><span class="vt-cur"> </span></div>`) {
 		t.Errorf("past the end of the row: %s", got)
 	}
 	_, _ = s.WriteString("\x1b[?25l")

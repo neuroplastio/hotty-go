@@ -30,7 +30,7 @@ for chunk := range output {
 
 The screen takes the terminal's look from the host stylesheet (SPEC §8): its font (--hotty-font), its font size, its row height (--hotty-cell-h), its foreground and background, and its 16 colours (--hotty-ansi-0 to 15), so a screen looks like the terminal it is shown in. The colours of the 256-colour palette above 15 and 24-bit colours are drawn as given. Add CSS to the document's stylesheet.
 
-The custom property --vt-scale on the screen's element sizes it: at 1 (the default) a cell of the screen is a cell of the terminal, at 0.5 it is half one. For a screen of 120 columns in a placement of 80, set it to 80/120 (SetScale, or Scale before HTML). The screen's columns are the terminal's cells, scaled, so the fit is exact; the font's own shapes fill them as well as they fit a cell. Box-drawing characters and block elements are drawn to fill their cells, as a terminal draws them, so borders and bars meet across rows; the dashed lines and the diagonals are the font's.
+The custom property --vt-scale on the screen's element sizes it: at 1 (the default) a cell of the screen is a cell of the terminal, at 0.5 it is half one. For a screen of 120 columns in a placement of 80, set it to 80/120 (SetScale, or Scale before HTML). The screen's columns are the terminal's cells, scaled, so the fit is exact; the font's own shapes fill them as well as they fit a cell. A character the font lacks, which the browser sets in a fallback font of another width, and a bold face wider than the regular one move nothing after them: each run of text sits in a box as wide as its cells (CSS). Box-drawing characters and block elements are drawn to fill their cells, as a terminal draws them, so borders and bars meet across rows; the dashed lines and the diagonals are the font's.
 
 ### <a id="hdr-What_it_leaves_out"></a>What it leaves out
 
@@ -57,7 +57,7 @@ show(s.Delta("build"))
 Output:
 
 ```
-inner vt-r1 <span style="color:var(--hotty-ansi-2)">ok</span>  build 0.4s
+inner vt-r1 <span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:2">ok</span>  build 0.4s
 ```
 
 ## <a id="pkg-index"></a>Index
@@ -103,10 +103,13 @@ const CSS = `
   color: var(--hotty-fg); background: var(--hotty-bg); }
 .vt > div { height: calc(var(--vt-scale) * var(--hotty-cell-h)); overflow: hidden; }
 .vt a { color: inherit; }
-.vt .vt-w { display: inline-block; letter-spacing: 0; text-align: center;
-  width: calc(2 * var(--vt-scale) * var(--hotty-cell-w)); }
 .vt .vt-b { font-weight: bold; }
 .vt .vt-i { font-style: italic; }
+.vt .vt-b, .vt .vt-i { letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch); }
+.vt .vt-t, .vt .vt-w { display: inline-block; vertical-align: top;
+  width: calc(var(--vt-n, 1) * var(--vt-scale) * var(--hotty-cell-w));
+  height: calc(var(--vt-scale) * var(--hotty-cell-h)); }
+.vt .vt-w { --vt-n: 2; letter-spacing: 0; text-align: center; }
 .vt .vt-h { visibility: hidden; }
 .vt .vt-s { text-decoration-line: line-through; }
 .vt .vt-u { text-decoration-line: underline; }
@@ -119,7 +122,7 @@ const CSS = `
 ` + drawCSS
 ```
 
-CSS lays a screen out: a block of its rows, in the terminal's font, scaled by --vt-scale. Its columns are the terminal's cells (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing makes up the difference, so the screen keeps its width and its columns line up as they do in a terminal, which draws each character in its cell. Box-drawing characters and block elements are drawn by it (draw.go). Add it to the document's stylesheet once, however many screens it shows.
+CSS lays a screen out: a block of its rows, in the terminal's font, scaled by --vt-scale. Its columns are the terminal's cells (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing makes up the difference, so the screen keeps its width and its columns line up as they do in a terminal, which draws each character in its cell. A bold or an italic face can be wider than the regular one, so the spacing is worked out again in each, from its own 1ch. What the spacing cannot answer for (a character from a fallback font, an advance the browser rounds) stays in its box (vt-t), and a wide character in its own (vt-w): each as wide as its cells, so the next starts at its column. Box-drawing characters and block elements are drawn by it (draw.go). Add it to the document's stylesheet once, however many screens it shows.
 
 <a id="DefaultID"></a>
 

@@ -32,10 +32,12 @@
 // is half one. For a screen of 120 columns in a placement of 80, set it to
 // 80/120 (SetScale, or Scale before HTML). The screen's columns are the
 // terminal's cells, scaled, so the fit is exact; the font's own shapes fill
-// them as well as they fit a cell. Box-drawing characters and block
-// elements are drawn to fill their cells, as a terminal draws them, so
-// borders and bars meet across rows; the dashed lines and the diagonals
-// are the font's.
+// them as well as they fit a cell. A character the font lacks, which the
+// browser sets in a fallback font of another width, and a bold face wider
+// than the regular one move nothing after them: each run of text sits in a
+// box as wide as its cells (CSS). Box-drawing characters and block elements
+// are drawn to fill their cells, as a terminal draws them, so borders and
+// bars meet across rows; the dashed lines and the diagonals are the font's.
 //
 // # What it leaves out
 //
@@ -57,6 +59,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -73,6 +76,11 @@ const DefaultID = "vt"
 // (--hotty-cell-w), scaled, whatever the font's own advance: letter-spacing
 // makes up the difference, so the screen keeps its width and its columns
 // line up as they do in a terminal, which draws each character in its cell.
+// A bold or an italic face can be wider than the regular one, so the
+// spacing is worked out again in each, from its own 1ch. What the spacing
+// cannot answer for (a character from a fallback font, an advance the
+// browser rounds) stays in its box (vt-t), and a wide character in its own
+// (vt-w): each as wide as its cells, so the next starts at its column.
 // Box-drawing characters and block elements are drawn by it (draw.go).
 // Add it to the document's stylesheet once, however many screens it shows.
 const CSS = `
@@ -84,10 +92,13 @@ const CSS = `
   color: var(--hotty-fg); background: var(--hotty-bg); }
 .vt > div { height: calc(var(--vt-scale) * var(--hotty-cell-h)); overflow: hidden; }
 .vt a { color: inherit; }
-.vt .vt-w { display: inline-block; letter-spacing: 0; text-align: center;
-  width: calc(2 * var(--vt-scale) * var(--hotty-cell-w)); }
 .vt .vt-b { font-weight: bold; }
 .vt .vt-i { font-style: italic; }
+.vt .vt-b, .vt .vt-i { letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch); }
+.vt .vt-t, .vt .vt-w { display: inline-block; vertical-align: top;
+  width: calc(var(--vt-n, 1) * var(--vt-scale) * var(--hotty-cell-w));
+  height: calc(var(--vt-scale) * var(--hotty-cell-h)); }
+.vt .vt-w { --vt-n: 2; letter-spacing: 0; text-align: center; }
 .vt .vt-h { visibility: hidden; }
 .vt .vt-s { text-decoration-line: line-through; }
 .vt .vt-u { text-decoration-line: underline; }
@@ -291,12 +302,40 @@ func (s *Screen) SetScale(surface string, scale float64) string {
 // plain reports whether a row's markup is text alone, with no element.
 func plain(r string) bool { return !strings.ContainsRune(r, '<') }
 
-// run is cells next to each other that are drawn alike.
+// The kinds of run: text, set in the font and spaced to the cells; a
+// glyph, one cell of a character that may come from another font; a wide
+// character; and drawn characters (draw.go).
+const (
+	textRun = iota
+	glyphRun
+	wideRun
+	drawnRun
+)
+
+// kind is the kind of run a cell's content goes in. Only ASCII is text:
+// the terminal's font has all of it, at its own advance, which the
+// letter-spacing makes a cell (CSS). Any other character may be set in a
+// fallback font of another width.
+func kind(c *uv.Cell, content string) int {
+	switch {
+	case c.Width > 1:
+		return wideRun
+	case len(content) == 1 && content[0] < utf8.RuneSelf:
+		return textRun
+	}
+	if _, how := drawKind(content); how != 0 {
+		return drawnRun
+	}
+	return glyphRun
+}
+
+// run is cells next to each other that are drawn alike, of one kind.
 type run struct {
 	style  uv.Style
 	link   string
-	wide   bool
+	kind   int
 	cursor bool
+	cells  int
 	text   strings.Builder
 	// The drawn character the run ends with (draw.go), and how many of it,
 	// while more of it may follow.
@@ -306,17 +345,18 @@ type run struct {
 
 // add puts a cell's content at the run's end.
 func (r *run) add(content string) {
-	k, kind := drawKind(content)
-	if kind&tiles != 0 && k == r.k {
+	r.cells++
+	if r.kind != drawnRun {
+		r.text.WriteString(html.EscapeString(content))
+		return
+	}
+	k, how := drawKind(content)
+	if how&tiles != 0 && k == r.k {
 		r.n++
 		return
 	}
 	r.flushDrawn()
-	if kind != 0 {
-		r.k, r.n = k, 1
-		return
-	}
-	r.text.WriteString(html.EscapeString(content))
+	r.k, r.n = k, 1
 }
 
 func (r *run) flushDrawn() {
@@ -343,9 +383,9 @@ func (s *Screen) row(y int) string {
 	}
 	var b strings.Builder
 	var r *run
-	flush := func() {
+	flush := func(last bool) {
 		if r != nil {
-			r.write(&b)
+			r.write(&b, last)
 			r = nil
 		}
 	}
@@ -359,14 +399,16 @@ func (s *Screen) row(y int) string {
 		}
 		atCursor := showCursor && x == cur.X
 		link := linkURL(c.Link.URL)
-		wide := c.Width > 1
-		if r == nil || wide || r.wide || atCursor || r.cursor || r.link != link || !r.style.Equal(&c.Style) {
-			flush()
-			r = &run{style: c.Style, link: link, wide: wide, cursor: atCursor}
+		text := content(c)
+		k := kind(c, text)
+		if r == nil || k != r.kind || k == glyphRun || k == wideRun || atCursor || r.cursor ||
+			r.link != link || !r.style.Equal(&c.Style) {
+			flush(false)
+			r = &run{style: c.Style, link: link, kind: k, cursor: atCursor}
 		}
-		r.add(content(c))
+		r.add(text)
 	}
-	flush()
+	flush(true)
 	return b.String()
 }
 
@@ -394,7 +436,11 @@ func linkURL(u string) string {
 	return ""
 }
 
-func (r *run) write(b *strings.Builder) {
+// write puts the run's markup at b's end. Text and a glyph that are not the
+// row's last run are in a box their cells wide (vt-t), so that what follows
+// starts at its column whatever the font's advance; a wide character's
+// element is such a box, and so is each drawn one.
+func (r *run) write(b *strings.Builder, last bool) {
 	r.flushDrawn()
 	var class []string
 	var style []string
@@ -419,8 +465,14 @@ func (r *run) write(b *strings.Builder) {
 			style = append(style, "background:"+bg)
 		}
 	}
-	if r.wide {
+	switch {
+	case r.kind == wideRun:
 		class = append(class, "vt-w")
+	case (r.kind == textRun || r.kind == glyphRun) && !last:
+		class = append(class, "vt-t")
+		if r.cells > 1 {
+			style = append(style, "--vt-n:"+strconv.Itoa(r.cells))
+		}
 	}
 	for _, a := range [...]struct {
 		bit   uint8
@@ -440,19 +492,22 @@ func (r *run) write(b *strings.Builder) {
 		}
 	}
 	text := r.text.String()
-	if len(class) > 0 || len(style) > 0 {
-		var open strings.Builder
-		open.WriteString("<span")
-		if len(class) > 0 {
-			open.WriteString(` class="` + strings.Join(class, " ") + `"`)
-		}
-		if len(style) > 0 {
-			open.WriteString(` style="` + html.EscapeString(strings.Join(style, ";")) + `"`)
-		}
-		text = open.String() + ">" + text + "</span>"
-	}
+	// A link is the run's element itself: a box in it would not take its
+	// underline (text decorations stop at an inline-block).
+	tag := "span"
+	var attrs strings.Builder
 	if r.link != "" {
-		text = `<a href="` + html.EscapeString(r.link) + `" target="_blank">` + text + `</a>`
+		tag = "a"
+		attrs.WriteString(` href="` + html.EscapeString(r.link) + `" target="_blank"`)
+	}
+	if len(class) > 0 {
+		attrs.WriteString(` class="` + strings.Join(class, " ") + `"`)
+	}
+	if len(style) > 0 {
+		attrs.WriteString(` style="` + html.EscapeString(strings.Join(style, ";")) + `"`)
+	}
+	if attrs.Len() > 0 {
+		text = "<" + tag + attrs.String() + ">" + text + "</" + tag + ">"
 	}
 	b.WriteString(text)
 }

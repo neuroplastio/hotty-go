@@ -29,7 +29,7 @@ func Example() {
 	_, _ = s.WriteString("\x1b[32mok\x1b[0m  build 0.4s")
 	show(s.Delta("build"))
 	// Output:
-	// inner vt-r1 <span style="color:var(--hotty-ansi-2)">ok</span>  build 0.4s
+	// inner vt-r1 <span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:2">ok</span>  build 0.4s
 }
 
 // A session recorded at 120 columns, shown in a placement of 80: the
