@@ -4,7 +4,7 @@ module github.com/neuroplastio/hotty-go/hottytest
 go 1.26.8
 
 require (
-	github.com/neuroplastio/hotty-go v0.0.0-20261003200607-8d270e552b02
+	github.com/neuroplastio/hotty-go v0.0.0-20261004110030-1e908d0b0873
 	golang.org/x/net v0.39.0
 )
 
