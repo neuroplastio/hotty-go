@@ -235,7 +235,7 @@ Close stops the screen: what it is given afterwards is lost, and Replies gets no
 func (s *Screen) Delta(surface string) []string
 ```
 
-Delta is the commands that bring surface, whose document holds the screen's element as HTML or Delta last left it, to the screen as it is now: one per row that changed, and the program's surfaces' changes (Surfaces, in the package's documentation); none when nothing changed. After a Resize, it is the whole element. Before HTML, it is nothing: there is no element to change. Send a frame's commands together, in hotty.Sync, for the host to show it whole.
+Delta is the commands that bring surface, whose document holds the screen's element as HTML or Delta last left it, to the screen as it is now: one per row that changed, and the program's surfaces' changes (Surfaces, in the package's documentation); none when nothing changed. After a Resize, it is the whole element, and so it is when the surfaces did more since the last Delta than the screen keeps (a program that does not show the screen for a while need not ask). Before HTML, it is nothing: there is no element to change. Send a frame's commands together, in hotty.Sync, for the host to show it whole.
 
 ### <a id="Screen.ElementID"></a>func (*Screen) ElementID
 

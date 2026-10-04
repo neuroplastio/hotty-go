@@ -1,6 +1,7 @@
 package hottyvt_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -248,5 +249,28 @@ func TestNoSurfaces(t *testing.T) {
 	_, _ = s.WriteString("a" + hotty.Doc("d", "<p>x</p>") + hotty.PlaceAt("d", 0, 0, hotty.Placement{Cols: 4, Rows: 1}) + "b")
 	if html := s.HTML(); strings.Contains(html, "vt-p") || s.Text() != "ab" {
 		t.Fatalf("%s %q", html, s.Text())
+	}
+}
+
+// A screen nobody asks for deltas for a while keeps a bounded number of
+// them, then sends the whole element.
+func TestSurfaceDeltasNobodyAskedFor(t *testing.T) {
+	h := hottytest.New(t)
+	s := screen(t, 20, 6)
+	send(t, h, hotty.Doc("vt", s.HTML()))
+	_, _ = s.WriteString(hotty.Doc("d", `<p id="n">0</p>`))
+	send(t, h, hotty.Sync(s.Delta("vt")...))
+	big := strings.Repeat("x", 4096)
+	for i := range 200 {
+		_, _ = s.WriteString(hotty.Delta("d", hotty.OpInner, "n", "", []byte(big+strconv.Itoa(i))))
+	}
+	cmds := s.Delta("vt")
+	ms := decode(cmds)
+	if len(ms) != 1 || ms[0].Get("t") != "vt" || ms[0].Get("op") != "morph" {
+		t.Fatalf("%d commands, the first %v", len(ms), ms[0].Control)
+	}
+	send(t, h, hotty.Sync(cmds...))
+	if got := h.Surface("vt").TextOf("vt-d1-n"); got != big+"199" {
+		t.Errorf("the surface: %d bytes", len(got))
 	}
 }

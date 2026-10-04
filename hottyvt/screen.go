@@ -189,6 +189,8 @@ type Screen struct {
 	resOrder   []string
 	resOut     []string // resource commands for the next Delta
 	ops        []op     // deltas for the next Delta
+	queued     int      // their payloads' bytes
+	stale      bool     // too many to keep: the next Delta is the whole element
 	stamps     int      // the rows' stamps, as they follow output
 }
 
@@ -340,7 +342,9 @@ func (s *Screen) vars() string {
 // screen's element as HTML or Delta last left it, to the screen as it is
 // now: one per row that changed, and the program's surfaces' changes
 // (Surfaces, in the package's documentation); none when nothing changed.
-// After a Resize, it is the whole element. Before HTML, it is nothing:
+// After a Resize, it is the whole element, and so it is when the surfaces
+// did more since the last Delta than the screen keeps (a program that does
+// not show the screen for a while need not ask). Before HTML, it is nothing:
 // there is no element to change. Send a frame's commands together, in
 // hotty.Sync, for the host to show it whole.
 func (s *Screen) Delta(surface string) []string {
@@ -348,7 +352,7 @@ func (s *Screen) Delta(surface string) []string {
 		return nil
 	}
 	cols, rows := s.Size()
-	if cols != s.sentCols || rows != len(s.sent) {
+	if cols != s.sentCols || rows != len(s.sent) || s.stale {
 		res := s.resOut
 		s.resOut = nil
 		return append(res, hotty.MorphTo(surface, s.id, s.HTML()))

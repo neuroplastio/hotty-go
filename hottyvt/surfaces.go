@@ -344,15 +344,15 @@ func (s *Screen) doc(name string, sf *surface, markup string) {
 		s.surfaces[name] = sf
 		s.order = append(s.order, sf)
 		s.parse(sf, markup)
-		if s.sent != nil {
+		if s.sent != nil && !s.stale {
 			sf.sentStyle = s.boxStyle(sf)
-			s.ops = append(s.ops, op{op: hotty.OpAppend, target: s.id, payload: []byte(s.box(sf))})
+			s.queue(op{op: hotty.OpAppend, target: s.id, payload: []byte(s.box(sf))})
 		}
 		return
 	}
 	s.parse(sf, markup)
 	if s.sent != nil && sf.sentStyle != "" {
-		s.ops = append(s.ops, op{op: hotty.OpMorph, target: s.rootID(sf), payload: []byte(render(sf.root))})
+		s.queue(op{op: hotty.OpMorph, target: s.rootID(sf), payload: []byte(render(sf.root))})
 	}
 }
 
@@ -519,7 +519,7 @@ func (s *Screen) drop(sf *surface) {
 		}
 	}
 	if s.sent != nil && sf.sentStyle != "" {
-		s.ops = append(s.ops, op{op: hotty.OpRemove, target: s.boxID(sf)})
+		s.queue(op{op: hotty.OpRemove, target: s.boxID(sf)})
 	}
 }
 
@@ -718,10 +718,21 @@ func (s *Screen) morphByIDs(sf *surface, payload string) {
 	}
 }
 
+// maxQueued bounds the deltas the screen keeps for the next Delta: a
+// program that stops showing the screen for a while, and so stops asking,
+// would have it keep them all. Past it, the screen keeps none, and the next
+// Delta sends the whole element, which costs less than they would.
+const maxQueued = 256 << 10
+
 func (s *Screen) queue(o op) {
-	if s.sent != nil {
-		s.ops = append(s.ops, o)
+	if s.sent == nil || s.stale {
+		return
 	}
+	if s.queued += len(o.payload); s.queued > maxQueued {
+		s.ops, s.queued, s.stale = nil, 0, true
+		return
+	}
+	s.ops = append(s.ops, o)
 }
 
 // fragment parses a payload in the context of the element it will be a
@@ -901,7 +912,7 @@ func (s *Screen) surfacesHTML() string {
 		sf.sentStyle = s.boxStyle(sf)
 		b.WriteString(s.box(sf))
 	}
-	s.ops = nil
+	s.ops, s.queued, s.stale = nil, 0, false
 	return b.String()
 }
 
@@ -918,7 +929,7 @@ func (s *Screen) surfaceDelta(surface string) []string {
 		}
 		out = append(out, hotty.Delta(surface, o.op, o.target, o.key, o.payload))
 	}
-	s.ops = nil
+	s.ops, s.queued = nil, 0
 	for _, sf := range s.order {
 		if st := s.boxStyle(sf); sf.sentStyle != "" && st != sf.sentStyle {
 			sf.sentStyle = st
