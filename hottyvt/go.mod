@@ -8,8 +8,8 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285
-	github.com/neuroplastio/hotty-go v0.0.0-20261004161409-d972ee9d9803
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261004161409-d972ee9d9803
+	github.com/neuroplastio/hotty-go v0.0.0-20261004161912-582454518321
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261004161912-582454518321
 	golang.org/x/net v0.39.0
 )
 
