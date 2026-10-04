@@ -39,6 +39,39 @@
 // are drawn to fill their cells, as a terminal draws them, so borders and
 // bars meet across rows; the dashed lines and the diagonals are the font's.
 //
+// # Surfaces
+//
+// A program that speaks HOTTY, recorded in a HOTTY host, made surfaces as
+// well as cells, and the screen shows them as a host would (SPEC §5–§7): it
+// reads the HOTTY messages in what it is given, keeps each surface's
+// document, placement and resources, and shows each placed surface above
+// the rows, at its cells, laid out at its size and scaled with the screen.
+// What the surfaces do reaches the screen's surface as Delta's commands: a
+// delta to a surface is the same delta to the surface's element in the
+// screen's, so a card whose clock ticks costs what it cost the program; a
+// placement is its box's style; a resource is a resource of the program
+// showing the screen, named with the screen's id (Resources). A placement
+// moves with its line as the screen scrolls and goes when that line leaves
+// the screen, and one made on the alternate screen goes with it, as its
+// surface does (SPEC §5.4).
+//
+// Each surface's document is rewritten to live in the screen's beside the
+// others: its ids are prefixed with its element's (id-d1-…), its selectors
+// scoped to that element, and what it says of its root (html, body, :root)
+// is said of the element. The rules of the document the screen is in reach
+// the surfaces' elements too, so keep them to its own classes.
+//
+// The surfaces show as a recording does, as detached ones (SPEC §5.5) that
+// report nothing: a link that is not a hyperlink loses its href, so that a
+// click on it does not reach the program showing the screen as a click on
+// a link of its own, and data-on goes. The screen answers no message; the
+// program that was recorded had its answers. So a placement with auto rows
+// moves the cursor by rows the screen guesses from its text, where the host
+// laid the document out (the document shows at its own height), and media
+// queries and viewport units see the screen's surface, not the placement.
+// NoSurfaces makes a screen that shows the cells alone, as a terminal that
+// is not a host does.
+//
 // # What it leaves out
 //
 // The scrollback: the screen shows what a terminal of its size would, and
@@ -46,7 +79,8 @@
 // the colours a program sets for the terminal's default foreground and
 // background (OSC 10, 11), which would fight the host's theme. The
 // emulator's answers to queries (the cursor's position, device attributes)
-// are dropped, unless Replies takes them.
+// are dropped, unless Replies takes them; HOTTY's are not made. Text is the
+// cells', without the surfaces' text.
 //
 // This package does no I/O but for those answers: like the hotty package,
 // it returns commands for the program to send.
@@ -84,14 +118,14 @@ const DefaultID = "vt"
 // Box-drawing characters and block elements are drawn by it (draw.go).
 // Add it to the document's stylesheet once, however many screens it shows.
 const CSS = `
-.vt { --vt-scale: 1; display: block; box-sizing: content-box; overflow: hidden;
+.vt { --vt-scale: 1; display: block; box-sizing: content-box; overflow: hidden; position: relative; isolation: isolate;
   font-family: var(--hotty-font, monospace); font-size: calc(var(--vt-scale) * 1rem);
   line-height: calc(var(--vt-scale) * var(--hotty-cell-h));
   letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch);
   width: calc(var(--vt-cols) * var(--vt-scale) * var(--hotty-cell-w)); white-space: pre;
   color: var(--hotty-fg); background: var(--hotty-bg); }
 .vt > div { height: calc(var(--vt-scale) * var(--hotty-cell-h)); overflow: hidden; }
-.vt a { color: inherit; }
+.vt > div > a { color: inherit; }
 .vt .vt-b { font-weight: bold; }
 .vt .vt-i { font-style: italic; }
 .vt .vt-b, .vt .vt-i { letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch); }
@@ -108,6 +142,18 @@ const CSS = `
 .vt .vt-u4 { text-decoration-style: dotted; }
 .vt .vt-u5 { text-decoration-style: dashed; }
 .vt .vt-cur { color: var(--hotty-bg); background: var(--hotty-fg); }
+.vt > .vt-p { position: absolute; overflow: hidden; z-index: 1001;
+  left: calc(var(--vt-px) * var(--vt-scale) * var(--hotty-cell-w));
+  top: calc(var(--vt-py) * var(--vt-scale) * var(--hotty-cell-h));
+  width: calc(var(--vt-pw, var(--vt-pc)) * var(--vt-scale) * var(--hotty-cell-w));
+  height: calc(var(--vt-ph, var(--vt-pr)) * var(--vt-scale) * var(--hotty-cell-h)); }
+.vt-p > .vt-v { all: initial; display: block; position: relative; overflow: hidden;
+  width: calc(var(--vt-pc) * var(--hotty-cell-w)); height: calc(var(--vt-pr) * var(--hotty-cell-h));
+  transform-origin: 0 0; transform: scale(var(--vt-scale))
+    translate(calc(-1 * var(--vt-wx, 0) * var(--hotty-cell-w)), calc(-1 * var(--vt-wy, 0) * var(--hotty-cell-h)));
+  font-family: var(--hotty-font, monospace); font-size: 1rem; line-height: var(--hotty-cell-h);
+  color: var(--hotty-fg); background: var(--hotty-bg); color-scheme: inherit; }
+.vt-v > .vt-d { display: block; }
 ` + drawCSS
 
 // Screen is a terminal's screen shown on a surface. It is not safe for
@@ -130,6 +176,20 @@ type Screen struct {
 	hidden bool
 	// title is the title the program last set (OSC 0, 2).
 	title string
+
+	// The surfaces the program made, and what the screen's surface has not
+	// heard of them yet (surfaces.go).
+	noSurfaces bool
+	dec        hotty.Decoder
+	held       []byte // the end of what Write was given, which may begin a HOTTY message
+	surfaces   map[string]*surface
+	order      []*surface // in the order they were made: their stacking
+	made       int        // surfaces made, for their numbers
+	res        map[string]resource
+	resOrder   []string
+	resOut     []string // resource commands for the next Delta
+	ops        []op     // deltas for the next Delta
+	stamps     int      // the rows' stamps, as they follow output
 }
 
 // Option sets up a Screen.
@@ -148,6 +208,11 @@ func Scale(scale float64) Option { return func(s *Screen) { s.scale = scale } }
 // visible.
 func HideCursor() Option { return func(s *Screen) { s.cursor = false } }
 
+// NoSurfaces makes the screen a terminal that is not a HOTTY host: it
+// shows the cells alone, and ignores the HOTTY messages in what it is
+// given, as such a terminal does.
+func NoSurfaces() Option { return func(s *Screen) { s.noSurfaces = true } }
+
 // Replies takes the emulator's answers to the queries in what it is given
 // (device attributes, the cursor's position, a colour), for a program that
 // runs in it and waits for them: write them to its input. They are
@@ -158,7 +223,8 @@ func Replies(w io.Writer) Option { return func(s *Screen) { s.replies = w } }
 // New makes a screen of cols by rows cells (at least one of each), blank,
 // with the cursor at the top left. Close it when done with it.
 func New(cols, rows int, opts ...Option) *Screen {
-	s := &Screen{id: DefaultID, cursor: true, scale: 1, replies: io.Discard, drained: make(chan struct{})}
+	s := &Screen{id: DefaultID, cursor: true, scale: 1, replies: io.Discard, drained: make(chan struct{}),
+		surfaces: map[string]*surface{}, res: map[string]resource{}}
 	for _, o := range opts {
 		o(s)
 	}
@@ -166,7 +232,11 @@ func New(cols, rows int, opts ...Option) *Screen {
 	s.emu.SetCallbacks(vt.Callbacks{
 		CursorVisibility: func(visible bool) { s.hidden = !visible },
 		Title:            func(t string) { s.title = t },
+		AltScreen:        s.altScreen,
 	})
+	// A full reset (RIS) deletes every surface (SPEC §5.4); the emulator's
+	// own handler resets the rest.
+	s.emu.RegisterEscHandler('c', func() bool { s.dropAll(); return false })
 	// The emulator writes its answers to a pipe, and Write waits until
 	// they are read.
 	go func() {
@@ -177,10 +247,16 @@ func New(cols, rows int, opts ...Option) *Screen {
 }
 
 // Write gives the screen output, as a terminal's pty would. It never fails.
-func (s *Screen) Write(p []byte) (int, error) { return s.emu.Write(p) }
+func (s *Screen) Write(p []byte) (int, error) {
+	if s.noSurfaces {
+		return s.emu.Write(p)
+	}
+	s.feed(p)
+	return len(p), nil
+}
 
 // WriteString is Write for a string.
-func (s *Screen) WriteString(p string) (int, error) { return s.emu.WriteString(p) }
+func (s *Screen) WriteString(p string) (int, error) { return s.Write([]byte(p)) }
 
 // Close stops the screen: what it is given afterwards is lost, and Replies
 // gets nothing more.
@@ -247,6 +323,7 @@ func (s *Screen) HTML() string {
 		s.sent[y] = s.row(y)
 		b.WriteString(`<div id="` + html.EscapeString(s.RowID(y)) + `">` + s.sent[y] + `</div>`)
 	}
+	b.WriteString(s.surfacesHTML())
 	b.WriteString(`</div>`)
 	return b.String()
 }
@@ -261,19 +338,22 @@ func (s *Screen) vars() string {
 
 // Delta is the commands that bring surface, whose document holds the
 // screen's element as HTML or Delta last left it, to the screen as it is
-// now: one per row that changed, none when nothing did. After a Resize, it
-// is the whole element. Before HTML, it is nothing: there is no element to
-// change. Send a frame's commands together, in hotty.Sync, for the host to
-// show it whole.
+// now: one per row that changed, and the program's surfaces' changes
+// (Surfaces, in the package's documentation); none when nothing changed.
+// After a Resize, it is the whole element. Before HTML, it is nothing:
+// there is no element to change. Send a frame's commands together, in
+// hotty.Sync, for the host to show it whole.
 func (s *Screen) Delta(surface string) []string {
 	if s.sent == nil {
 		return nil
 	}
 	cols, rows := s.Size()
 	if cols != s.sentCols || rows != len(s.sent) {
-		return []string{hotty.MorphTo(surface, s.id, s.HTML())}
+		res := s.resOut
+		s.resOut = nil
+		return append(res, hotty.MorphTo(surface, s.id, s.HTML()))
 	}
-	var out []string
+	out := s.surfaceDelta(surface)
 	for y := range rows {
 		r := s.row(y)
 		if r == s.sent[y] {

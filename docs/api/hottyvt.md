@@ -32,9 +32,17 @@ The screen takes the terminal's look from the host stylesheet (SPEC §8): its fo
 
 The custom property --vt-scale on the screen's element sizes it: at 1 (the default) a cell of the screen is a cell of the terminal, at 0.5 it is half one. For a screen of 120 columns in a placement of 80, set it to 80/120 (SetScale, or Scale before HTML). The screen's columns are the terminal's cells, scaled, so the fit is exact; the font's own shapes fill them as well as they fit a cell. A character the font lacks, which the browser sets in a fallback font of another width, and a bold face wider than the regular one move nothing after them: each run of text sits in a box as wide as its cells (CSS). Box-drawing characters and block elements are drawn to fill their cells, as a terminal draws them, so borders and bars meet across rows; the dashed lines and the diagonals are the font's.
 
+### <a id="hdr-Surfaces"></a>Surfaces
+
+A program that speaks HOTTY, recorded in a HOTTY host, made surfaces as well as cells, and the screen shows them as a host would (SPEC §5–§7): it reads the HOTTY messages in what it is given, keeps each surface's document, placement and resources, and shows each placed surface above the rows, at its cells, laid out at its size and scaled with the screen. What the surfaces do reaches the screen's surface as Delta's commands: a delta to a surface is the same delta to the surface's element in the screen's, so a card whose clock ticks costs what it cost the program; a placement is its box's style; a resource is a resource of the program showing the screen, named with the screen's id (Resources). A placement moves with its line as the screen scrolls and goes when that line leaves the screen, and one made on the alternate screen goes with it, as its surface does (SPEC §5.4).
+
+Each surface's document is rewritten to live in the screen's beside the others: its ids are prefixed with its element's (id-d1-…), its selectors scoped to that element, and what it says of its root (html, body, :root) is said of the element. The rules of the document the screen is in reach the surfaces' elements too, so keep them to its own classes.
+
+The surfaces show as a recording does, as detached ones (SPEC §5.5) that report nothing: a link that is not a hyperlink loses its href, so that a click on it does not reach the program showing the screen as a click on a link of its own, and data-on goes. The screen answers no message; the program that was recorded had its answers. So a placement with auto rows moves the cursor by rows the screen guesses from its text, where the host laid the document out (the document shows at its own height), and media queries and viewport units see the screen's surface, not the placement. NoSurfaces makes a screen that shows the cells alone, as a terminal that is not a host does.
+
 ### <a id="hdr-What_it_leaves_out"></a>What it leaves out
 
-The scrollback: the screen shows what a terminal of its size would, and nothing that scrolled off. Images (kitty graphics, sixel), blinking, and the colours a program sets for the terminal's default foreground and background (OSC 10, 11), which would fight the host's theme. The emulator's answers to queries (the cursor's position, device attributes) are dropped, unless Replies takes them.
+The scrollback: the screen shows what a terminal of its size would, and nothing that scrolled off. Images (kitty graphics, sixel), blinking, and the colours a program sets for the terminal's default foreground and background (OSC 10, 11), which would fight the host's theme. The emulator's answers to queries (the cursor's position, device attributes) are dropped, unless Replies takes them; HOTTY's are not made. Text is the cells', without the surfaces' text.
 
 This package does no I/O but for those answers: like the hotty package, it returns commands for the program to send.
 
@@ -66,6 +74,7 @@ inner vt-r1 <span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:2">ok</sp
 - [`type Option`](#Option)
   - [`func HideCursor() Option`](#HideCursor)
   - [`func ID(id string) Option`](#ID)
+  - [`func NoSurfaces() Option`](#NoSurfaces)
   - [`func Replies(w io.Writer) Option`](#Replies)
   - [`func Scale(scale float64) Option`](#Scale)
 - [`type Screen`](#Screen)
@@ -75,6 +84,7 @@ inner vt-r1 <span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:2">ok</sp
   - [`func (s *Screen) ElementID() string`](#Screen.ElementID)
   - [`func (s *Screen) HTML() string`](#Screen.HTML)
   - [`func (s *Screen) Resize(cols, rows int)`](#Screen.Resize)
+  - [`func (s *Screen) Resources() []string`](#Screen.Resources)
   - [`func (s *Screen) RowID(y int) string`](#Screen.RowID)
   - [`func (s *Screen) SetScale(surface string, scale float64) string`](#Screen.SetScale)
   - [`func (s *Screen) Size() (cols, rows int)`](#Screen.Size)
@@ -95,14 +105,14 @@ inner vt-r1 <span class="vt-t" style="color:var(--hotty-ansi-2);--vt-n:2">ok</sp
 
 ```go
 const CSS = `
-.vt { --vt-scale: 1; display: block; box-sizing: content-box; overflow: hidden;
+.vt { --vt-scale: 1; display: block; box-sizing: content-box; overflow: hidden; position: relative; isolation: isolate;
   font-family: var(--hotty-font, monospace); font-size: calc(var(--vt-scale) * 1rem);
   line-height: calc(var(--vt-scale) * var(--hotty-cell-h));
   letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch);
   width: calc(var(--vt-cols) * var(--vt-scale) * var(--hotty-cell-w)); white-space: pre;
   color: var(--hotty-fg); background: var(--hotty-bg); }
 .vt > div { height: calc(var(--vt-scale) * var(--hotty-cell-h)); overflow: hidden; }
-.vt a { color: inherit; }
+.vt > div > a { color: inherit; }
 .vt .vt-b { font-weight: bold; }
 .vt .vt-i { font-style: italic; }
 .vt .vt-b, .vt .vt-i { letter-spacing: calc(var(--vt-scale) * var(--hotty-cell-w) - 1ch); }
@@ -119,6 +129,18 @@ const CSS = `
 .vt .vt-u4 { text-decoration-style: dotted; }
 .vt .vt-u5 { text-decoration-style: dashed; }
 .vt .vt-cur { color: var(--hotty-bg); background: var(--hotty-fg); }
+.vt > .vt-p { position: absolute; overflow: hidden; z-index: 1001;
+  left: calc(var(--vt-px) * var(--vt-scale) * var(--hotty-cell-w));
+  top: calc(var(--vt-py) * var(--vt-scale) * var(--hotty-cell-h));
+  width: calc(var(--vt-pw, var(--vt-pc)) * var(--vt-scale) * var(--hotty-cell-w));
+  height: calc(var(--vt-ph, var(--vt-pr)) * var(--vt-scale) * var(--hotty-cell-h)); }
+.vt-p > .vt-v { all: initial; display: block; position: relative; overflow: hidden;
+  width: calc(var(--vt-pc) * var(--hotty-cell-w)); height: calc(var(--vt-pr) * var(--hotty-cell-h));
+  transform-origin: 0 0; transform: scale(var(--vt-scale))
+    translate(calc(-1 * var(--vt-wx, 0) * var(--hotty-cell-w)), calc(-1 * var(--vt-wy, 0) * var(--hotty-cell-h)));
+  font-family: var(--hotty-font, monospace); font-size: 1rem; line-height: var(--hotty-cell-h);
+  color: var(--hotty-fg); background: var(--hotty-bg); color-scheme: inherit; }
+.vt-v > .vt-d { display: block; }
 ` + drawCSS
 ```
 
@@ -155,6 +177,14 @@ func ID(id string) Option
 ```
 
 ID names the screen's element, and makes its rows' ids (id-r0, id-r1, …): for a document with more than one screen. Without it, DefaultID.
+
+### <a id="NoSurfaces"></a>func NoSurfaces
+
+```go
+func NoSurfaces() Option
+```
+
+NoSurfaces makes the screen a terminal that is not a HOTTY host: it shows the cells alone, and ignores the HOTTY messages in what it is given, as such a terminal does.
 
 ### <a id="Replies"></a>func Replies
 
@@ -205,7 +235,7 @@ Close stops the screen: what it is given afterwards is lost, and Replies gets no
 func (s *Screen) Delta(surface string) []string
 ```
 
-Delta is the commands that bring surface, whose document holds the screen's element as HTML or Delta last left it, to the screen as it is now: one per row that changed, none when nothing did. After a Resize, it is the whole element. Before HTML, it is nothing: there is no element to change. Send a frame's commands together, in hotty.Sync, for the host to show it whole.
+Delta is the commands that bring surface, whose document holds the screen's element as HTML or Delta last left it, to the screen as it is now: one per row that changed, and the program's surfaces' changes (Surfaces, in the package's documentation); none when nothing changed. After a Resize, it is the whole element. Before HTML, it is nothing: there is no element to change. Send a frame's commands together, in hotty.Sync, for the host to show it whole.
 
 ### <a id="Screen.ElementID"></a>func (*Screen) ElementID
 
@@ -230,6 +260,14 @@ func (s *Screen) Resize(cols, rows int)
 ```
 
 Resize changes the screen's size, as a terminal's window would: what is on it is kept where it fits. The next Delta sends the whole element.
+
+### <a id="Screen.Resources"></a>func (*Screen) Resources
+
+```go
+func (s *Screen) Resources() []string
+```
+
+Resources is the commands that give a host the resources the screen's surfaces refer to, as they are now. Delta sends each as it arrives; a program that gives a host the screen's element afresh, a host that has not had them, sends these with it.
 
 ### <a id="Screen.RowID"></a>func (*Screen) RowID
 
