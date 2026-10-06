@@ -4,12 +4,12 @@ module github.com/neuroplastio/hotty-go/hottyterm
 
 go 1.25.0
 
-require github.com/neuroplastio/hotty-go v0.0.0-20261006165839-2da425e02025
+require github.com/neuroplastio/hotty-go v0.0.0-20261006171037-3c52803284da
 
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261006165839-2da425e02025
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261006171037-3c52803284da
 	golang.org/x/sys v0.47.0
 )
 
