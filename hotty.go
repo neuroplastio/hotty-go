@@ -105,29 +105,38 @@ func (c *Control) set(k, v string) {
 }
 
 // ReplyOption sets the reply a command asks for (SPEC §3.5): every command
-// takes one, Doc as a DocOption.
-type ReplyOption func(*Control)
-
-// Q sets the command's quiet level.
-func Q(q Quiet) ReplyOption {
-	return func(c *Control) { c.set("q", strconv.Itoa(int(q))) }
+// takes one, Doc as a DocOption. N and Q make them, in either order.
+type ReplyOption struct {
+	n, q       int
+	setN, setQ bool
 }
+
+// Q sets the command's quiet level. It wins over the level N implies,
+// whichever comes first.
+func Q(q Quiet) ReplyOption { return ReplyOption{q: int(q), setQ: true} }
 
 // N numbers the command and asks for its reply whatever the outcome
 // (ReplyAlways): the reply echoes n, so the program can tell which command
-// it answers. Q after N asks for less.
-func N(n int) ReplyOption {
-	return func(c *Control) {
-		c.set("n", strconv.Itoa(n))
-		c.set("q", strconv.Itoa(int(ReplyAlways)))
-	}
-}
+// it answers. A Q given with it asks for less.
+func N(n int) ReplyOption { return ReplyOption{n: n, setN: true} }
 
 // command encodes a command with its default quiet level and the options.
 func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string {
-	ctl.set("q", strconv.Itoa(int(def)))
+	q, n, numbered, given := int(def), 0, false, false
 	for _, o := range opts {
-		o(&ctl)
+		if o.setN {
+			n, numbered = o.n, true
+		}
+		if o.setQ {
+			q, given = o.q, true
+		}
+	}
+	if numbered && !given {
+		q = int(ReplyAlways)
+	}
+	ctl.set("q", strconv.Itoa(q))
+	if numbered {
+		ctl.set("n", strconv.Itoa(n))
 	}
 	return Encode(ctl, payload)
 }

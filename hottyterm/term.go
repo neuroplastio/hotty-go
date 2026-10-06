@@ -44,7 +44,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/internal/detect"
 )
 
 // Size is the terminal's size in cells.
@@ -330,73 +329,69 @@ func (t *Term) Detect(ctx context.Context) bool {
 	}
 	defer restore()
 
-	var native bool
-	var caps hotty.Caps
-	replied := make(chan struct{})
-	da1 := make(chan struct{}, 8)
+	// The Detector decides; the reader's goroutine gives it what it reads,
+	// and this one the time.
+	var mu sync.Mutex
+	d := hotty.Detector{N: queryN}
+	wake := make(chan struct{}, 1)
 	remove := t.listen(func(ev Event) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		took := false
 		switch ev := ev.(type) {
 		case Message:
-			if r, ok := ev.Reply(); ok && !native {
-				if c, ok := detect.Answer(r, detect.N); ok {
-					native, caps = true, c
-					close(replied)
-					return true
-				}
+			if r, ok := ev.Reply(); ok {
+				took = d.Reply(r, time.Now())
 			}
 		case uv.PrimaryDeviceAttributesEvent:
+			took = d.DA1(time.Now())
+		}
+		if took {
 			select {
-			case da1 <- struct{}{}:
+			case wake <- struct{}{}:
 			default:
 			}
-			return true
 		}
-		return false
+		return took
 	})
-	if t.Send(hotty.Query(detect.N)) != nil {
-		remove()
+	defer remove()
+	mu.Lock()
+	query := d.Start(time.Now())
+	mu.Unlock()
+	if t.Send(query) != nil {
 		return t.setDetected(false, hotty.Caps{})
 	}
 
-	deadline := time.NewTimer(detect.Timeout)
-	defer deadline.Stop()
-	// Until the host replies, a DA1 ends the wait after a moment. After
-	// the reply, the DA1 behind it ends the wait at once.
-	var fence <-chan time.Time
-wait:
+	timer := time.NewTimer(time.Hour)
+	defer timer.Stop()
 	for {
+		mu.Lock()
+		if d.Done {
+			native, caps := d.State == hotty.Native, d.Caps
+			mu.Unlock()
+			return t.setDetected(native, caps)
+		}
+		timer.Reset(time.Until(d.Deadline))
+		mu.Unlock()
 		select {
 		case <-ctx.Done():
-			break wait
-		case <-deadline.C:
-			break wait
-		case <-fence:
-			break wait
 		case <-t.ended:
-			break wait
-		case <-replied:
-			replied = nil
-			fence = time.After(detect.AfterReply)
-		case <-da1:
-			select {
-			case <-replied: // taken before this DA1: it is the one behind it
-				break wait
-			default:
-			}
-			if replied == nil {
-				break wait
-			}
-			if fence == nil {
-				fence = time.After(detect.AfterDA1)
-			}
+		case <-timer.C:
+			mu.Lock()
+			d.Tick(time.Now())
+			mu.Unlock()
+			continue
+		case <-wake:
+			continue
 		}
+		mu.Lock()
+		d.End(time.Now())
+		mu.Unlock()
 	}
-	remove()
-	t.mu.Lock()
-	n, c := native, caps
-	t.mu.Unlock()
-	return t.setDetected(n, c)
 }
+
+// queryN numbers the detection's query; a Request's number is never it.
+const queryN = 1
 
 func (t *Term) setDetected(native bool, caps hotty.Caps) bool {
 	t.mu.Lock()
@@ -422,7 +417,7 @@ func (t *Term) Request(ctx context.Context, build func(hotty.ReplyOption) string
 	defer restore()
 	t.mu.Lock()
 	t.nextN++
-	n := detect.N + t.nextN // never the query's
+	n := queryN + t.nextN // never the query's
 	t.mu.Unlock()
 	got := make(chan hotty.Reply, 1)
 	remove := t.listen(func(ev Event) bool {

@@ -6,7 +6,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-go/internal/detect"
+	"github.com/neuroplastio/hotty-go"
 )
 
 // graphicsQuery asks whether a terminal shows kitty graphics: a query for a
@@ -57,7 +57,7 @@ func (t *Term) KittyGraphics(ctx context.Context) bool {
 	if err := t.Send(graphicsQuery); err != nil {
 		return false
 	}
-	deadline := time.NewTimer(detect.Timeout)
+	deadline := time.NewTimer(hotty.DetectTimeout)
 	defer deadline.Stop()
 	// A DA1 before any answer ends the wait after a moment: it is this
 	// query's, or one an earlier question left behind, with this one's
@@ -77,7 +77,7 @@ func (t *Term) KittyGraphics(ctx context.Context) bool {
 			return ok
 		case ok = <-answer:
 			answered = true
-			fence = time.After(detect.AfterDA1)
+			fence = time.After(hotty.DetectAfterDA1)
 		case <-da1:
 			if answered {
 				return ok
@@ -88,7 +88,7 @@ func (t *Term) KittyGraphics(ctx context.Context) bool {
 			default:
 			}
 			if fence == nil {
-				fence = time.After(detect.AfterDA1)
+				fence = time.After(hotty.DetectAfterDA1)
 			}
 		}
 	}

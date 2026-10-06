@@ -7,13 +7,14 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The conformance vectors' SDK sections (SDK.md §5, conformance/README.md):
-// what this package builds, encodes and decodes. The scan and detect
-// sections are for a Scanner and a Detector, which it does not have yet.
+// what this package builds, encodes, decodes, scans and detects.
 
 // features is what this package implements of what a vector may require.
 // A vector that requires anything else is skipped: what is missing here is
@@ -24,7 +25,14 @@ var features = map[string]bool{
 	"doc.scroll":          true,
 	"event.area":          true,
 	"caps.scroll":         true,
+	"caps.passthrough":    true,
+	"caps.version":        true,
+	"caps.lenient":        true,
+	"caps.drag-kinds":     true,
+	"options.unordered":   true,
+	"decode.abort-count":  true,
 	"decode.unterminated": true,
+	"scanner.da1":         true,
 }
 
 func applies(t *testing.T, requires []string) {
@@ -41,6 +49,8 @@ func sdkVectors(t *testing.T) (v struct {
 	Build  []buildVector  `json:"build"`
 	Encode []encodeVector `json:"encode"`
 	Decode []decodeVector `json:"decode"`
+	Scan   []scanVector   `json:"scan"`
+	Detect []detectVector `json:"detect"`
 }) {
 	t.Helper()
 	data, err := os.ReadFile(vectorsFile)
@@ -409,7 +419,7 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  map[string]any{"w": c.Cell.W, "h": c.Cell.H},
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"scroll": c.Scroll, "host": c.Host, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "host": c.Host, "version": c.Version, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	supports, sends := map[string]any{}, map[string]any{}
@@ -504,4 +514,204 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+type scanVector struct {
+	Name     string              `json:"name"`
+	Requires []string            `json:"requires"`
+	Stream   string              `json:"stream"`
+	Segments []map[string]string `json:"segments"`
+	Held     string              `json:"held"`
+	Flush    []map[string]string `json:"flush"`
+	Invalid  int                 `json:"invalid"`
+}
+
+// TestScanVectors feeds each stream whole, cut in two at every offset (in
+// a long stream, at every offset near its ends and at a stride between),
+// and a byte at a time. Each piece is fed from one buffer, overwritten
+// after each Feed once its segments are copied: what the Scanner keeps
+// must not be the caller's bytes.
+func TestScanVectors(t *testing.T) {
+	for _, v := range sdkVectors(t).Scan {
+		t.Run(v.Name, func(t *testing.T) {
+			applies(t, v.Requires)
+			data := []byte(v.Stream)
+			n := len(data)
+			var offsets []int
+			if n > 512 {
+				for i := 1; i < 64; i++ {
+					offsets = append(offsets, i)
+				}
+				for i := 64; i <= n-65; i += 4999 {
+					offsets = append(offsets, i)
+				}
+				for i := n - 64; i < n; i++ {
+					offsets = append(offsets, i)
+				}
+			} else {
+				for i := 1; i < n; i++ {
+					offsets = append(offsets, i)
+				}
+			}
+			splits := [][]int{nil}
+			for _, i := range offsets {
+				splits = append(splits, []int{i})
+			}
+			every := make([]int, 0, n)
+			for i := 1; i < n; i++ {
+				every = append(every, i)
+			}
+			splits = append(splits, every)
+			want, wantFlush := wantSegments(v.Segments), wantSegments(v.Flush)
+			for _, cuts := range splits {
+				s := Scanner{DA1: slices.Contains(v.Requires, "scanner.da1")}
+				var got []segView
+				buf := make([]byte, 0, n)
+				prev := 0
+				for _, c := range append(slices.Clone(cuts), n) {
+					buf = append(buf[:0], data[prev:c]...)
+					got = append(got, viewSegments(s.Feed(buf))...)
+					for i := range buf {
+						buf[i] = 'X'
+					}
+					prev = c
+				}
+				where := "whole"
+				switch {
+				case len(cuts) == 1:
+					where = fmt.Sprintf("cut at %d", cuts[0])
+				case len(cuts) > 1:
+					where = "a byte at a time"
+				}
+				held := string(s.Holding())
+				flushed := viewSegments(s.Flush())
+				if got := mergePass(got); !slices.Equal(got, want) {
+					t.Fatalf("%s: segments %q, want %q", where, got, want)
+				}
+				if held != v.Held {
+					t.Fatalf("%s: held %q, want %q", where, held, v.Held)
+				}
+				if !slices.Equal(flushed, wantFlush) {
+					t.Fatalf("%s: flush %q, want %q", where, flushed, wantFlush)
+				}
+				if s.Invalid != v.Invalid {
+					t.Fatalf("%s: %d invalid, want %d", where, s.Invalid, v.Invalid)
+				}
+			}
+		})
+	}
+}
+
+// segView is a segment as a vector has it: "pass", "osc" or "da1", and its
+// bytes, copied.
+type segView struct{ Kind, Data string }
+
+func viewSegments(segs []Segment) []segView {
+	var out []segView
+	for _, s := range segs {
+		out = append(out, segView{s.Kind.String(), string(s.Data)})
+	}
+	return out
+}
+
+func wantSegments(list []map[string]string) []segView {
+	var out []segView
+	for _, m := range list {
+		for k, v := range m {
+			out = append(out, segView{k, v})
+		}
+	}
+	return out
+}
+
+// mergePass joins adjacent pass segments, which come apart where the
+// stream was cut.
+func mergePass(segs []segView) []segView {
+	var out []segView
+	for _, s := range segs {
+		if n := len(out); n > 0 && s.Kind == "pass" && out[n-1].Kind == "pass" {
+			out[n-1].Data += s.Data
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+type detectVector struct {
+	Name  string `json:"name"`
+	N     int    `json:"n"`
+	Steps []struct {
+		At    int64   `json:"at"`
+		Start bool    `json:"start"`
+		DA1   bool    `json:"da1"`
+		OSC   *string `json:"osc"`
+		Tick  bool    `json:"tick"`
+		End   bool    `json:"end"`
+		// What the Detector must then say, for the keys present.
+		Took     *bool            `json:"took"`
+		State    *string          `json:"state"`
+		Decided  *bool            `json:"decided"`
+		Done     *bool            `json:"done"`
+		Deadline *json.RawMessage `json:"deadline"`
+	} `json:"steps"`
+	Caps map[string]any `json:"caps"`
+}
+
+// TestDetectVectors runs each vector's steps through one Detector, with
+// each step's time in milliseconds from the Unix epoch.
+func TestDetectVectors(t *testing.T) {
+	for _, v := range sdkVectors(t).Detect {
+		t.Run(v.Name, func(t *testing.T) {
+			d := Detector{N: v.N}
+			var dec Decoder
+			for i, st := range v.Steps {
+				now := time.UnixMilli(st.At)
+				took := false
+				switch {
+				case st.Start:
+					if q, want := d.Start(now), Query(max(v.N, 1)); q != want {
+						t.Errorf("step %d: Start returned %q, want %q", i, q, want)
+					}
+				case st.DA1:
+					took = d.DA1(now)
+				case st.OSC != nil:
+					m, res := dec.Feed(*st.OSC)
+					if r, ok := m.Reply(); res == Complete && ok {
+						took = d.Reply(r, now)
+					}
+				case st.Tick:
+					d.Tick(now)
+				case st.End:
+					d.End(now)
+				}
+				at := fmt.Sprintf("step %d (at %d)", i, st.At)
+				if st.Took != nil && took != *st.Took {
+					t.Errorf("%s: took %v, want %v", at, took, *st.Took)
+				}
+				if st.State != nil && d.State.String() != *st.State {
+					t.Errorf("%s: state %v, want %s", at, d.State, *st.State)
+				}
+				if st.Decided != nil && d.Decided != *st.Decided {
+					t.Errorf("%s: decided %v, want %v", at, d.Decided, *st.Decided)
+				}
+				if st.Done != nil && d.Done != *st.Done {
+					t.Errorf("%s: done %v, want %v", at, d.Done, *st.Done)
+				}
+				if st.Deadline != nil {
+					want := string(*st.Deadline)
+					got := "null"
+					if !d.Deadline.IsZero() {
+						got = strconv.FormatInt(d.Deadline.UnixMilli(), 10)
+					}
+					if got != want {
+						t.Errorf("%s: deadline %s, want %s", at, got, want)
+					}
+				}
+			}
+			if v.Caps != nil {
+				check(t, "caps", capsView(d.Caps, v.Caps), v.Caps)
+			}
+		})
+	}
 }

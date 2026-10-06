@@ -19,17 +19,24 @@ func Query(n int) string {
 // the document is sent Detached. It is answered on error: EQUOTA when the
 // host holds no more surfaces.
 func Doc(surface, html string, opts ...DocOption) string {
-	ctl := Control{{"a", "doc"}, {"s", surface}, {"q", strconv.Itoa(int(ReplyOnError))}}
+	ctl := Control{{"a", "doc"}, {"s", surface}, {"q", ""}}
+	var replies []ReplyOption
 	for _, o := range opts {
+		if r, ok := o.(ReplyOption); ok {
+			replies = append(replies, r)
+			continue
+		}
 		o.doc(&ctl)
 	}
-	return Encode(ctl, []byte(html))
+	return command(ctl, []byte(html), ReplyOnError, replies)
 }
 
 // DocOption is an option of Doc: a ReplyOption, Detached, or Scroll.
 type DocOption interface{ doc(*Control) }
 
-func (o ReplyOption) doc(c *Control) { o(c) }
+// doc does nothing: Doc takes its reply options apart from the others, so
+// that their order does not matter.
+func (ReplyOption) doc(*Control) {}
 
 type detached struct{}
 

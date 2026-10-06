@@ -8,7 +8,8 @@ a form that asks, or the panels of a full-screen Bubble Tea program.
 
 The SDK:
 
-- encodes the protocol;
+- encodes the protocol, and cuts it out of a byte stream, for a program
+  that reads its terminal raw or a relay that reads another's output;
 - finds out whether the terminal is a HOTTY host;
 - keeps surfaces on screen while a full-screen frame changes;
 - converts Markdown, tables and images into documents;

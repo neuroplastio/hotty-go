@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -26,6 +27,9 @@ func caps(n string) tea.Msg {
 
 var da1 = uv.PrimaryDeviceAttributesEvent{62, 22}
 
+// after is the Detector's timer firing d from now.
+func after(d time.Duration) tea.Msg { return detectTickMsg{time.Now().Add(d)} }
+
 func detecting() *Session {
 	s := New()
 	s.Detect()
@@ -44,7 +48,7 @@ func TestDetectHost(t *testing.T) {
 		t.Errorf("the fence's DA1 came back: %#v", msg)
 	}
 	// The detection's timers, when they fire, change nothing.
-	for _, late := range []tea.Msg{noHostMsg{}, detectTimeoutMsg{}} {
+	for _, late := range []tea.Msg{after(hotty.DetectAfterDA1), after(hotty.DetectTimeout)} {
 		if msg, _ := s.Update(late); msg != nil || s.Mode != Native {
 			t.Errorf("%T after detection: %#v, mode %v", late, msg, s.Mode)
 		}
@@ -59,7 +63,7 @@ func TestDetectText(t *testing.T) {
 	if msg != nil || cmd == nil || s.Mode != Detecting {
 		t.Fatalf("DA1: %#v, cmd %v, mode %v", msg, cmd != nil, s.Mode)
 	}
-	if msg, _ := s.Update(noHostMsg{}); !isReady(msg, Text) || s.Mode != Text {
+	if msg, _ := s.Update(after(hotty.DetectAfterDA1)); !isReady(msg, Text) || s.Mode != Text {
 		t.Fatalf("after the moment: %#v", msg)
 	}
 	// A reply that comes too late changes nothing.
@@ -75,7 +79,7 @@ func isReady(msg tea.Msg, mode Mode) bool {
 
 func TestDetectSilence(t *testing.T) {
 	s := detecting()
-	if msg, _ := s.Update(detectTimeoutMsg{}); !isReady(msg, Text) {
+	if msg, _ := s.Update(after(hotty.DetectTimeout)); !isReady(msg, Text) {
 		t.Fatalf("a terminal that answers nothing: %#v", msg)
 	}
 }
@@ -88,7 +92,7 @@ func TestDetectStrayDA1(t *testing.T) {
 	if msg, _ := s.Update(caps("1")); msg == nil || s.Mode != Native {
 		t.Fatalf("the reply after a stray DA1: %#v, mode %v", msg, s.Mode)
 	}
-	if msg, _ := s.Update(noHostMsg{}); msg != nil || s.Mode != Native {
+	if msg, _ := s.Update(after(hotty.DetectAfterDA1)); msg != nil || s.Mode != Native {
 		t.Errorf("the stray DA1's timer: %#v, mode %v", msg, s.Mode)
 	}
 }

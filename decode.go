@@ -73,7 +73,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 	body, ok := strings.CutPrefix(seq, prefix)
 	if !ok {
 		if seq == "\x1b]"+Number || strings.HasPrefix(seq, "\x1b]"+Number+"\x1b") || strings.HasPrefix(seq, "\x1b]"+Number+"\x07") {
-			return Message{}, d.invalid() // no control at all
+			return Message{}, d.bad() // no control at all
 		}
 		return Message{}, NotHotty
 	}
@@ -86,8 +86,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 	ctlPart, payload, _ := strings.Cut(body, ";")
 	ctl, ok := parseControl(ctlPart)
 	if !ok {
-		d.abort()
-		return Message{}, d.invalid()
+		return Message{}, d.bad()
 	}
 	more, hasMore := ctl["m"]
 
@@ -121,6 +120,16 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 func (d *Decoder) invalid() Result {
 	d.Invalid++
 	return Invalid
+}
+
+// bad drops a malformed message, and the chunked one it interrupts: two
+// malformed messages (SPEC §3.7).
+func (d *Decoder) bad() Result {
+	if d.pending != nil {
+		d.abort()
+		d.Invalid++
+	}
+	return d.invalid()
 }
 
 func (d *Decoder) abort() { d.pending, d.body = nil, strings.Builder{} }

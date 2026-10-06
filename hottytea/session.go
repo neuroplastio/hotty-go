@@ -46,7 +46,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/internal/detect"
 )
 
 // Counts are what Layout has sent so far: documents, placements, hides and
@@ -111,10 +110,9 @@ type RelayoutMsg struct{}
 type PongMsg struct{ Took time.Duration }
 
 type (
-	detectTimeoutMsg struct{}
-	noHostMsg        struct{}
-	erasedMsg        struct{}
-	pingDueMsg       struct{ seq int }
+	detectTickMsg struct{ at time.Time }
+	erasedMsg     struct{}
+	pingDueMsg    struct{ seq int }
 )
 
 // Rect is a rectangle of cells, from the screen's top-left corner (0, 0).
@@ -210,16 +208,17 @@ type Session struct {
 	keep    map[string]bool
 	seen    map[string]int  // the last layout that wanted a surface
 	refused map[string]bool // documents refused with EQUOTA, whose placement will fail too
-	// da1 counts the DA1 answers the Session's own requests are owed (the
-	// detection's fence, pings); sawDA1 is whether detection saw one.
-	da1     int
-	sawDA1  bool
-	layouts int // Layout calls
-	learned int // a limit an EQUOTA taught
-	closed  bool
-	watch   watcher
-	pinging bool
-	pingSeq int
+	// det decides what the terminal is, from Detect on; da1 counts the
+	// DA1 answers the Session's pings are owed.
+	det       hotty.Detector
+	detecting bool
+	da1       int
+	layouts   int // Layout calls
+	learned   int // a limit an EQUOTA taught
+	closed    bool
+	watch     watcher
+	pinging   bool
+	pingSeq   int
 
 	// The commands Send queued, which Flush's command takes when it runs,
 	// on a goroutine of Bubble Tea's; queued counts the bytes since the
@@ -240,12 +239,34 @@ func New() *Session {
 // the terminal answers the fence without a reply, or after 1.5 s of
 // silence.
 func (h *Session) Detect() tea.Cmd {
-	h.da1++
-	return tea.Batch(
-		tea.Raw(hotty.Query(detect.N)),
-		// A terminal that answers neither the query nor DA1 is not a host.
-		tea.Tick(detect.Timeout, func(time.Time) tea.Msg { return detectTimeoutMsg{} }),
-	)
+	h.detecting = true
+	return tea.Batch(tea.Raw(h.det.Start(time.Now())), h.detectTick())
+}
+
+// detectTick calls the Detector's Tick at its deadline.
+func (h *Session) detectTick() tea.Cmd {
+	if h.det.Done {
+		return nil
+	}
+	return tea.Tick(time.Until(h.det.Deadline), func(t time.Time) tea.Msg { return detectTickMsg{t} })
+}
+
+// detected reports what the Detector decided, once, as ReadyMsg, and keeps
+// its Tick on time when its deadline moved from was.
+func (h *Session) detected(was time.Time) (tea.Msg, tea.Cmd) {
+	var msg tea.Msg
+	if h.det.Decided && h.Mode == Detecting {
+		h.Mode = Text
+		if h.det.State == hotty.Native {
+			h.Mode, h.Caps = Native, h.det.Caps
+		}
+		msg = ReadyMsg{Mode: h.Mode, Caps: h.Caps}
+	}
+	var cmd tea.Cmd
+	if !h.det.Deadline.Equal(was) {
+		cmd = h.detectTick()
+	}
+	return msg, cmd
 }
 
 // Update takes the program's messages first. What is HOTTY's comes back as
@@ -270,16 +291,15 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 		return nil, nil
 
 	case uv.PrimaryDeviceAttributesEvent:
+		// Until detection is done, every DA1 is its own: the query's fence,
+		// or an earlier question's (SDK.md §3.8).
+		if was := h.det.Deadline; h.detecting && h.det.DA1(time.Now()) {
+			return h.detected(was)
+		}
 		if h.da1 == 0 {
 			return msg, nil // the program's own request
 		}
 		h.da1--
-		// The fence: a host answers the query before DA1. Wait a moment
-		// anyway, in case this DA1 answers an earlier request.
-		if h.Mode == Detecting && !h.sawDA1 {
-			h.sawDA1 = true
-			return nil, tea.Tick(detect.AfterDA1, func(time.Time) tea.Msg { return noHostMsg{} })
-		}
 		if h.pinging {
 			h.pinging = false
 			h.watch.mu.Lock()
@@ -306,12 +326,10 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 		}
 		return nil, nil
 
-	case noHostMsg, detectTimeoutMsg:
-		if h.Mode == Detecting {
-			h.Mode = Text
-			return ReadyMsg{Mode: Text}, nil
-		}
-		return nil, nil
+	case detectTickMsg:
+		was := h.det.Deadline
+		h.det.Tick(m.at)
+		return h.detected(was)
 
 	case erasedMsg:
 		h.watch.handled()
@@ -326,12 +344,8 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 }
 
 func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
-	if caps, ok := detect.Answer(r, detect.N); ok {
-		if h.Mode != Detecting {
-			return nil, nil // a late answer: detection is over
-		}
-		h.Mode, h.Caps = Native, caps
-		return ReadyMsg{Mode: Native, Caps: caps}, nil
+	if was := h.det.Deadline; h.detecting && h.det.Reply(r, time.Now()) {
+		return h.detected(was) // nothing, for a late answer
 	}
 	switch {
 	case r.OK && r.N != 0 && r.Re != "q":

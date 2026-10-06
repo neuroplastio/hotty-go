@@ -64,11 +64,20 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (c Caps) Light() bool`](#Caps.Light)
   - [`func (c Caps) Sends(kind string) bool`](#Caps.Sends)
   - [`func (c Caps) Supports(op Op) bool`](#Caps.Supports)
+  - [`func (c *Caps) UnmarshalJSON(data []byte) error`](#Caps.UnmarshalJSON)
 - [`type Control`](#Control)
   - [`func (c Control) Get(k string) (string, bool)`](#Control.Get)
   - [`func (c Control) With(k, v string) Control`](#Control.With)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
+- [`type DetectState`](#DetectState)
+  - [`func (s DetectState) String() string`](#DetectState.String)
+- [`type Detector`](#Detector)
+  - [`func (d *Detector) DA1(now time.Time) bool`](#Detector.DA1)
+  - [`func (d *Detector) End(now time.Time)`](#Detector.End)
+  - [`func (d *Detector) Reply(r Reply, now time.Time) bool`](#Detector.Reply)
+  - [`func (d *Detector) Start(now time.Time) string`](#Detector.Start)
+  - [`func (d *Detector) Tick(now time.Time)`](#Detector.Tick)
 - [`type DocOption`](#DocOption)
   - [`func Detached() DocOption`](#Detached)
   - [`func Scroll(axes Axes) DocOption`](#Scroll)
@@ -103,9 +112,29 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func Q(q Quiet) ReplyOption`](#Q)
 - [`type Result`](#Result)
   - [`func (r Result) String() string`](#Result.String)
+- [`type Scanner`](#Scanner)
+  - [`func (s *Scanner) Feed(p []byte) []Segment`](#Scanner.Feed)
+  - [`func (s *Scanner) Flush() []Segment`](#Scanner.Flush)
+  - [`func (s *Scanner) Holding() []byte`](#Scanner.Holding)
+  - [`func (s *Scanner) InSequence() bool`](#Scanner.InSequence)
+- [`type Segment`](#Segment)
+- [`type SegmentKind`](#SegmentKind)
+  - [`func (k SegmentKind) String() string`](#SegmentKind.String)
 - [`type Window`](#Window)
 
 ## <a id="pkg-constants"></a>Constants
+
+<a id="DetectTimeout"></a><a id="DetectAfterDA1"></a><a id="DetectAfterReply"></a>
+
+```go
+const (
+	DetectTimeout    = 1500 * time.Millisecond
+	DetectAfterDA1   = 150 * time.Millisecond
+	DetectAfterReply = 300 * time.Millisecond
+)
+```
+
+The Detector's times (SPEC §4): how long to wait for any answer at all; after a DA1 answer that came before any reply, for a reply that may still be on its way, since the DA1 may answer a question asked before the query; and after the host's reply, for the DA1 answer behind it, which would otherwise be left for whoever reads the terminal next.
 
 <a id="Number"></a><a id="Chunk"></a><a id="MaxSize"></a><a id="MaxName"></a><a id="Version"></a>
 
@@ -398,12 +427,19 @@ type Caps struct {
 	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
 	// a host that does not says nothing, and clips.
 	Scroll bool `json:"scroll"`
+	// Passthrough is true when the pointer passes through the parts of a
+	// surface that take no pointer (SPEC §9.3); a host that does not says
+	// nothing, and every window takes the pointer wherever it is.
+	Passthrough bool `json:"passthrough"`
 	// Host names the implementation, if it says.
 	Host string `json:"host"`
+	// Version is the implementation's version, with Host: dot-separated
+	// numbers, compared one by one ("0.0.10" is after "0.0.9").
+	Version string `json:"version"`
 }
 ```
 
-Caps is what a host says about itself in its reply to a query (SPEC §4).
+Caps is what a host says about itself in its reply to a query (SPEC §4). Each field is read on its own (SDK.md §2.7): one of an unexpected type is ignored, as one the program does not know is, and so is an element of a list or a map.
 
 ### <a id="Caps.CellCSS"></a>func (Caps) CellCSS
 
@@ -443,7 +479,7 @@ Light reports whether the terminal's colour scheme is light.
 func (c Caps) Sends(kind string) bool
 ```
 
-Sends reports whether the host sends an event kind. A host that lists no kinds is taken to send them all.
+Sends reports whether the host sends an event kind. A host that lists no kinds is taken to send them all. Drag in its events stands for dragstart, drag and dragend (SPEC §4).
 
 ### <a id="Caps.Supports"></a>func (Caps) Supports
 
@@ -452,6 +488,14 @@ func (c Caps) Supports(op Op) bool
 ```
 
 Supports reports whether the host supports a delta op. A host that lists no ops is taken to support them all.
+
+### <a id="Caps.UnmarshalJSON"></a>func (*Caps) UnmarshalJSON
+
+```go
+func (c *Caps) UnmarshalJSON(data []byte) error
+```
+
+UnmarshalJSON reads capabilities leniently: a field of an unexpected type is left zero, and the rest are read. JSON that is not an object is an error, and null changes nothing.
 
 ## <a id="Control"></a>type Control
 
@@ -500,6 +544,105 @@ func (d *Decoder) Feed(seq string) (m Message, r Result)
 Feed takes one complete OSC sequence, as a terminal-input parser delivers it: ESC ] … terminated by ST or BEL. When the result is Complete, m is the message.
 
 A malformed message (a control that does not parse, a payload that is not base64 or zlib) is Invalid. So is a chunked message that another message interrupts; the interrupting one is then decoded as usual, and its own result returned.
+
+## <a id="DetectState"></a>type DetectState
+
+```go
+type DetectState uint8
+```
+
+DetectState is what a Detector has found.
+
+<a id="Detecting"></a><a id="Native"></a><a id="Text"></a>
+
+```go
+const (
+	// Detecting: nothing is known yet.
+	Detecting DetectState = iota
+	// Native: the terminal is a HOTTY host.
+	Native
+	// Text: it is not; the program draws in cells.
+	Text
+)
+```
+
+The states of a Detector.
+
+### <a id="DetectState.String"></a>func (DetectState) String
+
+```go
+func (s DetectState) String() string
+```
+
+String names the state: "detecting", "native" or "text".
+
+## <a id="Detector"></a>type Detector
+
+```go
+type Detector struct {
+	// N numbers the query: a reply that does not echo it answers someone
+	// else's. 0 is 1.
+	N int
+
+	// State is what the Detector has found, and Caps the host's
+	// capabilities, when Native.
+	State DetectState
+	Caps  Caps
+	// Decided is whether State is final; Done, whether detection is over.
+	Decided, Done bool
+	// Deadline is when to call Tick next; zero before Start and once Done.
+	Deadline time.Time
+	// contains filtered or unexported fields
+}
+```
+
+Detector decides whether the terminal is a HOTTY host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
+
+Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query is detection's whenever it comes.
+
+Decided and Done differ only for a host: it is known to be one when its reply arrives, and detection is over when the DA1 answer behind it does. A program that must not wait acts when Decided; one that hands the terminal on, when Done.
+
+Its zero value is ready to use. It is not safe for concurrent use.
+
+### <a id="Detector.DA1"></a>func (*Detector) DA1
+
+```go
+func (d *Detector) DA1(now time.Time) bool
+```
+
+DA1 takes a DA1 answer that arrived at now, and reports whether it was detection's.
+
+### <a id="Detector.End"></a>func (*Detector) End
+
+```go
+func (d *Detector) End(now time.Time)
+```
+
+End ends detection at now: the input ended, or the program gave up. A terminal that has not answered is not a host.
+
+### <a id="Detector.Reply"></a>func (*Detector) Reply
+
+```go
+func (d *Detector) Reply(r Reply, now time.Time) bool
+```
+
+Reply takes a reply that arrived at now, and reports whether it answers the query: a=ok, re=q, and the query's n. One that comes after the Detector decided changes nothing.
+
+### <a id="Detector.Start"></a>func (*Detector) Start
+
+```go
+func (d *Detector) Start(now time.Time) string
+```
+
+Start starts detection at now, and returns the query to send.
+
+### <a id="Detector.Tick"></a>func (*Detector) Tick
+
+```go
+func (d *Detector) Tick(now time.Time)
+```
+
+Tick tells the Detector the time is now.
 
 ## <a id="DocOption"></a>type DocOption
 
@@ -853,10 +996,13 @@ Err is the reply as an error: nil when OK, else an \*Error.
 ## <a id="ReplyOption"></a>type ReplyOption
 
 ```go
-type ReplyOption func(*Control)
+type ReplyOption struct {
+	// contains filtered or unexported fields
+	// contains filtered or unexported fields
+}
 ```
 
-ReplyOption sets the reply a command asks for (SPEC §3.5): every command takes one, Doc as a DocOption.
+ReplyOption sets the reply a command asks for (SPEC §3.5): every command takes one, Doc as a DocOption. N and Q make them, in either order.
 
 ### <a id="N"></a>func N
 
@@ -864,7 +1010,7 @@ ReplyOption sets the reply a command asks for (SPEC §3.5): every command takes 
 func N(n int) ReplyOption
 ```
 
-N numbers the command and asks for its reply whatever the outcome (ReplyAlways): the reply echoes n, so the program can tell which command it answers. Q after N asks for less.
+N numbers the command and asks for its reply whatever the outcome (ReplyAlways): the reply echoes n, so the program can tell which command it answers. A Q given with it asks for less.
 
 ### <a id="Q"></a>func Q
 
@@ -872,7 +1018,7 @@ N numbers the command and asks for its reply whatever the outcome (ReplyAlways):
 func Q(q Quiet) ReplyOption
 ```
 
-Q sets the command's quiet level.
+Q sets the command's quiet level. It wins over the level N implies, whichever comes first.
 
 ## <a id="Result"></a>type Result
 
@@ -907,6 +1053,115 @@ func (r Result) String() string
 ```
 
 String names the result: "complete", "invalid", ….
+
+## <a id="Scanner"></a>type Scanner
+
+```go
+type Scanner struct {
+	// DA1 makes the Scanner cut out answers to Primary Device Attributes
+	// as SegmentDA1, for a program that reads them itself (SDK.md §4.1).
+	// Without it they pass.
+	DA1 bool
+	// Invalid counts the HOTTY sequences dropped so far.
+	Invalid int
+	// contains filtered or unexported fields
+}
+```
+
+Scanner cuts HOTTY sequences out of a byte stream, however the reads split it (SDK.md §3.7): a terminal's input, read raw, or a program's output, for a relay. Everything else goes out as it came, in order, in the Feed that brought it; the Scanner holds only what may still become a segment of its own, the start of ESC ] 7279 ; (or of a DA1 answer, with DA1) and a HOTTY sequence in progress. So the segments do not depend on how the stream was split, and a key is never kept waiting.
+
+An ESC inside a HOTTY sequence that does not begin its ST ends the sequence unfinished: it is dropped as malformed, and the ESC begins what comes next. A sequence longer than 64 KiB is dropped up to its terminator.
+
+Its zero value is ready to use. It is not safe for concurrent use.
+
+### <a id="Scanner.Feed"></a>func (*Scanner) Feed
+
+```go
+func (s *Scanner) Feed(p []byte) []Segment
+```
+
+Feed takes the next bytes of the stream and returns its segments, in order. Adjacent SegmentPass segments are one.
+
+### <a id="Scanner.Flush"></a>func (*Scanner) Flush
+
+```go
+func (s *Scanner) Flush() []Segment
+```
+
+Flush ends the stream: what is held goes out as SegmentPass, except a HOTTY sequence in progress, which is dropped as malformed.
+
+A program reading keys flushes a lone ESC that a read ended with, as the Escape key (SDK.md §4.1), at once or when no more bytes follow soon:
+
+```go
+segs := s.Feed(buf[:n])
+if h := s.Holding(); len(h) == 1 && !s.InSequence() {
+	segs = append(segs, s.Flush()...) // a lone ESC
+}
+```
+
+### <a id="Scanner.Holding"></a>func (*Scanner) Holding
+
+```go
+func (s *Scanner) Holding() []byte
+```
+
+Holding returns the bytes the Scanner holds for the next Feed: the start of a segment, or a HOTTY sequence in progress. They are good until the next Feed or Flush.
+
+### <a id="Scanner.InSequence"></a>func (*Scanner) InSequence
+
+```go
+func (s *Scanner) InSequence() bool
+```
+
+InSequence reports whether a HOTTY sequence is in progress, or one too long is being dropped: the next Feed goes on with it, and Flush would drop it. Otherwise what Holding returns is the start of a segment, which a program reading keys may flush after a moment, as typing (an ESC, then ], is Alt+]).
+
+## <a id="Segment"></a>type Segment
+
+```go
+type Segment struct {
+	Kind SegmentKind
+	// Data is the segment's bytes. It may share memory with the bytes
+	// given to Feed, so it is good until the caller changes those: a
+	// caller that reuses its read buffer copies what it keeps.
+	Data []byte
+}
+```
+
+Segment is a piece of a scanned stream.
+
+## <a id="SegmentKind"></a>type SegmentKind
+
+```go
+type SegmentKind uint8
+```
+
+SegmentKind is what a Segment holds.
+
+<a id="SegmentPass"></a><a id="SegmentOSC"></a><a id="SegmentDA1"></a>
+
+```go
+const (
+	// SegmentPass: bytes that are not HOTTY's, unchanged: keys, mouse
+	// reports, text, other escape sequences, other OSCs.
+	SegmentPass SegmentKind = iota
+	// SegmentOSC: one complete HOTTY sequence, from ESC ] 7279 ; to its
+	// terminator (ST or BEL), ready for a Decoder.
+	SegmentOSC
+	// SegmentDA1: an answer to Primary Device Attributes, CSI ? <digits
+	// and ;> c, from a Scanner made to look for them (Scanner.DA1).
+	SegmentDA1
+)
+```
+
+The kinds of Segment.
+
+### <a id="SegmentKind.String"></a>func (SegmentKind) String
+
+```go
+func (k SegmentKind) String() string
+```
+
+String names the kind: "pass", "osc" or "da1".
 
 ## <a id="Window"></a>type Window
 

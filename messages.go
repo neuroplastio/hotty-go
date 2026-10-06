@@ -307,6 +307,9 @@ func (e *Error) Error() string {
 }
 
 // Caps is what a host says about itself in its reply to a query (SPEC §4).
+// Each field is read on its own (SDK.md §2.7): one of an unexpected type
+// is ignored, as one the program does not know is, and so is an element of
+// a list or a map.
 type Caps struct {
 	// V is the protocol version the host implements: "0.1".
 	V string `json:"v"`
@@ -332,8 +335,79 @@ type Caps struct {
 	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
 	// a host that does not says nothing, and clips.
 	Scroll bool `json:"scroll"`
+	// Passthrough is true when the pointer passes through the parts of a
+	// surface that take no pointer (SPEC §9.3); a host that does not says
+	// nothing, and every window takes the pointer wherever it is.
+	Passthrough bool `json:"passthrough"`
 	// Host names the implementation, if it says.
 	Host string `json:"host"`
+	// Version is the implementation's version, with Host: dot-separated
+	// numbers, compared one by one ("0.0.10" is after "0.0.9").
+	Version string `json:"version"`
+}
+
+// UnmarshalJSON reads capabilities leniently: a field of an unexpected
+// type is left zero, and the rest are read. JSON that is not an object is
+// an error, and null changes nothing.
+func (c *Caps) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil || raw == nil {
+		return err
+	}
+	*c = Caps{}
+	field := func(k string, v any) { _ = json.Unmarshal(raw[k], v) }
+	field("v", &c.V)
+	c.Ops = stringList(raw["ops"])
+	c.Events = stringList(raw["events"])
+	var cell struct{ W, H *float64 }
+	if field("cell", &cell); cell.W != nil && cell.H != nil {
+		c.Cell.W, c.Cell.H = *cell.W, *cell.H
+	}
+	field("scale", &c.Scale)
+	field("scheme", &c.Scheme)
+	var limits map[string]json.RawMessage
+	field("limits", &limits)
+	for k, v := range limits {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			if c.Limits == nil {
+				c.Limits = map[string]int{}
+			}
+			c.Limits[k] = n
+		}
+	}
+	var net map[string]json.RawMessage
+	field("net", &net)
+	for k, v := range net {
+		var list []json.RawMessage
+		if json.Unmarshal(v, &list) == nil {
+			if c.Net == nil {
+				c.Net = map[string][]string{}
+			}
+			c.Net[k] = stringList(v)
+		}
+	}
+	field("scroll", &c.Scroll)
+	field("passthrough", &c.Passthrough)
+	field("host", &c.Host)
+	field("version", &c.Version)
+	return nil
+}
+
+// stringList reads a JSON list's strings, leaving out what is not one.
+func stringList(data json.RawMessage) []string {
+	var list []json.RawMessage
+	if json.Unmarshal(data, &list) != nil {
+		return nil
+	}
+	var out []string
+	for _, v := range list {
+		var s string
+		if json.Unmarshal(v, &s) == nil {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // Caps returns the capabilities a reply to a query carries.
@@ -378,10 +452,14 @@ func (c Caps) Supports(op Op) bool {
 }
 
 // Sends reports whether the host sends an event kind. A host that lists no
-// kinds is taken to send them all.
+// kinds is taken to send them all. Drag in its events stands for
+// dragstart, drag and dragend (SPEC §4).
 func (c Caps) Sends(kind string) bool {
 	if len(c.Events) == 0 {
 		return true
+	}
+	if kind == EventDragStart || kind == EventDragEnd {
+		kind = EventDrag
 	}
 	for _, k := range c.Events {
 		if k == kind {
