@@ -2,6 +2,8 @@ package hotty
 
 import (
 	"encoding/json"
+	"errors"
+	"math"
 	"slices"
 	"strconv"
 )
@@ -112,11 +114,11 @@ func (e Event) Size() (w, h float64, ok bool) {
 // FitRows is the rows a fit event says the document needs now; ok is false
 // for any other event.
 func (e Event) FitRows() (rows int, ok bool) {
-	var d struct{ R *int }
+	var d struct{ R *whole }
 	if e.Kind != EventFit || json.Unmarshal(e.Detail, &d) != nil || d.R == nil || *d.R < 1 {
 		return 0, false
 	}
-	return *d.R, true
+	return int(*d.R), true
 }
 
 // Hover is where a hover event says the pointer is (SPEC §9.4).
@@ -138,7 +140,7 @@ func (e Event) Hover() (Hover, bool) {
 		return Hover{}, false
 	}
 	var d struct {
-		C, R *int
+		C, R *whole
 		Out  bool
 	}
 	if json.Unmarshal(e.Detail, &d) != nil {
@@ -150,7 +152,26 @@ func (e Event) Hover() (Hover, bool) {
 	if d.C == nil || d.R == nil {
 		return Hover{}, false
 	}
-	return Hover{Col: *d.C, Row: *d.R}, true
+	return Hover{Col: int(*d.C), Row: int(*d.R)}, true
+}
+
+// whole is a count of cells in a detail: a JSON number with no fractional
+// part, however it is written, so 2.0 is 2 (SDK.md §3.9). Anything else
+// fails the detail's unmarshalling, and the accessor reads nothing.
+type whole int
+
+var errNotWhole = errors.New("hotty: not a whole number")
+
+func (w *whole) UnmarshalJSON(b []byte) error {
+	var f float64
+	if err := json.Unmarshal(b, &f); err != nil {
+		return err
+	}
+	if f != math.Trunc(f) || f < math.MinInt32 || f > math.MaxInt32 {
+		return errNotWhole
+	}
+	*w = whole(f)
+	return nil
 }
 
 // Area is the cells an element covers (SPEC §9), counted as a drag's are:
@@ -169,7 +190,7 @@ func (e Event) Area() (Area, bool) {
 		return Area{}, false
 	}
 	var d struct {
-		Area *struct{ C, R, W, H *int }
+		Area *struct{ C, R, W, H *whole }
 	}
 	if json.Unmarshal(e.Detail, &d) != nil || d.Area == nil {
 		return Area{}, false
@@ -178,7 +199,7 @@ func (e Event) Area() (Area, bool) {
 	if a.C == nil || a.R == nil || a.W == nil || a.H == nil {
 		return Area{}, false
 	}
-	return Area{Col: *a.C, Row: *a.R, W: *a.W, H: *a.H}, true
+	return Area{Col: int(*a.C), Row: int(*a.R), W: int(*a.W), H: int(*a.H)}, true
 }
 
 // Drag is where a drag's pointer is, and the modifier keys held
@@ -213,13 +234,13 @@ func (e Event) Drag() (Drag, bool) {
 		return Drag{}, false
 	}
 	var d struct {
-		C, R *int
+		C, R *whole
 		Keys []string
 	}
 	if json.Unmarshal(e.Detail, &d) != nil || d.C == nil || d.R == nil {
 		return Drag{}, false
 	}
-	return Drag{Col: *d.C, Row: *d.R, Keys: d.Keys}, true
+	return Drag{Col: int(*d.C), Row: int(*d.R), Keys: d.Keys}, true
 }
 
 // Fields is a submit event's detail: the form's fields by name. A value
