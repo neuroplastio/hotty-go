@@ -203,8 +203,8 @@ func TestAProgramOnAHost(t *testing.T) {
 	}
 	// At column 2, row 1, keeping the cursor, asking for presses.
 	place, _ := command(h, "a", "place", "s", cardName)
-	if c := place.Control; c["c"] != "20" || c["r"] != "3" || c["p"] != "1" || c["C"] != "1" {
-		t.Errorf("placement: %v", c)
+	if m := place; m.Get("c") != "20" || m.Get("r") != "3" || m.Get("p") != "1" || m.Get("C") != "1" {
+		t.Errorf("placement: %v", m.Control)
 	}
 	if !strings.Contains(h.Output(), "\x1b7\x1b[2;3H\x1b]7279;a=place:s="+cardName) {
 		t.Errorf("not placed at 2,1")

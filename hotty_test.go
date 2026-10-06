@@ -13,6 +13,15 @@ import (
 
 // split cuts a stream into its OSC sequences (the way a terminal-input parser
 // would deliver them), ignoring everything else.
+// ctlMap is a control as a map, for comparing with one.
+func ctlMap(c Control) map[string]string {
+	m := make(map[string]string, len(c))
+	for _, kv := range c {
+		m[kv.K] = kv.V
+	}
+	return m
+}
+
 func split(stream string) []string {
 	var out []string
 	for {
@@ -99,7 +108,7 @@ func TestCommandsRoundTrip(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			m := decodeOne(t, c.cmd)
-			if !reflect.DeepEqual(m.Control, c.control) || string(m.Payload) != c.payload {
+			if !reflect.DeepEqual(ctlMap(m.Control), c.control) || string(m.Payload) != c.payload {
 				t.Errorf("got %v %q", m.Control, m.Payload)
 			}
 		})
@@ -230,7 +239,7 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 	if string(m.Payload) != html {
 		t.Fatal("chunks did not reassemble")
 	}
-	if _, ok := m.Control["o"]; ok {
+	if m.Has("o") {
 		t.Error("o is the envelope's, not the message's")
 	}
 
@@ -554,12 +563,12 @@ func TestWireVectors(t *testing.T) {
 			}
 			for i, c := range w.Commands {
 				for k, val := range c.Control {
-					if got[i].Control[k] != val {
-						t.Errorf("%s=%q, want %q", k, got[i].Control[k], val)
+					if got[i].Get(k) != val {
+						t.Errorf("%s=%q, want %q", k, got[i].Get(k), val)
 					}
 				}
 				for _, k := range []string{"m", "o"} {
-					if _, ok := got[i].Control[k]; ok {
+					if got[i].Has(k) {
 						t.Errorf("%s is present", k)
 					}
 				}

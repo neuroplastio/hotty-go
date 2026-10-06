@@ -34,6 +34,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 
 - [Constants](#pkg-constants)
 - [`func Blur(surface string, opts ...ReplyOption) string`](#Blur)
+- [`func CursorBelow(rows int) string`](#CursorBelow)
 - [`func Del(surface string, opts ...ReplyOption) string`](#Del)
 - [`func DelAll(opts ...ReplyOption) string`](#DelAll)
 - [`func DelRes(id string, opts ...ReplyOption) string`](#DelRes)
@@ -41,6 +42,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Detach(surface string, opts ...ReplyOption) string`](#Detach)
 - [`func Doc(surface, html string, opts ...DocOption) string`](#Doc)
 - [`func Encode(ctl Control, payload []byte) string`](#Encode)
+- [`func EncodePlain(ctl Control, payload []byte) string`](#EncodePlain)
 - [`func Focus(surface, target string, opts ...ReplyOption) string`](#Focus)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
@@ -48,7 +50,11 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
 - [`func Query(n int) string`](#Query)
 - [`func RemoveAttr(surface, target, name string, opts ...ReplyOption) string`](#RemoveAttr)
+- [`func ReplyCaps(n string, caps json.RawMessage) string`](#ReplyCaps)
+- [`func ReplyErr(n, surface, re, code, detail string) string`](#ReplyErr)
+- [`func ReplyOK(n, surface, re string, extra Control, body []byte) string`](#ReplyOK)
 - [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
+- [`func Sanitize(v string) string`](#Sanitize)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
 - [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
@@ -67,7 +73,9 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (c *Caps) UnmarshalJSON(data []byte) error`](#Caps.UnmarshalJSON)
 - [`type Control`](#Control)
   - [`func (c Control) Get(k string) (string, bool)`](#Control.Get)
+  - [`func (c Control) Has(k string) bool`](#Control.Has)
   - [`func (c Control) With(k, v string) Control`](#Control.With)
+  - [`func (c Control) Without(k string) Control`](#Control.Without)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
 - [`type DetectState`](#DetectState)
@@ -89,6 +97,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (e Event) Area() (Area, bool)`](#Event.Area)
   - [`func (e Event) Checked() (checked, ok bool)`](#Event.Checked)
   - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
+  - [`func (e Event) Encode() string`](#Event.Encode)
   - [`func (e Event) Fields() map[string]string`](#Event.Fields)
   - [`func (e Event) FitRows() (rows int, ok bool)`](#Event.FitRows)
   - [`func (e Event) Hover() (Hover, bool)`](#Event.Hover)
@@ -100,6 +109,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
   - [`func (m Message) Get(k string) string`](#Message.Get)
+  - [`func (m Message) Has(k string) bool`](#Message.Has)
+  - [`func (m Message) Placement() (Placement, error)`](#Message.Placement)
   - [`func (m Message) Reply() (Reply, bool)`](#Message.Reply)
 - [`type Op`](#Op)
 - [`type Placement`](#Placement)
@@ -202,6 +213,14 @@ func Blur(surface string, opts ...ReplyOption) string
 
 Blur takes the keyboard back from a surface. Its focused control commits its value first, so a change event may come before the blur event.
 
+## <a id="CursorBelow"></a>func CursorBelow
+
+```go
+func CursorBelow(rows int) string
+```
+
+CursorBelow is the cursor's move a placement without KeepCursor makes (SPEC §5.2): rows index operations (IND) and a carriage return, to the start of the line below the placement. A relay that keeps a placement from the screen it emulates feeds it this instead.
+
 ## <a id="Del"></a>func Del
 
 ```go
@@ -258,7 +277,15 @@ Doc creates a surface, or replaces its document (SPEC §5.1). The surface is the
 func Encode(ctl Control, payload []byte) string
 ```
 
-Encode returns one command: the control and the payload, compressed when that makes it smaller, base64-encoded, and split into chunks of at most Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; in values, each character that the control's grammar does not allow becomes '\_' (SPEC §3.2).
+Encode returns one command: the control and the payload, compressed when that makes it smaller, base64-encoded, and split into chunks of at most Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are cleaned (Sanitize). The keys o and m are Encode's to set: a control given with them goes out without them.
+
+## <a id="EncodePlain"></a>func EncodePlain
+
+```go
+func EncodePlain(ctl Control, payload []byte) string
+```
+
+EncodePlain is Encode without compression: what a host, or a relay speaking as one, writes to a program, since hosts never compress (SPEC §3.3).
 
 ## <a id="Focus"></a>func Focus
 
@@ -316,6 +343,30 @@ func RemoveAttr(surface, target, name string, opts ...ReplyOption) string
 
 RemoveAttr removes an attribute from an element.
 
+## <a id="ReplyCaps"></a>func ReplyCaps
+
+```go
+func ReplyCaps(n string, caps json.RawMessage) string
+```
+
+ReplyCaps is a host's answer to a query numbered n (SPEC §4), with the capabilities' JSON as it is: a relay passes on Caps.Raw, so that fields it does not know reach the program.
+
+## <a id="ReplyErr"></a>func ReplyErr
+
+```go
+func ReplyErr(n, surface, re, code, detail string) string
+```
+
+ReplyErr is a host's error reply (SPEC §3.6): the code and detail as its JSON body.
+
+## <a id="ReplyOK"></a>func ReplyOK
+
+```go
+func ReplyOK(n, surface, re string, extra Control, body []byte) string
+```
+
+ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering for one writes it to a program: n and surface echo the command's, each left out when "", re names the action answered, extra keys follow it (a placement's c and r), and body is its JSON, if any. Never compressed (SPEC §3.3).
+
 ## <a id="Res"></a>func Res
 
 ```go
@@ -323,6 +374,14 @@ func Res(id, mime string, data []byte, opts ...ReplyOption) string
 ```
 
 Res stores a resource that documents refer to as cid:\<id> (SPEC §7.1): a stylesheet shared by several surfaces, an image, a font. Sending it again replaces it, and redraws every surface that refers to it.
+
+## <a id="Sanitize"></a>func Sanitize
+
+```go
+func Sanitize(v string) string
+```
+
+Sanitize makes v a control value (SPEC §3.2): each character a value may not hold becomes '\_', one for each character, not each byte, and one for each byte that is not UTF-8. Above 0x7e is not merely untidy: UTF-8 can hold 0x9c, which a terminal that reads C1 controls takes for ST, ending the sequence early.
 
 ## <a id="SetAttr"></a>func SetAttr
 
@@ -406,36 +465,42 @@ type Caps struct {
 	// V is the protocol version the host implements: "0.1".
 	V string `json:"v"`
 	// Ops are the delta ops it supports.
-	Ops []string `json:"ops"`
+	Ops []string `json:"ops,omitempty"`
 	// Events are the event kinds it sends.
-	Events []string `json:"events"`
+	Events []string `json:"events,omitempty"`
 	// Cell is a cell's size in device pixels.
 	Cell struct {
 		W float64 `json:"w"`
 		H float64 `json:"h"`
-	} `json:"cell"`
+	} `json:"cell,omitzero"`
 	// Scale is device pixels per CSS pixel.
-	Scale float64 `json:"scale"`
+	Scale float64 `json:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
-	Scheme string `json:"scheme"`
+	Scheme string `json:"scheme,omitempty"`
 	// Limits are the host's limits, such as "surfaces" (a count) and
 	// "resources" (bytes) (SPEC §13).
-	Limits map[string]int `json:"limits"`
+	Limits map[string]int `json:"limits,omitempty"`
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
-	Net map[string][]string `json:"net"`
+	Net map[string][]string `json:"net,omitempty"`
 	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
 	// a host that does not says nothing, and clips.
-	Scroll bool `json:"scroll"`
+	Scroll bool `json:"scroll,omitempty"`
 	// Passthrough is true when the pointer passes through the parts of a
 	// surface that take no pointer (SPEC §9.3); a host that does not says
 	// nothing, and every window takes the pointer wherever it is.
-	Passthrough bool `json:"passthrough"`
+	Passthrough bool `json:"passthrough,omitempty"`
 	// Host names the implementation, if it says.
-	Host string `json:"host"`
+	Host string `json:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
 	// numbers, compared one by one ("0.0.10" is after "0.0.9").
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
+
+	// Raw is the JSON the capabilities were read from, fields this
+	// package does not know included: what a relay announces to the
+	// programs behind it (SPEC §2.7). Marshalling Caps writes the fields
+	// above, not Raw.
+	Raw json.RawMessage `json:"-"`
 }
 ```
 
@@ -513,13 +578,29 @@ func (c Control) Get(k string) (string, bool)
 
 Get returns a key's value, and whether the control has the key.
 
+### <a id="Control.Has"></a>func (Control) Has
+
+```go
+func (c Control) Has(k string) bool
+```
+
+Has reports whether the control has a key.
+
 ### <a id="Control.With"></a>func (Control) With
 
 ```go
 func (c Control) With(k, v string) Control
 ```
 
-With returns the control with a key added.
+With returns a copy of the control with a key set: in place if the control has it, at the end if not (SDK.md §3.2).
+
+### <a id="Control.Without"></a>func (Control) Without
+
+```go
+func (c Control) Without(k string) Control
+```
+
+Without returns a copy of the control without a key: what a relay forwards with the keys it owns taken off.
 
 ## <a id="Decoder"></a>type Decoder
 
@@ -731,7 +812,8 @@ type Event struct {
 	// blur and resize, for a link without one (its href is in the
 	// detail), and for a press on nothing with an id.
 	Target string
-	// Detail is the event's JSON detail, if any.
+	// Detail is the event's JSON detail; nil when it has none, or when
+	// what came is not JSON.
 	Detail json.RawMessage
 }
 ```
@@ -761,6 +843,14 @@ func (e Event) Drag() (Drag, bool)
 ```
 
 Drag is a dragstart, drag or dragend event's detail; ok is false for any other event.
+
+### <a id="Event.Encode"></a>func (Event) Encode
+
+```go
+func (e Event) Encode() string
+```
+
+Encode is the event as a host sends it (SPEC §9): what a relay writes to a program, the surface named as the program knows it. Never compressed (SPEC §3.3).
 
 ### <a id="Event.Fields"></a>func (Event) Fields
 
@@ -838,12 +928,12 @@ KV is one control key and its value.
 
 ```go
 type Message struct {
-	Control map[string]string
+	Control Control
 	Payload []byte
 }
 ```
 
-Message is one HOTTY message: a reply or an event from the host, or a command from the program (what a host, or a test, decodes).
+Message is one HOTTY message: a reply or an event from the host, or a command from the program (what a host, a relay or a test decodes). Its control is in the order the keys came, so a relay that forwards it sends the same bytes.
 
 ### <a id="Message.Event"></a>func (Message) Event
 
@@ -860,6 +950,22 @@ func (m Message) Get(k string) string
 ```
 
 Get returns a control key's value, "" when the message lacks it.
+
+### <a id="Message.Has"></a>func (Message) Has
+
+```go
+func (m Message) Has(k string) bool
+```
+
+Has reports whether the message's control has a key.
+
+### <a id="Message.Placement"></a>func (Message) Placement
+
+```go
+func (m Message) Placement() (Placement, error)
+```
+
+Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). A command out of range is an \*Error with Code EINVAL, as a host answers it.
 
 ### <a id="Message.Reply"></a>func (Message) Reply
 

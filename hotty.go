@@ -41,6 +41,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/base64"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -80,8 +81,31 @@ type KV struct{ K, V string }
 // Control is a command's keys, in the order they are sent.
 type Control []KV
 
-// With returns the control with a key added.
-func (c Control) With(k, v string) Control { return append(c, KV{k, v}) }
+// With returns a copy of the control with a key set: in place if the
+// control has it, at the end if not (SDK.md §3.2).
+func (c Control) With(k, v string) Control {
+	out := slices.Clone(c)
+	out.set(k, v)
+	return out
+}
+
+// Without returns a copy of the control without a key: what a relay
+// forwards with the keys it owns taken off.
+func (c Control) Without(k string) Control {
+	out := make(Control, 0, len(c))
+	for _, kv := range c {
+		if kv.K != k {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// Has reports whether the control has a key.
+func (c Control) Has(k string) bool {
+	_, ok := c.Get(k)
+	return ok
+}
 
 // Get returns a key's value, and whether the control has the key.
 func (c Control) Get(k string) (string, bool) {
@@ -143,13 +167,20 @@ func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string 
 
 // Encode returns one command: the control and the payload, compressed when
 // that makes it smaller, base64-encoded, and split into chunks of at most
-// Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; in values, each
-// character that the control's grammar does not allow becomes '_'
-// (SPEC §3.2).
-func Encode(ctl Control, payload []byte) string {
+// Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are
+// cleaned (Sanitize). The keys o and m are Encode's to set: a control
+// given with them goes out without them.
+func Encode(ctl Control, payload []byte) string { return encode(ctl, payload, true) }
+
+// EncodePlain is Encode without compression: what a host, or a relay
+// speaking as one, writes to a program, since hosts never compress
+// (SPEC §3.3).
+func EncodePlain(ctl Control, payload []byte) string { return encode(ctl, payload, false) }
+
+func encode(ctl Control, payload []byte, compress bool) string {
 	body := payload
 	var zipped bool
-	if len(payload) >= compressFrom {
+	if compress && len(payload) >= compressFrom {
 		var z bytes.Buffer
 		w, _ := zlib.NewWriterLevel(&z, zlib.BestSpeed)
 		_, _ = w.Write(payload)
@@ -162,17 +193,23 @@ func Encode(ctl Control, payload []byte) string {
 
 	var control strings.Builder
 	var quiet string
-	for i, kv := range ctl {
-		if i > 0 {
+	for _, kv := range ctl {
+		if kv.K == "o" || kv.K == "m" {
+			continue
+		}
+		if control.Len() > 0 {
 			control.WriteByte(':')
 		}
-		control.WriteString(kv.K + "=" + cleanValue(kv.V))
+		control.WriteString(kv.K + "=" + Sanitize(kv.V))
 		if kv.K == "q" {
-			quiet = cleanValue(kv.V)
+			quiet = Sanitize(kv.V)
 		}
 	}
 	if zipped {
-		control.WriteString(":o=z")
+		if control.Len() > 0 {
+			control.WriteByte(':')
+		}
+		control.WriteString("o=z")
 	}
 
 	var b strings.Builder
@@ -210,9 +247,12 @@ func valueByte(c byte) bool {
 	return c >= 0x20 && c <= 0x7e && c != ':' && c != ';' && c != '='
 }
 
-// cleanValue replaces each character a control value may not hold with
-// '_', one for each character, not each byte.
-func cleanValue(v string) string {
+// Sanitize makes v a control value (SPEC §3.2): each character a value may
+// not hold becomes '_', one for each character, not each byte, and one for
+// each byte that is not UTF-8. Above 0x7e is not merely untidy: UTF-8 can
+// hold 0x9c, which a terminal that reads C1 controls takes for ST, ending
+// the sequence early.
+func Sanitize(v string) string {
 	clean := true
 	for i := 0; i < len(v); i++ {
 		if !valueByte(v[i]) {

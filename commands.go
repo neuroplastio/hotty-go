@@ -149,6 +149,64 @@ func (p Placement) control(surface string) Control {
 	return ctl
 }
 
+// Placement reads a place command (SPEC §5.2), as a host or a relay
+// does: Rows 0 for r=auto or none, and the window as the command gives it,
+// its defaults filled in: w reaches the surface's right edge, and h its
+// bottom, which with Rows 0 is the host's to find (H 0). A command out of
+// range is an *Error with Code EINVAL, as a host answers it.
+func (m Message) Placement() (Placement, error) {
+	fail := func(detail string) (Placement, error) {
+		return Placement{}, &Error{Code: EINVAL, Detail: detail, Re: m.Get("a"), Surface: m.Get("s")}
+	}
+	if m.Get("a") != "place" {
+		return fail("not a place command")
+	}
+	num := func(k string, def, lo, hi int) (int, bool) {
+		v, ok := m.Control.Get(k)
+		if !ok {
+			return def, true
+		}
+		n, err := strconv.Atoi(v)
+		return n, err == nil && n >= lo && n <= hi
+	}
+	if !m.Has("c") {
+		return fail("missing c")
+	}
+	var p Placement
+	var ok bool
+	if p.Cols, ok = num("c", 0, 1, MaxSize); !ok {
+		return fail("c out of range")
+	}
+	if v := m.Get("r"); m.Has("r") && v != "auto" {
+		if p.Rows, ok = num("r", 0, 1, MaxSize); !ok {
+			return fail("r out of range")
+		}
+	}
+	if m.Has("x") || m.Has("y") || m.Has("w") || m.Has("h") {
+		x, okx := num("x", 0, 0, MaxSize-1)
+		y, oky := num("y", 0, 0, MaxSize-1)
+		w, okw := num("w", p.Cols-x, 1, MaxSize)
+		h, okh := num("h", max(p.Rows-y, 0), 1, MaxSize)
+		if !okx || !oky || !okw || !okh || w < 1 || x+w > p.Cols || p.Rows > 0 && (h < 1 || y+h > p.Rows) {
+			return fail("window out of the surface")
+		}
+		p.Window = Window{X: x, Y: y, W: w, H: h}
+	}
+	if p.Z, ok = num("z", 0, -1000, 1000); !ok {
+		return fail("z out of range")
+	}
+	p.Press, p.Fit, p.Hover, p.KeepCursor = m.Get("p") == "1", m.Get("f") == "1", m.Get("v") == "1", m.Get("C") == "1"
+	return p, nil
+}
+
+// CursorBelow is the cursor's move a placement without KeepCursor makes
+// (SPEC §5.2): rows index operations (IND) and a carriage return, to the
+// start of the line below the placement. A relay that keeps a placement
+// from the screen it emulates feeds it this instead.
+func CursorBelow(rows int) string {
+	return strings.Repeat("\x1bD", max(rows, 0)) + "\r"
+}
+
 // Place places a surface at the cursor (SPEC §5.2). Placing a surface that
 // is placed moves it. It is answered on error: ENOENT when the host has no
 // such surface (it may have dropped it), EINVAL for a size or window out of

@@ -4,4 +4,4 @@
 // takes on only what it imports: hottyterm, hottytea and hottytest.
 module github.com/neuroplastio/hotty-go
 
-go 1.26.8
+go 1.24.0

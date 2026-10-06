@@ -469,30 +469,21 @@ func (h *Host) command(m hotty.Message) {
 	if q == "2" || q == "1" && code == "" {
 		return
 	}
-	ctl := hotty.Control{{K: "a", V: "ok"}}
-	if code != "" {
-		ctl[0].V = "err"
+	n, s := m.Get("n"), m.Get("s")
+	switch {
+	case code != "":
+		h.send(hotty.ReplyErr(n, s, a, code, detail))
+	case a == "q":
+		caps, _ := json.Marshal(h.caps)
+		h.send(hotty.ReplyCaps(n, caps))
+	default:
+		h.send(hotty.ReplyOK(n, s, a, extra, nil))
 	}
-	if n, ok := m.Control["n"]; ok {
-		ctl = ctl.With("n", n)
-	}
-	if s, ok := m.Control["s"]; ok {
-		ctl = ctl.With("s", s)
-	}
-	ctl = ctl.With("re", a)
-	ctl = append(ctl, extra...)
-	var payload []byte
-	if code != "" {
-		payload, _ = json.Marshal(map[string]string{"code": code, "detail": detail})
-	} else if a == "q" {
-		payload, _ = json.Marshal(h.caps)
-	}
-	h.send(ctl, payload)
 }
 
-// send writes a message to the program's input.
-func (h *Host) send(ctl hotty.Control, payload []byte) {
-	enc := hotty.Encode(ctl, payload)
+// send writes a message to the program's input: never compressed, as no
+// host compresses (SPEC §3.3).
+func (h *Host) send(enc string) {
 	var d hotty.Decoder
 	if m, r := d.Feed(enc); r == hotty.Complete {
 		if _, ok := m.Reply(); ok {
@@ -522,11 +513,11 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		return "", "", nil
 	}
 	if a == "del" {
-		if id, ok := m.Control["id"]; ok && m.Get("s") == "" {
+		if id, ok := m.Control.Get("id"); ok && m.Get("s") == "" {
 			delete(h.res, id)
 			return "", "", nil
 		}
-		if _, ok := m.Control["s"]; !ok {
+		if !m.Has("s") {
 			h.surfaces = map[string]*Surface{}
 			h.keyboard = nil
 			return "", "", nil
@@ -537,7 +528,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	default:
 		return hotty.EINVAL, "unknown action " + a, nil
 	}
-	name, ok := m.Control["s"]
+	name, ok := m.Control.Get("s")
 	if !ok || !hotty.ValidName(name) {
 		return hotty.EINVAL, "bad surface name", nil
 	}
@@ -650,60 +641,38 @@ func (h *Host) resBytes() int {
 }
 
 func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra hotty.Control) {
-	num := func(k string, def, lo, hi int) (int, bool) {
-		v, ok := m.Control[k]
-		if !ok {
-			return def, true
-		}
-		n, err := strconv.Atoi(v)
-		return n, err == nil && n >= lo && n <= hi
+	p, err := m.Placement()
+	if e := (*hotty.Error)(nil); errors.As(err, &e) {
+		return e.Code, e.Detail, nil
 	}
-	if _, ok := m.Control["c"]; !ok {
-		return hotty.EINVAL, "missing c", nil
-	}
-	c, ok := num("c", 0, 1, hotty.MaxSize)
-	if !ok {
-		return hotty.EINVAL, "c out of range", nil
-	}
-	r := 0
-	if v := m.Get("r"); v != "" && v != "auto" {
-		if r, ok = num("r", 0, 1, hotty.MaxSize); !ok {
-			return hotty.EINVAL, "r out of range", nil
-		}
-	}
+	r := p.Rows
 	if r == 0 {
-		r = max(1, min(hotty.MaxSize, h.autoRows(s, c)))
+		r = max(1, min(hotty.MaxSize, h.autoRows(s, p.Cols)))
 	}
-	x, okx := num("x", 0, 0, hotty.MaxSize)
-	y, oky := num("y", 0, 0, hotty.MaxSize)
-	w, okw := num("w", c-x, 1, hotty.MaxSize)
-	hh, okh := num("h", r-y, 1, hotty.MaxSize)
-	if !okx || !oky || !okw || !okh || x+w > c || y+hh > r || w < 1 || hh < 1 {
-		return hotty.EINVAL, "window out of the surface", nil
+	rows := r // the rows the placement covers
+	if win := &p.Window; *win != (hotty.Window{}) {
+		if win.H == 0 {
+			win.H = r - win.Y // auto: to the bottom, now that the host knows it
+		}
+		if win.H < 1 || win.Y+win.H > r {
+			return hotty.EINVAL, "window out of the surface", nil
+		}
+		rows = win.H
 	}
-	z, ok := num("z", 0, -1000, 1000)
-	if !ok {
-		return hotty.EINVAL, "z out of range", nil
-	}
+	p.Rows = r
 	s.placed = true
-	s.place = hotty.Placement{Cols: c, Rows: r, Z: z, Press: m.Get("p") == "1", Fit: m.Get("f") == "1",
-		Hover: m.Get("v") == "1", KeepCursor: m.Get("C") == "1"}
-	if !s.place.Hover {
+	s.place = p
+	if !p.Hover {
 		s.heard = nil // v=1 again starts from out (SPEC §9.4)
 	}
 	s.fitRows = r
-	if _, ok := m.Control["x"]; ok || m.Control["y"] != "" || m.Control["w"] != "" || m.Control["h"] != "" {
-		s.place.Window = hotty.Window{X: x, Y: y, W: w, H: hh}
-	}
 	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
-	if !s.place.KeepCursor {
-		// As if by h times IND, then CR.
-		for range hh {
-			h.scr.index()
+	if !p.KeepCursor {
+		for _, c := range []byte(hotty.CursorBelow(rows)) {
+			h.byte(c)
 		}
-		h.scr.col = 0
 	}
-	return "", "", hotty.Control{{K: "c", V: strconv.Itoa(c)}, {K: "r", V: strconv.Itoa(r)}}
+	return "", "", hotty.Control{{K: "c", V: strconv.Itoa(p.Cols)}, {K: "r", V: strconv.Itoa(r)}}
 }
 
 // estimateRows is AutoRows' default: a row for each line of the body's
@@ -755,7 +724,7 @@ func (h *Host) event(s *Surface, kind, target string, detail any) {
 	if detail != nil {
 		payload, _ = json.Marshal(detail)
 	}
-	h.send(hotty.Control{{K: "a", V: "ev"}, {K: "s", V: s.name}, {K: "e", V: kind}, {K: "t", V: target}}, payload)
+	h.send(hotty.Event{Surface: s.name, Kind: kind, Target: target, Detail: payload}.Encode())
 }
 
 // takeKeyboard gives a surface the keyboard at el, taking it from another

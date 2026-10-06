@@ -2,6 +2,7 @@ package hotty
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 )
 
@@ -35,7 +36,8 @@ type Event struct {
 	// blur and resize, for a link without one (its href is in the
 	// detail), and for a press on nothing with an id.
 	Target string
-	// Detail is the event's JSON detail, if any.
+	// Detail is the event's JSON detail; nil when it has none, or when
+	// what came is not JSON.
 	Detail json.RawMessage
 }
 
@@ -44,7 +46,18 @@ func (m Message) Event() (Event, bool) {
 	if m.Get("a") != "ev" {
 		return Event{}, false
 	}
-	return Event{Surface: m.Get("s"), Kind: m.Get("e"), Target: m.Get("t"), Detail: m.Payload}, true
+	e := Event{Surface: m.Get("s"), Kind: m.Get("e"), Target: m.Get("t")}
+	if len(m.Payload) > 0 && json.Valid(m.Payload) {
+		e.Detail = m.Payload
+	}
+	return e, true
+}
+
+// Encode is the event as a host sends it (SPEC §9): what a relay writes
+// to a program, the surface named as the program knows it. Never
+// compressed (SPEC §3.3).
+func (e Event) Encode() string {
+	return EncodePlain(Control{{"a", "ev"}, {"s", e.Surface}, {"e", e.Kind}, {"t", e.Target}}, e.Detail)
 }
 
 // Value is the "value" of the event's detail: a control's value, or the
@@ -277,6 +290,44 @@ func (m Message) Reply() (Reply, bool) {
 	return r, true
 }
 
+// ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay
+// answering for one writes it to a program: n and surface echo the
+// command's, each left out when "", re names the action answered, extra
+// keys follow it (a placement's c and r), and body is its JSON, if any.
+// Never compressed (SPEC §3.3).
+func ReplyOK(n, surface, re string, extra Control, body []byte) string {
+	return EncodePlain(replyControl("ok", n, surface, re, extra), body)
+}
+
+// ReplyErr is a host's error reply (SPEC §3.6): the code and detail as its
+// JSON body.
+func ReplyErr(n, surface, re, code, detail string) string {
+	body, _ := json.Marshal(struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail,omitempty"`
+	}{code, detail})
+	return EncodePlain(replyControl("err", n, surface, re, nil), body)
+}
+
+// ReplyCaps is a host's answer to a query numbered n (SPEC §4), with the
+// capabilities' JSON as it is: a relay passes on Caps.Raw, so that fields
+// it does not know reach the program.
+func ReplyCaps(n string, caps json.RawMessage) string {
+	return ReplyOK(n, "", "q", nil, caps)
+}
+
+func replyControl(a, n, surface, re string, extra Control) Control {
+	ctl := Control{{"a", a}}
+	if n != "" {
+		ctl = append(ctl, KV{"n", n})
+	}
+	if surface != "" {
+		ctl = append(ctl, KV{"s", surface})
+	}
+	ctl = append(ctl, KV{"re", re})
+	return append(ctl, extra...)
+}
+
 // Err is the reply as an error: nil when OK, else an *Error.
 func (r Reply) Err() error {
 	if r.OK {
@@ -314,36 +365,42 @@ type Caps struct {
 	// V is the protocol version the host implements: "0.1".
 	V string `json:"v"`
 	// Ops are the delta ops it supports.
-	Ops []string `json:"ops"`
+	Ops []string `json:"ops,omitempty"`
 	// Events are the event kinds it sends.
-	Events []string `json:"events"`
+	Events []string `json:"events,omitempty"`
 	// Cell is a cell's size in device pixels.
 	Cell struct {
 		W float64 `json:"w"`
 		H float64 `json:"h"`
-	} `json:"cell"`
+	} `json:"cell,omitzero"`
 	// Scale is device pixels per CSS pixel.
-	Scale float64 `json:"scale"`
+	Scale float64 `json:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
-	Scheme string `json:"scheme"`
+	Scheme string `json:"scheme,omitempty"`
 	// Limits are the host's limits, such as "surfaces" (a count) and
 	// "resources" (bytes) (SPEC §13).
-	Limits map[string]int `json:"limits"`
+	Limits map[string]int `json:"limits,omitempty"`
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
-	Net map[string][]string `json:"net"`
+	Net map[string][]string `json:"net,omitempty"`
 	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
 	// a host that does not says nothing, and clips.
-	Scroll bool `json:"scroll"`
+	Scroll bool `json:"scroll,omitempty"`
 	// Passthrough is true when the pointer passes through the parts of a
 	// surface that take no pointer (SPEC §9.3); a host that does not says
 	// nothing, and every window takes the pointer wherever it is.
-	Passthrough bool `json:"passthrough"`
+	Passthrough bool `json:"passthrough,omitempty"`
 	// Host names the implementation, if it says.
-	Host string `json:"host"`
+	Host string `json:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
 	// numbers, compared one by one ("0.0.10" is after "0.0.9").
-	Version string `json:"version"`
+	Version string `json:"version,omitempty"`
+
+	// Raw is the JSON the capabilities were read from, fields this
+	// package does not know included: what a relay announces to the
+	// programs behind it (SPEC §2.7). Marshalling Caps writes the fields
+	// above, not Raw.
+	Raw json.RawMessage `json:"-"`
 }
 
 // UnmarshalJSON reads capabilities leniently: a field of an unexpected
@@ -354,7 +411,7 @@ func (c *Caps) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil || raw == nil {
 		return err
 	}
-	*c = Caps{}
+	*c = Caps{Raw: slices.Clone(json.RawMessage(data))}
 	field := func(k string, v any) { _ = json.Unmarshal(raw[k], v) }
 	field("v", &c.V)
 	c.Ops = stringList(raw["ops"])

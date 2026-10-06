@@ -2,7 +2,7 @@
 // own for Bubble Tea.
 module github.com/neuroplastio/hotty-go/hottytea
 
-go 1.26.8
+go 1.25.0
 
 require github.com/neuroplastio/hotty-go v0.0.0-20261006165839-2da425e02025
 

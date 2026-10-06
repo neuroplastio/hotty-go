@@ -231,7 +231,7 @@ func segments(t *testing.T, out string) []segment {
 			s := segment{Cmd: &struct {
 				Control map[string]string `json:"control"`
 				Payload string            `json:"payload"`
-			}{m.Control, string(m.Payload)}}
+			}{ctlMap(m.Control), string(m.Payload)}}
 			segs = append(segs, s)
 		case Partial:
 		default:
@@ -260,8 +260,10 @@ func TestEncodeVectors(t *testing.T) {
 			var ctl Control
 			var keys []string
 			for _, kv := range v.Control {
-				ctl = ctl.With(kv[0], kv[1])
-				keys = append(keys, kv[0])
+				ctl = append(ctl, KV{kv[0], kv[1]})
+				if kv[0] != "m" && kv[0] != "o" { // Encode's to set
+					keys = append(keys, kv[0])
+				}
 			}
 			payload := []byte(deref(v.Payload))
 			if v.PayloadB64 != nil {
@@ -303,6 +305,13 @@ func TestEncodeVectors(t *testing.T) {
 			}
 			if !slices.Equal(order, keys) {
 				t.Errorf("keys %v, want %v", order, keys)
+			}
+			var decoded []string
+			for _, kv := range msgs[0].Control {
+				decoded = append(decoded, kv.K)
+			}
+			if !slices.Equal(decoded, keys) {
+				t.Errorf("decoded keys %v, want %v", decoded, keys)
 			}
 		})
 	}
@@ -347,7 +356,7 @@ func TestDecodeVectors(t *testing.T) {
 			}
 			for i, want := range v.Messages {
 				m := msgs[i]
-				if !reflect.DeepEqual(m.Control, want.Control) {
+				if !reflect.DeepEqual(ctlMap(m.Control), want.Control) {
 					t.Errorf("message %d: control %v, want %v", i, m.Control, want.Control)
 				}
 				if want.Reply != nil {

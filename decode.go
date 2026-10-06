@@ -10,14 +10,22 @@ import (
 )
 
 // Message is one HOTTY message: a reply or an event from the host, or a
-// command from the program (what a host, or a test, decodes).
+// command from the program (what a host, a relay or a test decodes). Its
+// control is in the order the keys came, so a relay that forwards it sends
+// the same bytes.
 type Message struct {
-	Control map[string]string
+	Control Control
 	Payload []byte
 }
 
 // Get returns a control key's value, "" when the message lacks it.
-func (m Message) Get(k string) string { return m.Control[k] }
+func (m Message) Get(k string) string {
+	v, _ := m.Control.Get(k)
+	return v
+}
+
+// Has reports whether the message's control has a key.
+func (m Message) Has(k string) bool { return m.Control.Has(k) }
 
 // Result is what a Decoder made of one sequence.
 type Result int
@@ -54,7 +62,7 @@ func (r Result) String() string {
 // (SPEC §3.4). Its zero value is ready to use. It is not safe for
 // concurrent use.
 type Decoder struct {
-	pending map[string]string // the control of a chunked message
+	pending Control // the control of a chunked message
 	body    strings.Builder
 	// Invalid counts the malformed messages dropped so far, aborted
 	// chunked messages included.
@@ -88,7 +96,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 	if !ok {
 		return Message{}, d.bad()
 	}
-	more, hasMore := ctl["m"]
+	more, hasMore := ctl.Get("m")
 
 	if d.pending != nil {
 		if continuation(ctl) {
@@ -108,7 +116,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 		return Message{}, d.invalid()
 	}
 
-	delete(ctl, "m")
+	ctl = ctl.Without("m")
 	if hasMore && more == "1" {
 		d.pending = ctl
 		d.body.WriteString(payload)
@@ -134,23 +142,23 @@ func (d *Decoder) bad() Result {
 
 func (d *Decoder) abort() { d.pending, d.body = nil, strings.Builder{} }
 
-func (d *Decoder) finish(ctl map[string]string, payload string) (Message, Result) {
-	p, ok := decodePayload(payload, ctl["o"])
+func (d *Decoder) finish(ctl Control, payload string) (Message, Result) {
+	o, _ := ctl.Get("o")
+	p, ok := decodePayload(payload, o)
 	if !ok {
 		return Message{}, d.invalid()
 	}
-	delete(ctl, "o")
-	return Message{Control: ctl, Payload: p}, Complete
+	return Message{Control: ctl.Without("o"), Payload: p}, Complete
 }
 
 // continuation reports whether a control is a further chunk's: m, and q
 // at most (SPEC §3.4).
-func continuation(ctl map[string]string) bool {
-	if _, ok := ctl["m"]; !ok {
+func continuation(ctl Control) bool {
+	if !ctl.Has("m") {
 		return false
 	}
-	for k := range ctl {
-		if k != "m" && k != "q" {
+	for _, kv := range ctl {
+		if kv.K != "m" && kv.K != "q" {
 			return false
 		}
 	}
@@ -160,11 +168,11 @@ func continuation(ctl map[string]string) bool {
 // parseControl reads key=value pairs separated by ':' (SPEC §3.2). A pair
 // without '=', a key that is not a key, a value with a character values may
 // not hold, or a key given twice, and the control does not parse.
-func parseControl(s string) (map[string]string, bool) {
+func parseControl(s string) (Control, bool) {
 	if s == "" {
 		return nil, false
 	}
-	ctl := map[string]string{}
+	var ctl Control
 	for kv := range strings.SplitSeq(s, ":") {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok || !validKey(k) {
@@ -175,10 +183,10 @@ func parseControl(s string) (map[string]string, bool) {
 				return nil, false
 			}
 		}
-		if _, dup := ctl[k]; dup {
+		if ctl.Has(k) {
 			return nil, false
 		}
-		ctl[k] = v
+		ctl = append(ctl, KV{k, v})
 	}
 	return ctl, true
 }

@@ -111,6 +111,12 @@ func TestQueryAndCaps(t *testing.T) {
 	if !ok || r.N != 5 || caps.Host != "mine" || caps.Limits["surfaces"] != 3 || caps.V != hotty.Version || caps.Cell.H != 18 {
 		t.Errorf("caps %+v, reply %+v", caps, r)
 	}
+	// Hosts never compress (SPEC §3.3), however long the reply.
+	h = New(t, Caps(hotty.Caps{Host: strings.Repeat("h", 400), Ops: []string{"text", "var", "morph", "inner"}}))
+	send(h, hotty.Query(1))
+	if seqs := oscs(h.drain()); len(seqs) != 1 || strings.Contains(seqs[0], "o=z") {
+		t.Errorf("the caps reply: %q", seqs)
+	}
 }
 
 func TestTextTerminal(t *testing.T) {

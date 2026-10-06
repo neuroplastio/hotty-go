@@ -471,41 +471,23 @@ func stylesheet(n *nethtml.Node) bool {
 // refused (EINVAL: a size, a window or a z out of range) changes nothing,
 // as it changed nothing where the program was recorded.
 func (s *Screen) place(sf *surface, m hotty.Message) {
-	bad := false
-	num := func(k string, least, most, def int) int {
-		v, ok := m.Control[k]
-		if !ok {
-			return def
-		}
-		n, err := strconv.Atoi(v)
-		if err != nil || n < least || n > most {
-			bad = true
-		}
-		return n
-	}
-	cols := num("c", 1, hotty.MaxSize, 0)
-	rows := 0
-	if r := m.Get("r"); r != "" && r != "auto" {
-		rows = num("r", 1, hotty.MaxSize, 0)
-	}
-	x, y := num("x", 0, hotty.MaxSize-1, 0), num("y", 0, hotty.MaxSize-1, 0)
-	w, h := num("w", 1, hotty.MaxSize, cols-x), num("h", 1, hotty.MaxSize, max(0, rows-y))
-	z := num("z", -1000, 1000, 0)
-	if bad || cols == 0 || x+w > cols || rows > 0 && y+h > rows {
+	p, err := m.Placement()
+	if err != nil {
 		return
 	}
-	if _, ok := m.Control["h"]; !ok && rows == 0 {
-		h = 0 // auto: to the document's end
+	w := p.Window
+	if w == (hotty.Window{}) {
+		w = hotty.Window{W: p.Cols, H: p.Rows} // with auto rows, H 0: to the document's end
 	}
-	sf.cols, sf.rows, sf.win, sf.z = cols, rows, [4]int{x, y, w, h}, z
+	sf.cols, sf.rows, sf.win, sf.z = p.Cols, p.Rows, [4]int{w.X, w.Y, w.W, w.H}, p.Z
 	cur := s.emu.CursorPosition()
 	sf.col, sf.row = cur.X, cur.Y
 	sf.alt = s.emu.IsAltScreen()
 	sf.placed = true
-	if m.Get("C") != "1" {
+	if !p.KeepCursor {
 		// The cursor goes to the start of the line below the placement,
 		// scrolling if it must (SPEC §5.2).
-		s.cells(append(bytes.Repeat([]byte("\x1bD"), sf.height()), '\r'))
+		s.cells([]byte(hotty.CursorBelow(sf.height())))
 	}
 }
 
