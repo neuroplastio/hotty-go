@@ -159,6 +159,15 @@ type Surface struct {
 	// surface: for a hint of the program's own, or to clear what it lit
 	// outside the surface (SPEC §9.4).
 	Hover bool
+	// Scroll asks the host to scroll the document itself along these axes
+	// (hotty.ScrollVertical, hotty.ScrollHorizontal; SPEC §5.3): the
+	// wheel, a touchpad, touch and the scrolling keys move it, and the
+	// program hears nothing of it. Rect is the box it scrolls in. It goes
+	// out with the document, so a change sends the document again, which
+	// starts at the top. A host whose Caps.Scroll is false clips the
+	// document as before: a program that must show the rest there scrolls
+	// it by Clip, or by documents of its own.
+	Scroll hotty.Axes
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.
@@ -203,8 +212,9 @@ type Session struct {
 	Count Counts
 
 	dec     hotty.Decoder
-	placed  map[string]placement // on screen
-	hasDoc  map[string]bool      // sent: on screen or hidden
+	placed  map[string]placement  // on screen
+	hasDoc  map[string]bool       // sent: on screen or hidden
+	scroll  map[string]hotty.Axes // the axes each document went out with
 	keep    map[string]bool
 	seen    map[string]int  // the last layout that wanted a surface
 	refused map[string]bool // documents refused with EQUOTA, whose placement will fail too
@@ -231,7 +241,7 @@ type Session struct {
 // New returns a Session that has not detected the terminal yet.
 func New() *Session {
 	return &Session{placed: map[string]placement{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
-		seen: map[string]int{}, refused: map[string]bool{}}
+		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}}
 }
 
 // Detect asks the terminal whether it is a host (SPEC §4): return it from
@@ -423,13 +433,14 @@ func (h *Session) Layout(want []Surface) {
 	}
 	for _, o := range on {
 		s, at := o.s, o.at
-		if !h.hasDoc[s.Name] {
-			if !h.makeRoom(wanted) {
+		if !h.hasDoc[s.Name] || h.scroll[s.Name] != s.Scroll {
+			if !h.hasDoc[s.Name] && !h.makeRoom(wanted) {
 				continue // the terminal holds no more: not until one goes
 			}
-			h.Send(hotty.Doc(s.Name, s.Doc()))
+			h.Send(hotty.Doc(s.Name, s.Doc(), hotty.Scroll(s.Scroll)))
 			h.Count.Docs++
 			h.hasDoc[s.Name] = true
+			h.scroll[s.Name] = s.Scroll
 			delete(h.refused, s.Name)
 			delete(h.placed, s.Name)
 		}
@@ -521,6 +532,7 @@ func (h *Session) Delete(name string) {
 	delete(h.placed, name)
 	delete(h.keep, name)
 	delete(h.seen, name)
+	delete(h.scroll, name)
 }
 
 // Close ends the Session, on the program's way out: it deletes every

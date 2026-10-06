@@ -562,6 +562,15 @@ type Surface struct {
 	// surface: for a hint of the program's own, or to clear what it lit
 	// outside the surface (SPEC §9.4).
 	Hover bool
+	// Scroll asks the host to scroll the document itself along these axes
+	// (hotty.ScrollVertical, hotty.ScrollHorizontal; SPEC §5.3): the
+	// wheel, a touchpad, touch and the scrolling keys move it, and the
+	// program hears nothing of it. Rect is the box it scrolls in. It goes
+	// out with the document, so a change sends the document again, which
+	// starts at the top. A host whose Caps.Scroll is false clips the
+	// document as before: a program that must show the rest there scrolls
+	// it by Clip, or by documents of its own.
+	Scroll hotty.Axes
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
 	// surface was deleted or the host lost it.

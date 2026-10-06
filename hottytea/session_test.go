@@ -71,6 +71,31 @@ func TestErasedScreenPlacesEverySurfaceAgain(t *testing.T) {
 	}
 }
 
+func TestAScrollingSurfaceAsksTheHostWithItsDocument(t *testing.T) {
+	h := native()
+	docs := 0
+	want := []Surface{{Name: "x", Rect: Rect{0, 1, 40, 10}, Scroll: hotty.ScrollVertical,
+		Doc: func() string { docs++; return "<p>x</p>" }}}
+	h.Layout(want)
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1:scroll=1;") || !strings.Contains(out, "a=place:s=x") {
+		t.Fatalf("first layout sent %q", out)
+	}
+	h.Layout(want)
+	if out := flushed(h); out != "" {
+		t.Fatalf("an unchanged layout sent %q", out)
+	}
+	// The axes are the document's: another value sends it again, and
+	// places it again.
+	want[0].Scroll = 0
+	h.Layout(want)
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1;") || strings.Contains(out, "scroll=") || !strings.Contains(out, "a=place:s=x") {
+		t.Fatalf("dropping Scroll sent %q", out)
+	}
+	if docs != 2 {
+		t.Fatalf("the document was built %d times", docs)
+	}
+}
+
 func TestAMissingDocumentIsSentAgain(t *testing.T) {
 	h := native()
 	want := []Surface{{Name: "x", Rect: Rect{0, 1, 10, 3}, Doc: func() string { return "<p>x</p>" }}}
