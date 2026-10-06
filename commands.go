@@ -26,7 +26,7 @@ func Doc(surface, html string, opts ...DocOption) string {
 	return Encode(ctl, []byte(html))
 }
 
-// DocOption is an option of Doc: a ReplyOption, or Detached.
+// DocOption is an option of Doc: a ReplyOption, Detached, or Scroll.
 type DocOption interface{ doc(*Control) }
 
 func (o ReplyOption) doc(c *Control) { o(c) }
@@ -46,6 +46,37 @@ func (detached) doc(c *Control) { c.set("d", "1") }
 // reads the terminal next, a shell, would read the surface's events as
 // typing. A host older than §5.5 ignores d=1.
 func Detached() DocOption { return detached{} }
+
+// Axes are the directions a document scrolls in (SPEC §5.1): a bitmask of
+// ScrollVertical and ScrollHorizontal.
+type Axes int
+
+// The axes of Scroll.
+const (
+	ScrollVertical   Axes = 1
+	ScrollHorizontal Axes = 2
+)
+
+type scroll Axes
+
+func (s scroll) doc(c *Control) {
+	if s != 0 {
+		c.set("scroll", strconv.Itoa(int(s)))
+	}
+}
+
+// Scroll lets the document scroll along the axes given (scroll=<axes>,
+// SPEC §5.1, §5.3), as a page does in a browser: its overflow scrolls, with
+// scrollbars in its pixels, never its cells, and a gesture it cannot take
+// further goes on to the terminal unless the document's CSS
+// overscroll-behavior stops it. Scrolling is local: the program hears
+// nothing of it, and a delta keeps the offsets.
+//
+// Like Detached, it belongs to the document: one sent without it does not
+// scroll. 0, the default, sends no key; any other value goes out as given,
+// for the host to judge. A host that does not scroll (Caps.Scroll false)
+// ignores it and clips, as it clips every other document.
+func Scroll(axes Axes) DocOption { return scroll(axes) }
 
 // Window is the part of a surface a placement shows, in cells from the
 // surface's top-left corner (SPEC §5.2). The zero Window shows all of it.

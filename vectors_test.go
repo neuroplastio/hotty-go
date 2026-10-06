@@ -21,6 +21,9 @@ import (
 var features = map[string]bool{
 	"place.hover":         true,
 	"event.hover":         true,
+	"doc.scroll":          true,
+	"event.area":          true,
+	"caps.scroll":         true,
 	"decode.unterminated": true,
 }
 
@@ -118,6 +121,9 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		}
 		if d, _ := options["detached"].(bool); d {
 			docOpts = append(docOpts, Detached())
+		}
+		if s, ok := options["scroll"].(float64); ok {
+			docOpts = append(docOpts, Scroll(Axes(s)))
 		}
 		return Doc(str("surface"), str("html"), docOpts...)
 	case "place":
@@ -391,6 +397,9 @@ func eventView(e Event) map[string]any {
 	if h, ok := e.Hover(); ok {
 		view["hover"] = map[string]any{"c": h.Col, "r": h.Row, "out": h.Out}
 	}
+	if a, ok := e.Area(); ok {
+		view["area"] = map[string]any{"c": a.Col, "r": a.Row, "w": a.W, "h": a.H}
+	}
 	return view
 }
 
@@ -400,7 +409,7 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  map[string]any{"w": c.Cell.W, "h": c.Cell.H},
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"host": c.Host, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
+		"scroll": c.Scroll, "host": c.Host, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	supports, sends := map[string]any{}, map[string]any{}

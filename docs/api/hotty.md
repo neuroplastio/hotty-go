@@ -55,6 +55,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
+- [`type Area`](#Area)
+- [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
   - [`func (c Caps) CellCSS() (w, h float64)`](#Caps.CellCSS)
   - [`func (c Caps) Drags() bool`](#Caps.Drags)
@@ -69,11 +71,13 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
 - [`type DocOption`](#DocOption)
   - [`func Detached() DocOption`](#Detached)
+  - [`func Scroll(axes Axes) DocOption`](#Scroll)
 - [`type Drag`](#Drag)
   - [`func (d Drag) Has(key string) bool`](#Drag.Has)
 - [`type Error`](#Error)
   - [`func (e *Error) Error() string`](#Error.Error)
 - [`type Event`](#Event)
+  - [`func (e Event) Area() (Area, bool)`](#Event.Area)
   - [`func (e Event) Checked() (checked, ok bool)`](#Event.Checked)
   - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
   - [`func (e Event) Fields() map[string]string`](#Event.Fields)
@@ -339,6 +343,33 @@ func ValidName(s string) bool
 
 ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SPEC §3.5).
 
+## <a id="Area"></a>type Area
+
+```go
+type Area struct{ Col, Row, W, H int }
+```
+
+Area is the cells an element covers (SPEC §9), counted as a drag's are: Col and Row are the first column and row it touches, from 0 at the surface's top left (not its window's), and W and H the columns and rows it spans. An element partly clipped or scrolled away has its whole area, so Col and Row may be negative or past the surface.
+
+## <a id="Axes"></a>type Axes
+
+```go
+type Axes int
+```
+
+Axes are the directions a document scrolls in (SPEC §5.1): a bitmask of ScrollVertical and ScrollHorizontal.
+
+<a id="ScrollVertical"></a><a id="ScrollHorizontal"></a>
+
+```go
+const (
+	ScrollVertical   Axes = 1
+	ScrollHorizontal Axes = 2
+)
+```
+
+The axes of Scroll.
+
 ## <a id="Caps"></a>type Caps
 
 ```go
@@ -364,6 +395,9 @@ type Caps struct {
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
 	Net map[string][]string `json:"net"`
+	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
+	// a host that does not says nothing, and clips.
+	Scroll bool `json:"scroll"`
 	// Host names the implementation, if it says.
 	Host string `json:"host"`
 }
@@ -476,7 +510,7 @@ type DocOption interface {
 }
 ```
 
-DocOption is an option of Doc: a ReplyOption, or Detached.
+DocOption is an option of Doc: a ReplyOption, Detached, or Scroll.
 
 ### <a id="Detached"></a>func Detached
 
@@ -487,6 +521,16 @@ func Detached() DocOption
 Detached sends a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, changed by deltas, hidden and deleted as before.
 
 It is what a command prints among its output, which outlives it: whatever reads the terminal next, a shell, would read the surface's events as typing. A host older than §5.5 ignores d=1.
+
+### <a id="Scroll"></a>func Scroll
+
+```go
+func Scroll(axes Axes) DocOption
+```
+
+Scroll lets the document scroll along the axes given (scroll=\<axes>, SPEC §5.1, §5.3), as a page does in a browser: its overflow scrolls, with scrollbars in its pixels, never its cells, and a gesture it cannot take further goes on to the terminal unless the document's CSS overscroll-behavior stops it. Scrolling is local: the program hears nothing of it, and a delta keeps the offsets.
+
+Like Detached, it belongs to the document: one sent without it does not scroll. 0, the default, sends no key; any other value goes out as given, for the host to judge. A host that does not scroll (Caps.Scroll false) ignores it and clips, as it clips every other document.
 
 ## <a id="Drag"></a>type Drag
 
@@ -550,6 +594,14 @@ type Event struct {
 ```
 
 Event is what the user did in a surface (SPEC §9).
+
+### <a id="Event.Area"></a>func (Event) Area
+
+```go
+func (e Event) Area() (Area, bool)
+```
+
+Area is the cells of the element a click or a press reports, a keyboard click's too: what a program places something next to the element by, as a browser places a select's list or a menu by its control. ok is false for any other event, and when the detail lacks any of the four.
 
 ### <a id="Event.Checked"></a>func (Event) Checked
 

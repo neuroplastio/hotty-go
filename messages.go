@@ -140,6 +140,34 @@ func (e Event) Hover() (Hover, bool) {
 	return Hover{Col: *d.C, Row: *d.R}, true
 }
 
+// Area is the cells an element covers (SPEC §9), counted as a drag's are:
+// Col and Row are the first column and row it touches, from 0 at the
+// surface's top left (not its window's), and W and H the columns and rows
+// it spans. An element partly clipped or scrolled away has its whole area,
+// so Col and Row may be negative or past the surface.
+type Area struct{ Col, Row, W, H int }
+
+// Area is the cells of the element a click or a press reports, a keyboard
+// click's too: what a program places something next to the element by, as
+// a browser places a select's list or a menu by its control. ok is false
+// for any other event, and when the detail lacks any of the four.
+func (e Event) Area() (Area, bool) {
+	if e.Kind != EventClick && e.Kind != EventPress {
+		return Area{}, false
+	}
+	var d struct {
+		Area *struct{ C, R, W, H *int }
+	}
+	if json.Unmarshal(e.Detail, &d) != nil || d.Area == nil {
+		return Area{}, false
+	}
+	a := d.Area
+	if a.C == nil || a.R == nil || a.W == nil || a.H == nil {
+		return Area{}, false
+	}
+	return Area{Col: *a.C, Row: *a.R, W: *a.W, H: *a.H}, true
+}
+
 // Drag is where a drag's pointer is, and the modifier keys held
 // (SPEC §9.1).
 type Drag struct {
@@ -301,6 +329,9 @@ type Caps struct {
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
 	Net map[string][]string `json:"net"`
+	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
+	// a host that does not says nothing, and clips.
+	Scroll bool `json:"scroll"`
 	// Host names the implementation, if it says.
 	Host string `json:"host"`
 }

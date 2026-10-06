@@ -74,6 +74,9 @@ func TestCommandsRoundTrip(t *testing.T) {
 		{"doc", Doc("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "q": "1"}, "<p>hello</p>"},
 		{"doc detached", Doc("card", "<p>hello</p>", Detached()), map[string]string{"a": "doc", "s": "card", "d": "1", "q": "1"}, "<p>hello</p>"},
 		{"doc detached, numbered", Doc("card", "<p>hello</p>", Detached(), N(3)), map[string]string{"a": "doc", "s": "card", "d": "1", "n": "3", "q": "0"}, "<p>hello</p>"},
+		{"doc scrolls both ways", Doc("log", "<pre></pre>", Scroll(ScrollVertical|ScrollHorizontal)), map[string]string{"a": "doc", "s": "log", "scroll": "3", "q": "1"}, "<pre></pre>"},
+		{"doc scroll 0", Doc("log", "<pre></pre>", Scroll(0)), map[string]string{"a": "doc", "s": "log", "q": "1"}, "<pre></pre>"},
+		{"doc scroll as given", Doc("log", "<pre></pre>", Scroll(4)), map[string]string{"a": "doc", "s": "log", "scroll": "4", "q": "1"}, "<pre></pre>"},
 		{"place auto", Place("card", Placement{Cols: 40}), map[string]string{"a": "place", "s": "card", "c": "40", "r": "auto", "q": "1"}, ""},
 		{"place", Place("card", Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}),
 			map[string]string{"a": "place", "s": "card", "c": "40", "r": "3", "z": "-2", "p": "1", "C": "1", "q": "1"}, ""},
@@ -422,6 +425,23 @@ func TestEvents(t *testing.T) {
 		t.Error("a drag's detail without its column")
 	}
 
+	env, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "click"}, {"t", "env"}}, `{"value":"staging","area":{"c":2,"r":0,"w":12,"h":1}}`).Event()
+	if a, ok := env.Area(); !ok || a != (Area{Col: 2, Row: 0, W: 12, H: 1}) || env.Value() != "staging" {
+		t.Errorf("Area = %+v %v", a, ok)
+	}
+	title, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}, {"t", "title"}}, `{"area":{"c":-1,"r":3,"w":5,"h":2}}`).Event()
+	if a, ok := title.Area(); !ok || a.Col != -1 || a.H != 2 {
+		t.Errorf("a press's Area = %+v %v", a, ok)
+	}
+	for _, bad := range []string{`{}`, `{"area":null}`, `{"area":[2,0,12,1]}`, `{"area":{"c":2,"r":0,"w":12}}`, `{"area":{"c":2,"r":0,"w":12,"h":1.5}}`, `{"area":{"c":2,"r":0,"w":"12","h":1}}`, `[`} {
+		if _, ok := (Event{Kind: EventClick, Detail: []byte(bad)}).Area(); ok {
+			t.Errorf("Area on %s", bad)
+		}
+	}
+	if _, ok := (Event{Kind: EventChange, Detail: []byte(`{"area":{"c":2,"r":0,"w":12,"h":1}}`)}).Area(); ok {
+		t.Error("a change has no area")
+	}
+
 	if _, ok := host(Control{{"a", "ok"}, {"re", "doc"}}, "").Event(); ok {
 		t.Error("a reply is not an event")
 	}
@@ -482,6 +502,11 @@ func TestCaps(t *testing.T) {
 	// So is hover.
 	if caps.Hovers() || none.Hovers() || !(Caps{Events: []string{EventHover}}).Hovers() {
 		t.Error("Hovers")
+	}
+	// Scroll only where a host says so.
+	scrolls, _ := host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":"0.1","scroll":true}`).Reply()
+	if c, ok := scrolls.Caps(); !ok || !c.Scroll || caps.Scroll {
+		t.Error("Scroll")
 	}
 	bad, _ := host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":`).Reply()
 	if _, ok := bad.Caps(); ok {
