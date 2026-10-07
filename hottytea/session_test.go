@@ -84,12 +84,20 @@ func TestAScrollingSurfaceAsksTheHostWithItsDocument(t *testing.T) {
 	if out := flushed(h); out != "" {
 		t.Fatalf("an unchanged layout sent %q", out)
 	}
-	// The axes are the document's: another value sends it again, and
-	// places it again.
+	// The axes are the document's: another value sends it again, and only
+	// it. The host keeps the placement through a replaced document
+	// (SPEC §5.1).
 	want[0].Scroll = 0
 	h.Layout(want)
-	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1;") || strings.Contains(out, "scroll=") || !strings.Contains(out, "a=place:s=x") {
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1;") || strings.Contains(out, "scroll=") || strings.Contains(out, "a=place") {
 		t.Fatalf("dropping Scroll sent %q", out)
+	}
+	if h.Count.Docs != 2 || h.Count.Places != 1 {
+		t.Fatalf("sent %d documents and %d placements", h.Count.Docs, h.Count.Places)
+	}
+	h.Layout(want)
+	if out := flushed(h); out != "" {
+		t.Fatalf("the surface was not left placed: %q", out)
 	}
 	if docs != 2 {
 		t.Fatalf("the document was built %d times", docs)

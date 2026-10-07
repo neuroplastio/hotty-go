@@ -433,8 +433,8 @@ func (h *Session) Layout(want []Surface) {
 	}
 	for _, o := range on {
 		s, at := o.s, o.at
-		if !h.hasDoc[s.Name] || h.scroll[s.Name] != s.Scroll {
-			if !h.hasDoc[s.Name] && !h.makeRoom(wanted) {
+		if fresh := !h.hasDoc[s.Name]; fresh || h.scroll[s.Name] != s.Scroll {
+			if fresh && !h.makeRoom(wanted) {
 				continue // the terminal holds no more: not until one goes
 			}
 			h.Send(hotty.Doc(s.Name, s.Doc(), hotty.Scroll(s.Scroll)))
@@ -442,7 +442,11 @@ func (h *Session) Layout(want []Surface) {
 			h.hasDoc[s.Name] = true
 			h.scroll[s.Name] = s.Scroll
 			delete(h.refused, s.Name)
-			delete(h.placed, s.Name)
+			// A replaced document keeps its placement (SPEC §5.1): only a
+			// new one is placed again.
+			if fresh {
+				delete(h.placed, s.Name)
+			}
 		}
 		p := placement{at: at, cols: s.Rect.W, rows: s.Rect.H,
 			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press, fit: s.Fit, hover: s.Hover}
