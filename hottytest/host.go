@@ -7,6 +7,7 @@
 //	card := h.Surface("tool-card")
 //	card.TextOf("status")                         // what it shows
 //	h.Click("tool-card", "retry")                 // what the user does
+//	h.Key("Tab")                                  // keys, as SPEC §10.2 has a host take them
 //
 // The host keeps every surface's document as the program's commands leave
 // it, with the delta operations and the morph of SPEC §6, and answers each
@@ -841,7 +842,7 @@ func (h *Host) Click(surface, id string) error {
 	if err != nil {
 		return err
 	}
-	return h.click(s, el)
+	return h.click(s, el, true)
 }
 
 // ClickLink clicks the first link in a surface whose href is href, as
@@ -861,10 +862,12 @@ func (h *Host) ClickLink(surface, href string) error {
 	if el == nil {
 		return fmt.Errorf("%w: a link to %s in %s", ErrNoElement, href, s.name)
 	}
-	return h.click(s, el)
+	return h.click(s, el, true)
 }
 
-func (h *Host) click(s *Surface, el *html.Node) error {
+// click is a click on el: by the pointer, which presses first, or by
+// the keyboard (Key), which does not.
+func (h *Host) click(s *Surface, el *html.Node, pointer bool) error {
 	if a := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.A }); a != nil {
 		if _, ok := attr(a, "href"); ok && hyperlink(a) {
 			if u := s.resolve(a); u != "" {
@@ -876,7 +879,7 @@ func (h *Host) click(s *Surface, el *html.Node) error {
 	if s.detached {
 		return ErrDetached
 	}
-	if s.place.Press {
+	if pointer && s.place.Press {
 		h.pressAt(s, el)
 	}
 	if f := closest(el, focusable); f != nil {
