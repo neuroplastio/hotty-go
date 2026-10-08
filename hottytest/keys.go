@@ -10,27 +10,30 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyedit"
 )
 
 // Key types a key as the user does, and does with it what SPEC §10.2 has a
-// host do while a surface has the keyboard. The key is a W3C UI Events key
-// value after its modifiers, joined by "+": "a", "A", " ", "Enter", "Tab",
-// "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
+// host do while a surface has the keyboard. The key is named as SPEC §10.4
+// names it: a W3C UI Events key value after its modifiers, joined by "+":
+// "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown",
+// "Escape", "Control+s".
 //
 // Tab and Shift+Tab move focus among the surface's focusable elements in
 // tree order, those with a negative tabindex and those in an inert subtree
 // left out; past the last, or before the first, the surface loses the
-// keyboard (blur). The focused element takes the keys of its row of the
-// table, unmodified or with Shift only:
+// keyboard (blur). A text field (a text-like input, a textarea) does what
+// its keymap says (hotty.Resolve, with the data-keys of the elements from
+// the root to it): it edits its value at a caret this host keeps, as
+// hottyedit.Field does, with an input event for each edit (data-on~=input);
+// submit commits it and submits its form; characters type. The other
+// elements take the keys of their row of the table, unmodified or with
+// Shift only:
 //   - a button, a link, a summary: Space and Enter click it;
 //   - a checkbox or a radio button: Space checks it, Enter submits its
 //     form;
-//   - a text-like input: characters and Space type at the end, Backspace
-//     takes the last character back (input, with data-on~=input), Enter
-//     commits it and submits its form; Delete, the arrows across, Home
-//     and End move a caret this host does not keep;
-//   - a textarea: the same, with Enter typing a new line, and the arrows
-//     up and down and the page keys used;
+//   - a date or time input: the keys a text input's default keymap binds,
+//     and characters; the arrows up and down and the page keys are used;
 //   - a select: the arrows, Home and End pick an option (change), a
 //     character the next option it starts; Space, Enter and the page keys
 //     are used.
@@ -54,10 +57,8 @@ func (h *Host) Key(key string) (used bool) {
 
 func (h *Host) useKey(s *Surface, key string) bool {
 	mods, name := splitKey(key)
-	if slices.ContainsFunc(mods, func(m string) bool { return m != "Shift" }) {
-		return false
-	}
-	if name == "Tab" {
+	shiftOnly := !slices.ContainsFunc(mods, func(m string) bool { return m != "Shift" })
+	if name == "Tab" && shiftOnly {
 		h.tab(s, len(mods) > 0)
 		return true
 	}
@@ -65,30 +66,21 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	if el == nil {
 		return false
 	}
+	if textField(el) {
+		return h.fieldKey(s, el, key)
+	}
+	if !shiftOnly {
+		return false
+	}
 	char := utf8.RuneCountInString(name) == 1
 	switch {
-	case el.DataAtom == atom.Textarea || textInput(el):
-		multi := el.DataAtom == atom.Textarea
-		switch {
-		case char:
-			h.typeInto(s, el, s.valueOf(el)+name)
-		case name == "Backspace":
-			if v := []rune(s.valueOf(el)); len(v) > 0 {
-				h.typeInto(s, el, string(v[:len(v)-1]))
-			}
-		case name == "Enter" && multi:
-			h.typeInto(s, el, s.valueOf(el)+"\n")
-		case name == "Enter":
-			if form := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form }); form != nil {
-				h.commit(s)
-				h.submit(s, form, nil)
-			}
-		case slices.Contains([]string{"Delete", "ArrowLeft", "ArrowRight", "Home", "End"}, name):
-		case multi && slices.Contains([]string{"ArrowUp", "ArrowDown", "PageUp", "PageDown"}, name):
-		default:
-			return false
+	case textInput(el):
+		// A date or time input.
+		switch name {
+		case "ArrowUp", "ArrowDown", "PageUp", "PageDown":
+			return true
 		}
-		return true
+		return h.fieldKey(s, el, key)
 	case el.DataAtom == atom.Select:
 		return h.selectKey(s, el, name, char)
 	case box(el):
@@ -111,6 +103,64 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		return true
 	}
 	return false
+}
+
+// fieldKey gives a key to a text field, which does what its keymap says
+// (SPEC §10.2). A date or time input has the default keymap only.
+func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
+	multi := el.DataAtom == atom.Textarea || editingHost(el)
+	var values []string
+	if textField(el) {
+		for n := el; n != nil; n = n.Parent {
+			if v, ok := attr(n, "data-keys"); ok {
+				values = append([]string{v}, values...)
+			}
+		}
+	}
+	f := s.fields[el]
+	if f == nil {
+		v := s.valueOf(el)
+		t, _ := attr(el, "type")
+		f = &hottyedit.Field{Value: v, Caret: len(v), Multiline: multi, Password: strings.EqualFold(t, "password")}
+		s.fields[el] = f
+	}
+	f.Value = s.valueOf(el)
+	a, changed := f.Key(hotty.Resolve(multi, values...), key)
+	switch {
+	case a == "":
+		return false
+	case a == hotty.Submit:
+		if form := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form }); form != nil {
+			h.commit(s)
+			h.submit(s, form, nil)
+		}
+	case changed:
+		h.typeInto(s, el, f.Value)
+	}
+	return true
+}
+
+// textField reports whether an element edits text with a keymap (SPEC
+// §10.2): a text-like input, a textarea, an editing host.
+func textField(n *html.Node) bool {
+	if n.DataAtom == atom.Textarea || editingHost(n) {
+		return true
+	}
+	if !textInput(n) {
+		return false
+	}
+	t, _ := attr(n, "type")
+	switch strings.ToLower(t) {
+	case "date", "time", "datetime-local", "month", "week":
+		return false
+	}
+	return true
+}
+
+// editingHost reports whether an element is contenteditable.
+func editingHost(n *html.Node) bool {
+	v, ok := attr(n, "contenteditable")
+	return ok && !strings.EqualFold(v, "false")
 }
 
 // tab moves focus to the next focusable element, or the previous one.

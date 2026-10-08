@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottyedit"
 )
 
 // Surface is one surface the program made: its document, as the program's
@@ -30,7 +31,8 @@ type Surface struct {
 	// attributes set (SPEC §6.2): a control's value, a box's checked.
 	values  map[*html.Node]string
 	checked map[*html.Node]bool
-	edited  map[*html.Node]bool // text controls edited since their last commit
+	edited  map[*html.Node]bool             // text controls edited since their last commit
+	fields  map[*html.Node]*hottyedit.Field // text fields' carets, once used
 	focused *html.Node
 	keyb    bool // the surface has the keyboard
 }
@@ -50,6 +52,7 @@ func (s *Surface) setDoc(markup string) {
 	s.values = map[*html.Node]string{}
 	s.checked = map[*html.Node]bool{}
 	s.edited = map[*html.Node]bool{}
+	s.fields = map[*html.Node]*hottyedit.Field{}
 	s.focused, s.keyb = nil, false
 }
 
@@ -341,6 +344,7 @@ func (s *Surface) attrChanged(n *html.Node, key string) {
 	case key == "value" && control(n) && !box(n):
 		delete(s.values, n)
 		delete(s.edited, n)
+		delete(s.fields, n)
 	case key == "checked" && box(n):
 		delete(s.checked, n)
 	case key == "selected" && n.DataAtom == atom.Option:

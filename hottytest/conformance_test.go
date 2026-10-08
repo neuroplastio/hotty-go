@@ -5,7 +5,9 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/neuroplastio/hotty-go"
 )
@@ -62,6 +64,97 @@ type vectorStep struct {
 	Reply   json.RawMessage   `json:"reply"`
 	Inspect []string          `json:"inspect"`
 	Expect  json.RawMessage   `json:"expect"`
+	Pointer string            `json:"pointer"`
+	Key     *string           `json:"key"`
+	Keys    []string          `json:"keys"`
+	Term    *bool             `json:"terminal"`
+	Events  []vectorEvent     `json:"events"`
+	HasEvs  bool              `json:"-"`
+}
+
+type vectorEvent struct {
+	E      string          `json:"e"`
+	S      string          `json:"s"`
+	T      string          `json:"t"`
+	Detail json.RawMessage `json:"detail"`
+}
+
+// keyName is a key step's key as SPEC §10.4 names it: the modifiers held,
+// in its order, before the key; Shift left out before a character.
+func keyName(st vectorStep) string {
+	held := map[string]bool{}
+	for _, k := range st.Keys {
+		held[k] = true
+	}
+	name := *st.Key
+	if name == " " {
+		name = "Space"
+	}
+	var b strings.Builder
+	for _, m := range []struct{ held, name string }{{"ctrl", "Control"}, {"alt", "Alt"}, {"meta", "Meta"}, {"shift", "Shift"}} {
+		if held[m.held] && (m.held != "shift" || utf8.RuneCountInString(*st.Key) != 1) {
+			b.WriteString(m.name + "+")
+		}
+	}
+	return b.String() + name
+}
+
+// sentEvents decodes the events the host has sent the program since the
+// last drain.
+func (h *Host) sentEvents() []hotty.Event {
+	var d hotty.Decoder
+	var out []hotty.Event
+	for _, seq := range oscs(h.drain()) {
+		if m, r := d.Feed(seq); r == hotty.Complete {
+			if e, ok := m.Event(); ok {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
+// checkKey presses a key step's key, and checks where it went and the
+// events it made.
+func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
+	t.Helper()
+	h.drain()
+	name := keyName(st)
+	used := h.Key(name)
+	if st.Term != nil && used == *st.Term {
+		t.Errorf("step %d (%s): reached the program %v, want %v", i, name, !used, *st.Term)
+	}
+	if !st.HasEvs {
+		return
+	}
+	got := h.sentEvents()
+	if len(got) != len(st.Events) {
+		t.Errorf("step %d (%s): %d events %v, want %d", i, name, len(got), got, len(st.Events))
+		return
+	}
+	for j, w := range st.Events {
+		g := got[j]
+		if g.Kind != w.E || g.Surface != w.S || g.Target != w.T {
+			t.Errorf("step %d (%s): event %d is %s s=%s t=%s, want %s s=%s t=%s", i, name, j, g.Kind, g.Surface, g.Target, w.E, w.S, w.T)
+			continue
+		}
+		if w.Detail == nil {
+			continue
+		}
+		var gd, wd any
+		_ = json.Unmarshal(g.Detail, &gd)
+		_ = json.Unmarshal(w.Detail, &wd)
+		// This host lays nothing out, so it knows no element's area.
+		if m, ok := wd.(map[string]any); ok {
+			delete(m, "area")
+			if len(m) == 0 && gd == nil {
+				continue
+			}
+		}
+		if !reflect.DeepEqual(gd, wd) {
+			t.Errorf("step %d (%s): event %d detail %s, want %s", i, name, j, g.Detail, w.Detail)
+		}
+	}
 }
 
 // vectorControl is a vector's control as the program sends it: a first, the
@@ -93,8 +186,9 @@ func TestConformanceVectors(t *testing.T) {
 	}
 	var v struct {
 		Vectors []struct {
-			Name  string       `json:"name"`
-			Steps []vectorStep `json:"steps"`
+			Name     string            `json:"name"`
+			Requires json.RawMessage   `json:"requires"`
+			Steps    []json.RawMessage `json:"steps"`
 		} `json:"vectors"`
 	}
 	if err := json.Unmarshal(data, &v); err != nil {
@@ -106,9 +200,35 @@ func TestConformanceVectors(t *testing.T) {
 	for _, vec := range v.Vectors {
 		t.Run(vec.Name, func(t *testing.T) {
 			h := New(t, Lenient())
-			for i, st := range vec.Steps {
+			steps := make([]vectorStep, len(vec.Steps))
+			// Keys are pressed only in vectors with no pointer, and that
+			// require nothing: this host lays nothing out, so where a
+			// pointer is says nothing here, and it has no passthrough,
+			// hover or scroll.
+			keys := len(vec.Requires) == 0
+			for i, raw := range vec.Steps {
+				if err := json.Unmarshal(raw, &steps[i]); err != nil {
+					t.Fatal(err)
+				}
+				var fields map[string]json.RawMessage
+				_ = json.Unmarshal(raw, &fields)
+				_, steps[i].HasEvs = fields["events"]
+				if steps[i].Pointer != "" {
+					keys = false
+				}
+			}
+			for i, st := range steps {
 				if st.Inspect != nil {
 					checkInspect(t, i, h, st)
+					continue
+				}
+				if st.Pointer != "" {
+					continue
+				}
+				if st.Key != nil {
+					if keys {
+						checkKey(t, i, h, st)
+					}
 					continue
 				}
 				payload := ""

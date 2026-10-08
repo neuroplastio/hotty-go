@@ -23,6 +23,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261007135124-ea9639477c56 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/net v0.39.0 // indirect
@@ -35,3 +36,5 @@ require (
 replace github.com/neuroplastio/hotty-go => ../
 
 replace github.com/neuroplastio/hotty-go/hottytest => ../hottytest
+
+replace github.com/neuroplastio/hotty-go/hottyedit => ../hottyedit

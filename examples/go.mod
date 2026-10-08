@@ -17,6 +17,7 @@ require (
 require (
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285 // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261007135124-ea9639477c56 // indirect
 )
 
 require (
@@ -40,6 +41,7 @@ require (
 
 replace (
 	github.com/neuroplastio/hotty-go => ../
+	github.com/neuroplastio/hotty-go/hottyedit => ../hottyedit
 	github.com/neuroplastio/hotty-go/hottytea => ../hottytea
 	github.com/neuroplastio/hotty-go/hottyterm => ../hottyterm
 	github.com/neuroplastio/hotty-go/hottytest => ../hottytest

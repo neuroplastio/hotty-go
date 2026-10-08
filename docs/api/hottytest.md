@@ -337,14 +337,13 @@ Invalid counts the malformed messages the program sent.
 func (h *Host) Key(key string) (used bool)
 ```
 
-Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is a W3C UI Events key value after its modifiers, joined by "+": "a", "A", " ", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
+Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it: a W3C UI Events key value after its modifiers, joined by "+": "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
 
-Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). The focused element takes the keys of its row of the table, unmodified or with Shift only:
+Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); submit commits it and submits its form; characters type. The other elements take the keys of their row of the table, unmodified or with Shift only:
 
   - a button, a link, a summary: Space and Enter click it;
   - a checkbox or a radio button: Space checks it, Enter submits its form;
-  - a text-like input: characters and Space type at the end, Backspace takes the last character back (input, with data-on~=input), Enter commits it and submits its form; Delete, the arrows across, Home and End move a caret this host does not keep;
-  - a textarea: the same, with Enter typing a new line, and the arrows up and down and the page keys used;
+  - a date or time input: the keys a text input's default keymap binds, and characters; the arrows up and down and the page keys are used;
   - a select: the arrows, Home and End pick an option (change), a character the next option it starts; Space, Enter and the page keys are used.
 
 Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, Enter, Tab, Escape, Backspace, the arrows and the editing keys, and Control or Alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
