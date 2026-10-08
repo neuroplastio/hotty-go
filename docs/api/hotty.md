@@ -35,6 +35,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [Constants](#pkg-constants)
 - [`func Blur(surface string, opts ...ReplyOption) string`](#Blur)
 - [`func CursorBelow(rows int) string`](#CursorBelow)
+- [`func DecodeKeys(input []byte) []string`](#DecodeKeys)
 - [`func Del(surface string, opts ...ReplyOption) string`](#Del)
 - [`func DelAll(opts ...ReplyOption) string`](#DelAll)
 - [`func DelRes(id string, opts ...ReplyOption) string`](#DelRes)
@@ -46,6 +47,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Focus(surface, target string, opts ...ReplyOption) string`](#Focus)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
+- [`func ParseKey(name string) (canonical string, ok bool)`](#ParseKey)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
 - [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
 - [`func Query(n int) string`](#Query)
@@ -61,6 +63,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
+- [`type Action`](#Action)
+  - [`func (a Action) Multiline() bool`](#Action.Multiline)
 - [`type Area`](#Area)
 - [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
@@ -106,6 +110,12 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (e Event) Value() string`](#Event.Value)
 - [`type Hover`](#Hover)
 - [`type KV`](#KV)
+- [`type Keymap`](#Keymap)
+  - [`func ParseKeymap(value string) *Keymap`](#ParseKeymap)
+  - [`func Resolve(multiline bool, values ...string) *Keymap`](#Resolve)
+  - [`func (m *Keymap) Bind(name string, a Action) bool`](#Keymap.Bind)
+  - [`func (m *Keymap) Format() string`](#Keymap.Format)
+  - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
   - [`func (m Message) Get(k string) string`](#Message.Get)
@@ -205,6 +215,26 @@ const (
 
 Error codes, in a reply's Code (SPEC §3.6).
 
+<a id="TerminalKeys"></a>
+
+```go
+const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
+	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
+	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
+	"Home=line-start Control+a=line-start End=line-end Control+e=line-end " +
+	"Backspace=delete-char-backward Control+h=delete-char-backward " +
+	"Delete=delete-char-forward Control+d=delete-char-forward " +
+	"Alt+Backspace=delete-word-backward Control+w=delete-word-backward Control+Backspace=delete-word-backward " +
+	"Alt+Delete=delete-word-forward Alt+d=delete-word-forward Control+Delete=delete-word-forward " +
+	"Control+u=delete-to-line-start Control+k=delete-to-line-end " +
+	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
+	"PageUp=page-up PageDown=page-down " +
+	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
+	"Control+m=newline"
+```
+
+TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles). A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
+
 ## <a id="Blur"></a>func Blur
 
 ```go
@@ -220,6 +250,14 @@ func CursorBelow(rows int) string
 ```
 
 CursorBelow is the cursor's move a placement without KeepCursor makes (SPEC §5.2): rows index operations (IND) and a carriage return, to the start of the line below the placement. A relay that keeps a placement from the screen it emulates feeds it this instead.
+
+## <a id="DecodeKeys"></a>func DecodeKeys
+
+```go
+func DecodeKeys(input []byte) []string
+```
+
+DecodeKeys reads input from the terminal, the bytes a program reads, as SPEC §10.4 names the keys in it: one entry for each key, its canonical name, or "" for input that is no key it names (a mouse report, a sequence it does not know, a key's release). It reads the input whole: an ESC at its end is Escape.
 
 ## <a id="Del"></a>func Del
 
@@ -310,6 +348,14 @@ func MorphTo(surface, target, html string, opts ...ReplyOption) string
 ```
 
 MorphTo morphs an element into html, or with no target, each top-level element of html into the document's element with its id. Morphing keeps what the user is doing in what stays: focus, the text being typed, an open \<details> (SPEC §6.2).
+
+## <a id="ParseKey"></a>func ParseKey
+
+```go
+func ParseKey(name string) (canonical string, ok bool)
+```
+
+ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any order ("Shift+Control+a", "Control+ "), and returns its canonical name ("Control+A", "Control+Space"): the modifiers in the order Control, Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a space. ok is false for a name that does not parse.
 
 ## <a id="Place"></a>func Place
 
@@ -430,6 +476,56 @@ func ValidName(s string) bool
 ```
 
 ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SPEC §3.5).
+
+## <a id="Action"></a>type Action
+
+```go
+type Action string
+```
+
+Action is what a text field does with a key (SPEC §10.2): a keymap binds keys to actions, and Lookup says which one a key does.
+
+<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Insert"></a>
+
+```go
+const (
+	CharBackward       Action = "char-backward"
+	CharForward        Action = "char-forward"
+	WordBackward       Action = "word-backward"
+	WordForward        Action = "word-forward"
+	LineStart          Action = "line-start"
+	LineEnd            Action = "line-end"
+	DeleteCharBackward Action = "delete-char-backward"
+	DeleteCharForward  Action = "delete-char-forward"
+	DeleteWordBackward Action = "delete-word-backward"
+	DeleteWordForward  Action = "delete-word-forward"
+	DeleteToLineStart  Action = "delete-to-line-start"
+	DeleteToLineEnd    Action = "delete-to-line-end"
+	LinePrevious       Action = "line-previous"
+	LineNext           Action = "line-next"
+	PageUp             Action = "page-up"
+	PageDown           Action = "page-down"
+	InputStart         Action = "input-start"
+	InputEnd           Action = "input-end"
+	Newline            Action = "newline"
+	Submit             Action = "submit"
+	// Program binds a key to nothing: it reaches the program.
+	Program Action = "program"
+	// Insert is what Lookup returns for a character the field types. A
+	// keymap does not bind it.
+	Insert Action = "insert"
+)
+```
+
+The actions a keymap binds (SPEC §10.2).
+
+### <a id="Action.Multiline"></a>func (Action) Multiline
+
+```go
+func (a Action) Multiline() bool
+```
+
+Multiline reports whether only a multi-line field (a textarea, an editing host) has the action. From an input, a key bound to one reaches the program.
 
 ## <a id="Area"></a>type Area
 
@@ -923,6 +1019,57 @@ type KV struct{ K, V string }
 ```
 
 KV is one control key and its value.
+
+## <a id="Keymap"></a>type Keymap
+
+```go
+type Keymap struct {
+	// contains filtered or unexported fields
+	// contains filtered or unexported fields
+}
+```
+
+Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key.
+
+### <a id="ParseKeymap"></a>func ParseKeymap
+
+```go
+func ParseKeymap(value string) *Keymap
+```
+
+ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and Tab, Shift+Tab and Escape.
+
+### <a id="Resolve"></a>func Resolve
+
+```go
+func Resolve(multiline bool, values ...string) *Keymap
+```
+
+Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key.
+
+### <a id="Keymap.Bind"></a>func (*Keymap) Bind
+
+```go
+func (m *Keymap) Bind(name string, a Action) bool
+```
+
+Bind binds a key to an action, and reports whether it did: a host ignores the bindings ParseKeymap drops, and so does Bind.
+
+### <a id="Keymap.Format"></a>func (*Keymap) Format
+
+```go
+func (m *Keymap) Format() string
+```
+
+Format writes the keymap as a data-keys value: each key once, where it was first bound, with its last action.
+
+### <a id="Keymap.Lookup"></a>func (*Keymap) Lookup
+
+```go
+func (m *Keymap) Lookup(name string) Action
+```
+
+Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a character it types; or "" when the key is not the field's, and reaches the program (or, for Tab, moves focus). A key with Shift that no binding names is looked up without Shift.
 
 ## <a id="Message"></a>type Message
 

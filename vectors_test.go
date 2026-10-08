@@ -33,6 +33,7 @@ var features = map[string]bool{
 	"decode.abort-count":  true,
 	"decode.unterminated": true,
 	"scanner.da1":         true,
+	"graphemes":           true,
 }
 
 func applies(t *testing.T, requires []string) {
@@ -51,6 +52,8 @@ func sdkVectors(t *testing.T) (v struct {
 	Decode []decodeVector `json:"decode"`
 	Scan   []scanVector   `json:"scan"`
 	Detect []detectVector `json:"detect"`
+	Keys   []keysVector   `json:"keys"`
+	Keymap []keymapVector `json:"keymap"`
 }) {
 	t.Helper()
 	data, err := os.ReadFile(vectorsFile)
@@ -720,6 +723,89 @@ func TestDetectVectors(t *testing.T) {
 			}
 			if v.Caps != nil {
 				check(t, "caps", capsView(d.Caps, v.Caps), v.Caps)
+			}
+		})
+	}
+}
+
+type keysVector struct {
+	Name     string    `json:"name"`
+	Requires []string  `json:"requires"`
+	Input    *string   `json:"input"`
+	Keys     []*string `json:"keys"`
+	Key      string    `json:"key"`
+	Canon    *string   `json:"canon"`
+}
+
+// TestKeysVectors decodes each vector's input, or reads its key's name.
+func TestKeysVectors(t *testing.T) {
+	for _, v := range sdkVectors(t).Keys {
+		t.Run(v.Name, func(t *testing.T) {
+			applies(t, v.Requires)
+			if v.Input != nil {
+				var want []string
+				for _, k := range v.Keys {
+					if k == nil {
+						want = append(want, "")
+					} else {
+						want = append(want, *k)
+					}
+				}
+				if got := DecodeKeys([]byte(*v.Input)); !slices.Equal(got, want) {
+					t.Errorf("DecodeKeys(%q) = %q, want %q", *v.Input, got, want)
+				}
+				return
+			}
+			got, ok := ParseKey(v.Key)
+			switch {
+			case v.Canon == nil && ok:
+				t.Errorf("ParseKey(%q) = %q, want none", v.Key, got)
+			case v.Canon != nil && (!ok || got != *v.Canon):
+				t.Errorf("ParseKey(%q) = %q, %v, want %q", v.Key, got, ok, *v.Canon)
+			}
+		})
+	}
+}
+
+type keymapVector struct {
+	Name         string             `json:"name"`
+	Requires     []string           `json:"requires"`
+	Parse        *string            `json:"parse"`
+	Format       string             `json:"format"`
+	TerminalKeys bool               `json:"terminal_keys"`
+	Multiline    bool               `json:"multiline"`
+	Keys         []string           `json:"keys"`
+	Lookup       map[string]*string `json:"lookup"`
+}
+
+// TestKeymapVectors formats keymaps, and looks keys up in resolved ones.
+func TestKeymapVectors(t *testing.T) {
+	for _, v := range sdkVectors(t).Keymap {
+		t.Run(v.Name, func(t *testing.T) {
+			applies(t, v.Requires)
+			if v.Lookup == nil {
+				value := TerminalKeys
+				if v.Parse != nil {
+					value = *v.Parse
+				}
+				if got := ParseKeymap(value).Format(); got != v.Format {
+					t.Errorf("Format() = %q, want %q", got, v.Format)
+				}
+				return
+			}
+			values := v.Keys
+			if v.TerminalKeys {
+				values = append([]string{TerminalKeys}, values...)
+			}
+			m := Resolve(v.Multiline, values...)
+			for k, want := range v.Lookup {
+				w := Action("")
+				if want != nil {
+					w = Action(*want)
+				}
+				if got := m.Lookup(k); got != w {
+					t.Errorf("Lookup(%q) = %q, want %q", k, got, w)
+				}
 			}
 		})
 	}
