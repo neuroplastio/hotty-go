@@ -164,6 +164,7 @@ del counter
 ## <a id="pkg-index"></a>Index
 
 - [Constants](#pkg-constants)
+- [`func KeyName(k tea.Key) string`](#KeyName)
 - [`type AckMsg`](#AckMsg)
 - [`type Counts`](#Counts)
 - [`type ErrorMsg`](#ErrorMsg)
@@ -212,6 +213,14 @@ const DefaultLimit = 48
 ```
 
 DefaultLimit is how many surfaces a Session keeps at most, shown and hidden, unless its Limit or the terminal says fewer: a hidden surface keeps its memory in the terminal (a document, and pixels in a terminal that draws them itself).
+
+## <a id="KeyName"></a>func KeyName
+
+```go
+func KeyName(k tea.Key) string
+```
+
+KeyName is a Bubble Tea key as SPEC §10.4 names it, so that a program that edits a field in cells looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "A", "Space", "Control+a", "Alt+ArrowLeft", "Shift+Enter". Bubble Tea reads the bytes as SPEC §10.4 does, so a key has the name a host gives it. "" for a key with no name there.
 
 ## <a id="AckMsg"></a>type AckMsg
 
