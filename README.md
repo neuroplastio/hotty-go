@@ -12,6 +12,8 @@ The SDK:
   that reads its terminal raw or a relay that reads another's output;
 - finds out whether the terminal is a HOTTY host;
 - keeps surfaces on screen while a full-screen frame changes;
+- edits a text field in cells as a host edits it on a surface, with the
+  keymap the program gives both (`hotty.TerminalKeys`, `hottyedit`);
 - converts Markdown, tables and images into documents;
 - tests programs against a host that runs inside `go test`.
 
@@ -55,7 +57,8 @@ of what it imports:
 | `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library |
 | `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
-| `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html |
+| `github.com/neuroplastio/hotty-go/hottyedit` | `hottyedit` | uax29, Unicode's grapheme segmentation |
+| `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html, hottyedit |
 | `github.com/neuroplastio/hotty-go/hottyvt` | `hottyvt`, `asciicast` | x/vt, a terminal emulator; asciicast, the standard library |
 
 ```
@@ -72,6 +75,7 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyte
 | [`braille`](docs/api/braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
 | [`chart`](docs/api/chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark). |
 | [`form`](docs/api/form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers. |
+| [`hottyedit`](docs/api/hottyedit.md) | Package hottyedit edits a text field as a HOTTY host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret. |
 | [`hottytea`](docs/api/hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
 | [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
 | [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
