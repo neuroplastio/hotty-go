@@ -24,7 +24,7 @@ A Session is the program's side. Its life in a program:
 
 Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit.
 
-In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells.
+In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells. A Session with Late asks for a late answer, and moves to Native if one comes.
 
 ### <a id="example-package"></a>Example
 
@@ -343,7 +343,7 @@ type ReadyMsg struct {
 }
 ```
 
-ReadyMsg reports the outcome of detection, once.
+ReadyMsg reports the outcome of detection, once; with Late, a second time if a late answer moves the Session from Text to Native.
 
 ## <a id="Rect"></a>type Rect
 
@@ -377,6 +377,14 @@ type Session struct {
 	Mode Mode
 	// Caps is what the host said about itself, when Mode is Native.
 	Caps hotty.Caps
+	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
+	// program that draws either rendition whenever Mode says: one that may
+	// run in a multiplexer's pane before a terminal is attached to it. If
+	// the answer comes while Mode is Text, Mode becomes Native, Update
+	// answers ReadyMsg again, then RelayoutMsg. Until it comes, Close
+	// withdraws the query (hotty.WithdrawLate), so that no answer reaches
+	// whatever reads the terminal after the program.
+	Late bool
 	// Limit is the most surfaces to keep, shown and hidden; 0 is
 	// DefaultLimit. To stay within it, Layout deletes the hidden surfaces
 	// seen longest ago. The terminal's own limit (Caps.Limits["surfaces"],
@@ -422,7 +430,7 @@ Close ends the Session, on the program's way out: it deletes every surface the S
 return m, tea.Sequence(m.s.Close(), tea.Quit)
 ```
 
-After it, Layout and Send do nothing, so that a frame drawn before the program quits does not send a document again. A host deletes the surfaces placed on the alternate screen when the program leaves it, but it may not (SPEC §5.4 says SHOULD).
+After it, Layout and Send do nothing, so that a frame drawn before the program quits does not send a document again. A host deletes the surfaces placed on the alternate screen when the program leaves it, but it may not (SPEC §5.4 says SHOULD). With Late, a query whose late answer has not come is withdrawn (hotty.WithdrawLate), whatever the Mode.
 
 ### <a id="Session.Delete"></a>func (*Session) Delete
 

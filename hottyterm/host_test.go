@@ -240,3 +240,57 @@ func TestNames(t *testing.T) {
 		t.Errorf("Size without a size function: %v", s)
 	}
 }
+
+// With Late, a Term on a terminal that is not a host yet (a multiplexer's
+// pane with no terminal attached) finds none; when the terminal becomes
+// one, the late answer reaches Events, and the Term is native from then on
+// (SPEC §4).
+func TestLateAnswer(t *testing.T) {
+	h := hottytest.New(t, hottytest.Text())
+	tm := open(t, h)
+	tm.Late = true
+	if tm.Detect(ctx(t)) {
+		t.Fatal("not a host yet")
+	}
+	evs := tm.Events(ctx(t))
+	h.BecomeHost()
+	select {
+	case ev := <-evs:
+		m, ok := ev.(hottyterm.Message)
+		r, _ := m.Reply()
+		if caps, _ := r.Caps(); !ok || r.Re != "q" || caps.Host != "hottytest" {
+			t.Errorf("the late answer: %#v", ev)
+		}
+	case <-ctx(t).Done():
+		t.Fatal("no late answer")
+	}
+	if !tm.Native() || !tm.Detect(ctx(t)) || tm.Caps().Host != "hottytest" {
+		t.Errorf("after the late answer: native %v, caps %+v", tm.Native(), tm.Caps())
+	}
+	// Answered, the query is not withdrawn.
+	_ = tm.Close()
+	if n := len(h.Commands()); n != 1 {
+		t.Errorf("commands after the query: %v", h.Commands()[1:])
+	}
+}
+
+// Closed before a late answer came, a Term withdraws its query: the
+// terminal that becomes a host later has nothing to answer. Without Late
+// it withdraws nothing.
+func TestLateWithdrawnOnClose(t *testing.T) {
+	for _, late := range []bool{true, false} {
+		h := hottytest.New(t, hottytest.Text())
+		tm := hottyterm.New(h, h, "tool-7", h.TermSize, nil)
+		tm.Late = late
+		tm.Detect(ctx(t))
+		_ = tm.Close()
+		h.BecomeHost()
+		cmds := h.Commands()
+		if late && (len(cmds) != 2 || cmds[1].Get("a") != "q" || cmds[1].Get("q") != "2") || !late && len(cmds) != 1 {
+			t.Errorf("late %v: commands %v", late, cmds)
+		}
+		if len(h.Replies()) != 0 {
+			t.Errorf("late %v: answered %v", late, h.Replies())
+		}
+	}
+}

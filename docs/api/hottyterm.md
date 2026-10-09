@@ -159,6 +159,16 @@ type Term struct {
 	Name string
 	// TermType is $TERM, for decoding keys.
 	TermType string
+	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
+	// program that can start using HOTTY after it found no host: one that
+	// runs in a multiplexer's pane before a terminal is attached to it.
+	// If the answer comes, the reply goes to Events, with the host's
+	// capabilities (Reply.Caps), and Native, Caps and Detect report a host
+	// from then on. Until it comes, Close withdraws the query
+	// (hotty.WithdrawLate), so that no answer reaches whatever reads the
+	// terminal next. The terminal must stay in raw mode (Raw) meanwhile,
+	// or it would echo the answer.
+	Late bool
 	// contains filtered or unexported fields
 }
 ```
@@ -195,7 +205,7 @@ Caps is what the host said about itself, when Native.
 func (t *Term) Close() error
 ```
 
-Close restores the terminal and stops reading it; Events' channel closes. Natively it also closes /dev/tty. It is safe to call more than once.
+Close restores the terminal and stops reading it; Events' channel closes. Natively it also closes /dev/tty. It is safe to call more than once. With Late, a query whose late answer has not come is withdrawn first.
 
 ### <a id="Term.DetachAll"></a>func (*Term) DetachAll
 
@@ -211,7 +221,7 @@ DetachAll detaches every surface Surface has named (hotty.Detach), so that none 
 func (t *Term) Detect(ctx context.Context) bool
 ```
 
-Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and reports the answer; later calls return the first answer. A terminal that answers neither the query nor DA1 within 1.5 s, or before ctx ends, is not a host.
+Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and reports the answer; later calls return the first answer, or the late one (Late). A terminal that answers neither the query nor DA1 within 1.5 s, or before ctx ends, is not a host.
 
 A host's reply comes before its answer to DA1, and Detect waits for that too, so that nothing is left for whoever reads the terminal next.
 

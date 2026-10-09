@@ -97,6 +97,16 @@ type Term struct {
 	Name string
 	// TermType is $TERM, for decoding keys.
 	TermType string
+	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
+	// program that can start using HOTTY after it found no host: one that
+	// runs in a multiplexer's pane before a terminal is attached to it.
+	// If the answer comes, the reply goes to Events, with the host's
+	// capabilities (Reply.Caps), and Native, Caps and Detect report a host
+	// from then on. Until it comes, Close withdraws the query
+	// (hotty.WithdrawLate), so that no answer reaches whatever reads the
+	// terminal next. The terminal must stay in raw mode (Raw) meanwhile,
+	// or it would echo the answer.
+	Late bool
 
 	size     func() (cols, rows int)
 	known    *Known
@@ -112,6 +122,7 @@ type Term struct {
 	detected bool
 	native   bool
 	caps     hotty.Caps
+	lateOpen bool // a late answer may still come (Late)
 
 	// The input: a goroutine reads In and routes each event to the first
 	// tap that takes it, else to queue, for Events.
@@ -200,8 +211,16 @@ func (t *Term) Raw() (restore func(), err error) {
 }
 
 // Close restores the terminal and stops reading it; Events' channel closes.
-// Natively it also closes /dev/tty. It is safe to call more than once.
+// Natively it also closes /dev/tty. It is safe to call more than once. With
+// Late, a query whose late answer has not come is withdrawn first.
 func (t *Term) Close() error {
+	t.mu.Lock()
+	withdraw := t.lateOpen
+	t.lateOpen = false
+	t.mu.Unlock()
+	if withdraw {
+		_ = t.Send(hotty.WithdrawLate())
+	}
 	t.mu.Lock()
 	stop, cancelIn, closeFn := t.stop, t.cancelIn, t.close
 	t.stop, t.cancelIn, t.close = nil, nil, nil
@@ -304,9 +323,9 @@ func (t *Term) Caps() hotty.Caps {
 }
 
 // Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and
-// reports the answer; later calls return the first answer. A terminal that
-// answers neither the query nor DA1 within 1.5 s, or before ctx ends, is
-// not a host.
+// reports the answer; later calls return the first answer, or the late one
+// (Late). A terminal that answers neither the query nor DA1 within 1.5 s,
+// or before ctx ends, is not a host.
 //
 // A host's reply comes before its answer to DA1, and Detect waits for that
 // too, so that nothing is left for whoever reads the terminal next.
@@ -330,9 +349,11 @@ func (t *Term) Detect(ctx context.Context) bool {
 	defer restore()
 
 	// The Detector decides; the reader's goroutine gives it what it reads,
-	// and this one the time.
+	// and this one the time. With Late, the tap stays once the terminal is
+	// found not to be a host, for the late answer.
 	var mu sync.Mutex
-	d := hotty.Detector{N: queryN}
+	d := hotty.Detector{N: queryN, Late: t.Late}
+	late := false
 	wake := make(chan struct{}, 1)
 	remove := t.listen(func(ev Event) bool {
 		mu.Lock()
@@ -341,7 +362,15 @@ func (t *Term) Detect(ctx context.Context) bool {
 		switch ev := ev.(type) {
 		case Message:
 			if r, ok := ev.Reply(); ok {
+				was := d.State
 				took = d.Reply(r, time.Now())
+				if late && took {
+					// route holds t.mu.
+					if was == hotty.Text && d.State == hotty.Native {
+						t.native, t.caps, t.lateOpen = true, d.Caps, false
+					}
+					return false // the answer goes on to Events
+				}
 			}
 		case uv.PrimaryDeviceAttributesEvent:
 			took = d.DA1(time.Now())
@@ -354,11 +383,11 @@ func (t *Term) Detect(ctx context.Context) bool {
 		}
 		return took
 	})
-	defer remove()
 	mu.Lock()
 	query := d.Start(time.Now())
 	mu.Unlock()
 	if t.Send(query) != nil {
+		remove()
 		return t.setDetected(false, hotty.Caps{})
 	}
 
@@ -367,9 +396,19 @@ func (t *Term) Detect(ctx context.Context) bool {
 	for {
 		mu.Lock()
 		if d.Done {
-			native, caps := d.State == hotty.Native, d.Caps
 			mu.Unlock()
-			return t.setDetected(native, caps)
+			// In the order route takes the locks.
+			t.mu.Lock()
+			mu.Lock()
+			native := d.State == hotty.Native
+			late = t.Late && !native
+			t.detected, t.native, t.caps, t.lateOpen = true, native, d.Caps, late
+			mu.Unlock()
+			t.mu.Unlock()
+			if !late {
+				remove()
+			}
+			return native
 		}
 		timer.Reset(time.Until(d.Deadline))
 		mu.Unlock()

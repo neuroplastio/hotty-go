@@ -87,11 +87,15 @@ func (m *cardApp) View() tea.View {
 }
 
 // run starts the app on a terminal, and returns what its Session told it
-// and a function that waits for it to end.
-func run(t *testing.T, h *hottytest.Host) (seen <-chan tea.Msg, wait func()) {
+// and a function that waits for it to end. setup, if any, sets the
+// Session up before it runs.
+func run(t *testing.T, h *hottytest.Host, setup ...func(*hottytea.Session)) (seen <-chan tea.Msg, wait func()) {
 	t.Helper()
 	ch := make(chan tea.Msg, 64)
 	app := &cardApp{s: hottytea.New(), y: 1, status: "ready", seen: ch}
+	for _, f := range setup {
+		f(app.s)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	p := tea.NewProgram(app, tea.WithContext(ctx), tea.WithInput(h), tea.WithOutput(app.s.Watch(h)),
 		tea.WithoutSignalHandler(), tea.WithWindowSize(40, 10), tea.WithEnvironment([]string{"TERM=xterm-256color"}))
@@ -268,5 +272,55 @@ func TestAProgramInText(t *testing.T) {
 	wait()
 	if n := len(h.Commands()); n != 1 {
 		t.Errorf("%d HOTTY commands, want the query alone", n)
+	}
+}
+
+// With Late, a program that started on a terminal that was not a host yet
+// (a multiplexer's pane with no terminal attached) moves to surfaces when
+// it becomes one: ReadyMsg again, then RelayoutMsg, and its card goes out
+// (SPEC §4).
+func TestAProgramWithALateHost(t *testing.T) {
+	h := hottytest.New(t, hottytest.Text())
+	seen, wait := run(t, h, func(s *hottytea.Session) { s.Late = true })
+	if r := next[hottytea.ReadyMsg](t, seen); r.Mode != hottytea.Text {
+		t.Fatalf("ready: %+v", r)
+	}
+	eventually(t, "the card in cells", func() bool { return strings.Contains(h.Screen(), "[ready] (g)o") })
+	h.BecomeHost()
+	if r := next[hottytea.ReadyMsg](t, seen); r.Mode != hottytea.Native || r.Caps.Host != "hottytest" {
+		t.Fatalf("ready again: %+v", r)
+	}
+	next[hottytea.RelayoutMsg](t, seen)
+	eventually(t, "the card on a surface", func() bool {
+		s := h.Surface(cardName)
+		return s != nil && s.Placed()
+	})
+	h.Type("q")
+	wait()
+	if h.Surface(cardName) != nil {
+		t.Error("the card outlived the program")
+	}
+	if n := count(h, "a", "q"); n != 1 {
+		t.Errorf("%d queries, want the first alone: answered, it is not withdrawn", n)
+	}
+}
+
+// With Late, a program that quits before a late answer came withdraws its
+// query, so that a terminal that becomes a host later answers nothing.
+func TestAProgramWithdrawsItsLateQuery(t *testing.T) {
+	h := hottytest.New(t, hottytest.Text())
+	seen, wait := run(t, h, func(s *hottytea.Session) { s.Late = true })
+	if r := next[hottytea.ReadyMsg](t, seen); r.Mode != hottytea.Text {
+		t.Fatalf("ready: %+v", r)
+	}
+	h.Type("q")
+	wait()
+	cmds := h.Commands()
+	if len(cmds) != 2 || cmds[0].Get("late") != "1" || cmds[1].Get("a") != "q" || cmds[1].Get("q") != "2" {
+		t.Errorf("commands %v, want the query and its withdrawal", cmds)
+	}
+	h.BecomeHost()
+	if len(h.Replies()) != 0 {
+		t.Errorf("answered after the program: %v", h.Replies())
 	}
 }

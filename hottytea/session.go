@@ -32,7 +32,8 @@
 // gone, and keeps the number of surfaces within the host's limit.
 //
 // In a terminal that is not a host, Mode is Text and the Session sends
-// nothing: the program draws everything in cells.
+// nothing: the program draws everything in cells. A Session with Late
+// asks for a late answer, and moves to Native if one comes.
 package hottytea
 
 import (
@@ -76,7 +77,8 @@ func (m Mode) String() string {
 	return "Mode(" + strconv.Itoa(int(m)) + ")"
 }
 
-// ReadyMsg reports the outcome of detection, once.
+// ReadyMsg reports the outcome of detection, once; with Late, a second
+// time if a late answer moves the Session from Text to Native.
 type ReadyMsg struct {
 	Mode Mode
 	// Caps is what the host said about itself, when Mode is Native.
@@ -199,6 +201,14 @@ type Session struct {
 	Mode Mode
 	// Caps is what the host said about itself, when Mode is Native.
 	Caps hotty.Caps
+	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
+	// program that draws either rendition whenever Mode says: one that may
+	// run in a multiplexer's pane before a terminal is attached to it. If
+	// the answer comes while Mode is Text, Mode becomes Native, Update
+	// answers ReadyMsg again, then RelayoutMsg. Until it comes, Close
+	// withdraws the query (hotty.WithdrawLate), so that no answer reaches
+	// whatever reads the terminal after the program.
+	Late bool
 	// Limit is the most surfaces to keep, shown and hidden; 0 is
 	// DefaultLimit. To stay within it, Layout deletes the hidden surfaces
 	// seen longest ago. The terminal's own limit (Caps.Limits["surfaces"],
@@ -250,6 +260,7 @@ func New() *Session {
 // silence.
 func (h *Session) Detect() tea.Cmd {
 	h.detecting = true
+	h.det.Late = h.Late
 	return tea.Batch(tea.Raw(h.det.Start(time.Now())), h.detectTick())
 }
 
@@ -262,7 +273,8 @@ func (h *Session) detectTick() tea.Cmd {
 }
 
 // detected reports what the Detector decided, once, as ReadyMsg, and keeps
-// its Tick on time when its deadline moved from was.
+// its Tick on time when its deadline moved from was. A late answer (Late)
+// is a second ReadyMsg, and a RelayoutMsg after it.
 func (h *Session) detected(was time.Time) (tea.Msg, tea.Cmd) {
 	var msg tea.Msg
 	if h.det.Decided && h.Mode == Detecting {
@@ -271,6 +283,9 @@ func (h *Session) detected(was time.Time) (tea.Msg, tea.Cmd) {
 			h.Mode, h.Caps = Native, h.det.Caps
 		}
 		msg = ReadyMsg{Mode: h.Mode, Caps: h.Caps}
+	} else if h.Mode == Text && h.det.State == hotty.Native && !h.closed {
+		h.Mode, h.Caps = Native, h.det.Caps
+		return ReadyMsg{Mode: h.Mode, Caps: h.Caps}, func() tea.Msg { return RelayoutMsg{} }
 	}
 	var cmd tea.Cmd
 	if !h.det.Deadline.Equal(was) {
@@ -355,7 +370,7 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 
 func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 	if was := h.det.Deadline; h.detecting && h.det.Reply(r, time.Now()) {
-		return h.detected(was) // nothing, for a late answer
+		return h.detected(was) // nothing for a late answer, unless Late
 	}
 	switch {
 	case r.OK && r.N != 0 && r.Re != "q":
@@ -548,10 +563,18 @@ func (h *Session) Delete(name string) {
 // After it, Layout and Send do nothing, so that a frame drawn before the
 // program quits does not send a document again. A host deletes the
 // surfaces placed on the alternate screen when the program leaves it, but
-// it may not (SPEC §5.4 says SHOULD).
+// it may not (SPEC §5.4 says SHOULD). With Late, a query whose late answer
+// has not come is withdrawn (hotty.WithdrawLate), whatever the Mode.
 func (h *Session) Close() tea.Cmd {
 	for _, name := range h.names() {
 		h.Delete(name)
+	}
+	if h.Late && h.detecting && h.Mode != Native && !h.closed {
+		w := hotty.WithdrawLate()
+		h.outMu.Lock()
+		h.out = append(h.out, w)
+		h.queued += len(w)
+		h.outMu.Unlock()
 	}
 	h.closed = true
 	return h.Flush()
