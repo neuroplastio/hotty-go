@@ -185,6 +185,27 @@ func TestKeysForTheProgram(t *testing.T) {
 	expect(t, sent(h), `ev change t=f {"value":"yx"}`, `ev change t=free {"value":"b"}`)
 }
 
+// With no element focused there is no keymap: a surface that has the
+// keyboard with nothing to focus reads no data-keys, and every key but Tab
+// reaches the program (SPEC §10.2).
+func TestKeysWithNothingFocused(t *testing.T) {
+	h := shown(t, "k", `<div data-keys="ArrowDown=line-next Enter=submit Space=program"><p>text</p></div>`)
+	send(h, hotty.Focus("k", ""))
+	h.drain()
+	for _, k := range []string{"ArrowDown", "Enter", "Space", "a"} {
+		if h.Key(k) {
+			t.Errorf("%s was used with nothing focused", k)
+		}
+	}
+	expect(t, sent(h), `"\x1b[B\r a"`)
+	if s := h.Surface("k"); s.Focused() != "" || h.keyboard != s {
+		t.Errorf("focus %q; the surface has the keyboard: %v", s.Focused(), h.keyboard == s)
+	}
+	// Tab finds nothing to focus, and gives the keyboard back.
+	h.Key("Tab")
+	expect(t, sent(h), "ev blur t=")
+}
+
 // A select picks with its keys, past disabled options, by the first letter
 // of an option's label; each pick sends input, with data-on~=input, and
 // change at once (SPEC §10.2, selects). Space and Enter do nothing: this

@@ -348,6 +348,8 @@ Any other element has a keymap too, read the same way but with no default keymap
   - a date or time input: the keys a text input's default keymap binds, and characters; the arrows up and down and the page keys are used;
   - a select: the arrows, Home and End pick an option, the page keys as far as Home and End, a character the next option its label starts, past disabled ones; a pick sends input (with data-on~=input) and change at once. Space and Enter do nothing: this host shows no list.
 
+With no element focused there is no keymap: the data-keys of the document are not read, and every key but Tab is the program's.
+
 Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, Enter, Tab, Escape, Backspace, the arrows and the editing keys, and Control or Alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
 
 ### <a id="Host.Lines"></a>func (*Host) Lines

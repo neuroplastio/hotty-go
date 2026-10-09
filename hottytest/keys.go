@@ -43,6 +43,9 @@ import (
 //     and change at once. Space and Enter do nothing: this host shows no
 //     list.
 //
+// With no element focused there is no keymap: the data-keys of the
+// document are not read, and every key but Tab is the program's.
+//
 // Every other key reaches the program, as typed (Type) when it has a
 // terminal encoding here: characters, Enter, Tab, Escape, Backspace, the
 // arrows and the editing keys, and Control or Alt with a character. So
@@ -69,6 +72,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	}
 	el := s.focused
 	if el == nil {
+		// No element focused, no keymap (SPEC §10.2).
 		return false
 	}
 	if textField(el) {
