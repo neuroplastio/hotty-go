@@ -30,8 +30,10 @@ import (
 //
 // Any other element has a keymap too, read the same way but with no
 // default keymap (hotty.Keymap.Program): a key it binds to program reaches
-// the program, and its other bindings do nothing. The element takes the
-// other keys of its row of the table, unmodified or with Shift only:
+// the program, and its other bindings do nothing. This host does not
+// scroll, so a key bound to a scroll action goes on as if the keymap did
+// not bind it (SPEC §10.2). The element takes the other keys of its row of
+// the table, unmodified or with Shift only:
 //   - a button, a link, a summary: Space and Enter click it;
 //   - a checkbox or a radio button: Space checks it, Enter submits its
 //     form;

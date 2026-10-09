@@ -40,6 +40,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 - [`type Element`](#Element)
 - [`type Host`](#Host)
   - [`func New(tb testing.TB, opts ...Option) *Host`](#New)
+  - [`func (h *Host) BecomeHost()`](#Host.BecomeHost)
   - [`func (h *Host) Blur(surface string) error`](#Host.Blur)
   - [`func (h *Host) Buffered() int`](#Host.Buffered)
   - [`func (h *Host) Check(surface, id string, on bool) error`](#Host.Check)
@@ -172,6 +173,14 @@ func New(tb testing.TB, opts ...Option) *Host
 ```
 
 New makes a host for a test, closed when the test ends. tb may be nil outside a test: then nothing fails, and Errors lists what would have.
+
+### <a id="Host.BecomeHost"></a>func (*Host) BecomeHost
+
+```go
+func (h *Host) BecomeHost()
+```
+
+BecomeHost makes a terminal made with Text a HOTTY host from now on, as a multiplexer becomes one when a terminal that is a host attaches to the program's pane: it answers the last query the program sent, if that one asked for a late answer (late=1, SPEC §4) and was not withdrawn or reset since, and every command after.
 
 ### <a id="Host.Blur"></a>func (*Host) Blur
 
@@ -341,7 +350,7 @@ Key types a key as the user does, and does with it what SPEC §10.2 has a host d
 
 Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); submit commits it and submits its form; characters type.
 
-Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. The element takes the other keys of its row of the table, unmodified or with Shift only:
+Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with Shift only:
 
   - a button, a link, a summary: Space and Enter click it;
   - a checkbox or a radio button: Space checks it, Enter submits its form;
@@ -526,7 +535,7 @@ Size sets the terminal's size in cells; 80×24 by default.
 func Text() Option
 ```
 
-Text makes the host a terminal that is not a HOTTY host: it answers DA1 and the cursor's position, and ignores HOTTY.
+Text makes the host a terminal that is not a HOTTY host: it answers DA1 and the cursor's position, and ignores HOTTY, until BecomeHost.
 
 ## <a id="Surface"></a>type Surface
 

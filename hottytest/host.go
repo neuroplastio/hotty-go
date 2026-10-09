@@ -105,8 +105,23 @@ func Caps(c hotty.Caps) Option {
 }
 
 // Text makes the host a terminal that is not a HOTTY host: it answers DA1
-// and the cursor's position, and ignores HOTTY.
+// and the cursor's position, and ignores HOTTY, until BecomeHost.
 func Text() Option { return func(h *Host) { h.text = true } }
+
+// BecomeHost makes a terminal made with Text a HOTTY host from now on, as a
+// multiplexer becomes one when a terminal that is a host attaches to the
+// program's pane: it answers the last query the program sent, if that one
+// asked for a late answer (late=1, SPEC §4) and was not withdrawn or reset
+// since, and every command after.
+func (h *Host) BecomeHost() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.text = false
+	if m := h.held; m != nil && m.Get("late") == "1" {
+		h.command(*m)
+	}
+	h.held = nil
+}
 
 // Lenient keeps protocol errors from failing the test; Errors still lists
 // them.
@@ -175,6 +190,9 @@ type Host struct {
 	events   []hotty.Event
 	opened   []string // hyperlinks the user opened
 	errs     []string
+	// held is the last query a terminal that is not a host was sent, which
+	// BecomeHost answers if it asked for a late answer (SPEC §4).
+	held *hotty.Message
 
 	in input
 }
@@ -363,10 +381,12 @@ func (h *Host) altScreen(on bool) {
 	h.alt = on
 }
 
-// reset is RIS: a full reset deletes every surface (SPEC §5.4).
+// reset is RIS: a full reset deletes every surface (SPEC §5.4), and
+// forgets a query held for a late answer (SPEC §4).
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
+	h.held = nil
 	h.scr, h.alt, h.hidden = screen{cols: h.cols, rows: h.rows}, false, false
 }
 
@@ -431,7 +451,11 @@ func (h *Host) osc(seq string) {
 	if h.text {
 		if m.Get("a") != "q" {
 			h.protocol("a HOTTY command to a terminal that is not a host (SPEC §14): %v", m.Control)
+			return
 		}
+		// One query is held at a time: a later one, a withdrawal
+		// (a=q:q=2) among them, takes its place.
+		h.held = &m
 		return
 	}
 	h.command(m)

@@ -140,6 +140,45 @@ func TestTextTerminal(t *testing.T) {
 	}
 }
 
+// A terminal that is not a host holds the last query, and answers it when it
+// becomes one if it asked for a late answer (SPEC §4); a withdrawal, a
+// plain query or a full reset leaves nothing to answer.
+func TestBecomeHostAnswersALateQuery(t *testing.T) {
+	h := New(t, Text())
+	send(h, hotty.Query(3, hotty.Late()))
+	expect(t, sent(h), `"\x1b[?62;22c"`)
+	h.BecomeHost()
+	var d hotty.Decoder
+	seqs := oscs(h.drain())
+	if len(seqs) != 1 {
+		t.Fatalf("after BecomeHost: %q", seqs)
+	}
+	m, _ := d.Feed(seqs[0])
+	if r, _ := m.Reply(); !r.OK || r.Re != "q" || r.N != 3 {
+		t.Errorf("the late answer: %+v", r)
+	}
+	send(h, hotty.Doc("x", "<p>hi</p>", hotty.N(4)))
+	expect(t, sent(h), "ok re=doc s=x")
+
+	for name, after := range map[string]string{
+		"withdrawn":              hotty.WithdrawLate(),
+		"a plain query after it": hotty.Query(2),
+		"a full reset":           "\x1bc",
+	} {
+		rec := &recorder{TB: t}
+		h := New(rec, Text())
+		send(h, hotty.Query(1, hotty.Late()), after)
+		h.drain()
+		h.BecomeHost()
+		if s := h.drain(); s != "" {
+			t.Errorf("%s: sent %q", name, s)
+		}
+		if len(rec.errs) != 0 {
+			t.Errorf("%s: %v", name, rec.errs)
+		}
+	}
+}
+
 func TestProtocolErrorsFailTheTest(t *testing.T) {
 	rec := &recorder{TB: t}
 	h := New(rec)
