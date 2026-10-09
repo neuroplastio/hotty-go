@@ -53,6 +53,11 @@ const (
 // before, and is no key. A reply that answers the query is detection's
 // whenever it comes.
 //
+// With Late, the query asks for a late answer (SPEC §4): the first reply
+// that answers it once the State is Text makes the State Native, with the
+// host's capabilities, Decided and Done as it was. The program then starts
+// using HOTTY.
+//
 // Decided and Done differ only for a host: it is known to be one when its
 // reply arrives, and detection is over when the DA1 answer behind it does.
 // A program that must not wait acts when Decided; one that hands the
@@ -63,6 +68,8 @@ type Detector struct {
 	// N numbers the query: a reply that does not echo it answers someone
 	// else's. 0 is 1.
 	N int
+	// Late asks for a late answer (Late, SPEC §4).
+	Late bool
 
 	// State is what the Detector has found, and Caps the host's
 	// capabilities, when Native.
@@ -87,6 +94,9 @@ func (d *Detector) n() int {
 func (d *Detector) Start(now time.Time) string {
 	d.timeout = now.Add(DetectTimeout)
 	d.update()
+	if d.Late {
+		return Query(d.n(), Late())
+	}
 	return Query(d.n())
 }
 
@@ -108,7 +118,9 @@ func (d *Detector) DA1(now time.Time) bool {
 
 // Reply takes a reply that arrived at now, and reports whether it answers
 // the query: a=ok, re=q, and the query's n. One that comes after the
-// Detector decided changes nothing.
+// Detector decided changes nothing, unless the query asked for a late
+// answer (Late): then the first one that comes once the State is Text
+// makes it Native.
 func (d *Detector) Reply(r Reply, now time.Time) bool {
 	d.fire(now)
 	defer d.update()
@@ -122,6 +134,9 @@ func (d *Detector) Reply(r Reply, now time.Time) bool {
 		if !d.timeout.IsZero() && d.timeout.Before(d.after) {
 			d.after = d.timeout
 		}
+	} else if d.State == Text && d.Late {
+		d.State = Native
+		d.Caps, _ = r.Caps()
 	}
 	return true
 }

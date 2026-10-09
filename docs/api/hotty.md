@@ -50,7 +50,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func ParseKey(name string) (canonical string, ok bool)`](#ParseKey)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
 - [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
-- [`func Query(n int) string`](#Query)
+- [`func Query(n int, opts ...QueryOption) string`](#Query)
 - [`func RemoveAttr(surface, target, name string, opts ...ReplyOption) string`](#RemoveAttr)
 - [`func ReplyCaps(n string, caps json.RawMessage) string`](#ReplyCaps)
 - [`func ReplyErr(n, surface, re, code, detail string) string`](#ReplyErr)
@@ -63,8 +63,10 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
+- [`func WithdrawLate() string`](#WithdrawLate)
 - [`type Action`](#Action)
   - [`func (a Action) Multiline() bool`](#Action.Multiline)
+  - [`func (a Action) Scrolls() bool`](#Action.Scrolls)
 - [`type Area`](#Area)
 - [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
@@ -117,6 +119,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m *Keymap) Format() string`](#Keymap.Format)
   - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
   - [`func (m *Keymap) Program(name string) bool`](#Keymap.Program)
+  - [`func (m *Keymap) Scroll(name string) Action`](#Keymap.Scroll)
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
   - [`func (m Message) Get(k string) string`](#Message.Get)
@@ -125,6 +128,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m Message) Reply() (Reply, bool)`](#Message.Reply)
 - [`type Op`](#Op)
 - [`type Placement`](#Placement)
+- [`type QueryOption`](#QueryOption)
+  - [`func Late() QueryOption`](#Late)
 - [`type Quiet`](#Quiet)
 - [`type Reply`](#Reply)
   - [`func (r Reply) Caps() (Caps, bool)`](#Reply.Caps)
@@ -377,10 +382,10 @@ PlaceAt places a surface with its window's top-left corner at cell (x, y), count
 ## <a id="Query"></a>func Query
 
 ```go
-func Query(n int) string
+func Query(n int, opts ...QueryOption) string
 ```
 
-Query asks whether the terminal is a HOTTY host, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends. A DA1 answer with no reply before it means there is no host.
+Query asks whether the terminal is a HOTTY host, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
 
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
@@ -478,6 +483,14 @@ func ValidName(s string) bool
 
 ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SPEC §3.5).
 
+## <a id="WithdrawLate"></a>func WithdrawLate
+
+```go
+func WithdrawLate() string
+```
+
+WithdrawLate withdraws a query that asked for a late answer (SPEC §4): a query that wants no answer (a=q:q=2), which takes the held one's place. It has no fence, and nothing answers it.
+
 ## <a id="Action"></a>type Action
 
 ```go
@@ -486,7 +499,7 @@ type Action string
 
 Action is what a text field does with a key (SPEC §10.2): a keymap binds keys to actions, and Lookup says which one a key does.
 
-<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Insert"></a>
+<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
 
 ```go
 const (
@@ -512,6 +525,20 @@ const (
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
 	Program Action = "program"
+	// The scroll actions (SPEC §10.2, scrolling keys): outside a text field,
+	// a key bound to one, which the element does not use, scrolls the
+	// nearest element that scrolls, from the focused one outward; a text
+	// field's keymap leaves them out.
+	ScrollUp           Action = "scroll-up"
+	ScrollDown         Action = "scroll-down"
+	ScrollLeft         Action = "scroll-left"
+	ScrollRight        Action = "scroll-right"
+	ScrollPageUp       Action = "scroll-page-up"
+	ScrollPageDown     Action = "scroll-page-down"
+	ScrollHalfPageUp   Action = "scroll-half-page-up"
+	ScrollHalfPageDown Action = "scroll-half-page-down"
+	ScrollStart        Action = "scroll-start"
+	ScrollEnd          Action = "scroll-end"
 	// Insert is what Lookup returns for a character the field types. A
 	// keymap does not bind it.
 	Insert Action = "insert"
@@ -527,6 +554,14 @@ func (a Action) Multiline() bool
 ```
 
 Multiline reports whether only a multi-line field (a textarea, an editing host) has the action. From an input, a key bound to one reaches the program.
+
+### <a id="Action.Scrolls"></a>func (Action) Scrolls
+
+```go
+func (a Action) Scrolls() bool
+```
+
+Scrolls reports whether the action is a scroll action, which only an element that is not a text field has (SPEC §10.2).
 
 ## <a id="Area"></a>type Area
 
@@ -761,6 +796,8 @@ type Detector struct {
 	// N numbers the query: a reply that does not echo it answers someone
 	// else's. 0 is 1.
 	N int
+	// Late asks for a late answer (Late, SPEC §4).
+	Late bool
 
 	// State is what the Detector has found, and Caps the host's
 	// capabilities, when Native.
@@ -777,6 +814,8 @@ type Detector struct {
 Detector decides whether the terminal is a HOTTY host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
 
 Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query is detection's whenever it comes.
+
+With Late, the query asks for a late answer (SPEC §4): the first reply that answers it once the State is Text makes the State Native, with the host's capabilities, Decided and Done as it was. The program then starts using HOTTY.
 
 Decided and Done differ only for a host: it is known to be one when its reply arrives, and detection is over when the DA1 answer behind it does. A program that must not wait acts when Decided; one that hands the terminal on, when Done.
 
@@ -804,7 +843,7 @@ End ends detection at now: the input ended, or the program gave up. A terminal t
 func (d *Detector) Reply(r Reply, now time.Time) bool
 ```
 
-Reply takes a reply that arrived at now, and reports whether it answers the query: a=ok, re=q, and the query's n. One that comes after the Detector decided changes nothing.
+Reply takes a reply that arrived at now, and reports whether it answers the query: a=ok, re=q, and the query's n. One that comes after the Detector decided changes nothing, unless the query asked for a late answer (Late): then the first one that comes once the State is Text makes it Native.
 
 ### <a id="Detector.Start"></a>func (*Detector) Start
 
@@ -1030,7 +1069,7 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key. Program says whether any focused element's keymap gives a key to the program.
+Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
@@ -1046,7 +1085,7 @@ ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings s
 func Resolve(multiline bool, values ...string) *Keymap
 ```
 
-Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key.
+Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key.
 
 ### <a id="Keymap.Bind"></a>func (*Keymap) Bind
 
@@ -1080,7 +1119,17 @@ func (m *Keymap) Program(name string) bool
 
 Program reports whether the keymap gives a key to the program: binds it to program, or, for a key with Shift that no binding names, binds it without Shift (SPEC §10.2, keys for the program).
 
-Every focused element has a keymap, and outside a text field program is the only action it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds to program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
+Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds to program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
+
+### <a id="Keymap.Scroll"></a>func (*Keymap) Scroll
+
+```go
+func (m *Keymap) Scroll(name string) Action
+```
+
+Scroll is the scroll action the keymap binds a key to, or "" for none: the key's own binding, or, for a key with Shift that no binding names, the binding without Shift (SPEC §10.2, scrolling keys).
+
+A host asks it of the keymap it asks Program of, for a key the focused element does not use (Space on a button, a character on a select are the element's). A key bound to one scrolls the nearest element that scrolls, from the focused one outward, never the terminal; along an axis the document does not scroll (Scroll, SPEC §5.1), it goes on as if the keymap did not bind it.
 
 ## <a id="Message"></a>type Message
 
@@ -1197,6 +1246,27 @@ type Placement struct {
 ```
 
 Placement is where and how a surface is shown (SPEC §5.2).
+
+## <a id="QueryOption"></a>type QueryOption
+
+```go
+type QueryOption interface {
+	// contains filtered or unexported methods
+	// contains filtered or unexported fields
+}
+```
+
+QueryOption is an option of Query: Late.
+
+### <a id="Late"></a>func Late
+
+```go
+func Late() QueryOption
+```
+
+Late asks for a late answer (late=1, SPEC §4). What stands between the program and the terminal and has no host yet, such as a multiplexer running the program's pane with no terminal attached, may hold the query, and answer it once there is a host, whenever that is. A program that asks takes that answer as detection finding a host: it can start using HOTTY after it fell back to cells. A host answers at once, as it answers any query.
+
+A program that asked, and will no longer take the answer, such as one about to exit, sends WithdrawLate, or the answer would reach whatever reads the terminal after it.
 
 ## <a id="Quiet"></a>type Quiet
 

@@ -8,9 +8,40 @@ import (
 // Query asks whether the terminal is a HOTTY host, fenced by Primary Device
 // Attributes (SPEC §4): a host replies to the query, numbered n, before the
 // DA1 answer every terminal sends. A DA1 answer with no reply before it
-// means there is no host.
-func Query(n int) string {
-	return Encode(Control{{"a", "q"}, {"n", strconv.Itoa(n)}}, nil) + "\x1b[c"
+// means there is no host. Late asks for a late answer as well.
+func Query(n int, opts ...QueryOption) string {
+	ctl := Control{{"a", "q"}, {"n", strconv.Itoa(n)}}
+	for _, o := range opts {
+		o.query(&ctl)
+	}
+	return Encode(ctl, nil) + "\x1b[c"
+}
+
+// QueryOption is an option of Query: Late.
+type QueryOption interface{ query(*Control) }
+
+type late struct{}
+
+func (late) query(c *Control) { c.set("late", "1") }
+
+// Late asks for a late answer (late=1, SPEC §4). What stands between the
+// program and the terminal and has no host yet, such as a multiplexer
+// running the program's pane with no terminal attached, may hold the
+// query, and answer it once there is a host, whenever that is. A program
+// that asks takes that answer as detection finding a host: it can start
+// using HOTTY after it fell back to cells. A host answers at once, as it
+// answers any query.
+//
+// A program that asked, and will no longer take the answer, such as one
+// about to exit, sends WithdrawLate, or the answer would reach whatever
+// reads the terminal after it.
+func Late() QueryOption { return late{} }
+
+// WithdrawLate withdraws a query that asked for a late answer (SPEC §4): a
+// query that wants no answer (a=q:q=2), which takes the held one's place.
+// It has no fence, and nothing answers it.
+func WithdrawLate() string {
+	return Encode(Control{{"a", "q"}, {"q", strconv.Itoa(int(NoReply))}}, nil)
 }
 
 // Doc creates a surface, or replaces its document (SPEC §5.1). The surface

@@ -126,7 +126,12 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 	}
 	switch name {
 	case "query":
+		if l, _ := options["late"].(bool); l {
+			return Query(num("n"), Late())
+		}
 		return Query(num("n"))
+	case "withdraw_late":
+		return WithdrawLate()
 	case "doc":
 		var docOpts []DocOption
 		for _, o := range opts {
@@ -653,6 +658,7 @@ func mergePass(segs []segView) []segView {
 type detectVector struct {
 	Name  string `json:"name"`
 	N     int    `json:"n"`
+	Late  bool   `json:"late"`
 	Steps []struct {
 		At    int64   `json:"at"`
 		Start bool    `json:"start"`
@@ -675,14 +681,18 @@ type detectVector struct {
 func TestDetectVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Detect {
 		t.Run(v.Name, func(t *testing.T) {
-			d := Detector{N: v.N}
+			d := Detector{N: v.N, Late: v.Late}
 			var dec Decoder
 			for i, st := range v.Steps {
 				now := time.UnixMilli(st.At)
 				took := false
 				switch {
 				case st.Start:
-					if q, want := d.Start(now), Query(max(v.N, 1)); q != want {
+					want := Query(max(v.N, 1))
+					if v.Late {
+						want = Query(max(v.N, 1), Late())
+					}
+					if q := d.Start(now); q != want {
 						t.Errorf("step %d: Start returned %q, want %q", i, q, want)
 					}
 				case st.DA1:
@@ -777,20 +787,30 @@ type keymapVector struct {
 	Keys         []string           `json:"keys"`
 	Lookup       map[string]*string `json:"lookup"`
 	Program      map[string]bool    `json:"program"`
+	Scroll       map[string]*string `json:"scroll"`
 }
 
 // TestKeymapVectors formats keymaps, looks keys up in resolved ones, and
 // asks an element's keymap, with no default, which keys it gives the
-// program.
+// program and which scroll actions it binds them to.
 func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
-			if v.Program != nil {
+			if v.Program != nil || v.Scroll != nil {
 				m := ParseKeymap(strings.Join(v.Keys, " "))
 				for k, want := range v.Program {
 					if got := m.Program(k); got != want {
 						t.Errorf("Program(%q) = %v, want %v", k, got, want)
+					}
+				}
+				for k, want := range v.Scroll {
+					w := Action("")
+					if want != nil {
+						w = Action(*want)
+					}
+					if got := m.Scroll(k); got != w {
+						t.Errorf("Scroll(%q) = %q, want %q", k, got, w)
 					}
 				}
 				return

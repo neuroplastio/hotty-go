@@ -35,6 +35,20 @@ const (
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
 	Program Action = "program"
+	// The scroll actions (SPEC §10.2, scrolling keys): outside a text field,
+	// a key bound to one, which the element does not use, scrolls the
+	// nearest element that scrolls, from the focused one outward; a text
+	// field's keymap leaves them out.
+	ScrollUp           Action = "scroll-up"
+	ScrollDown         Action = "scroll-down"
+	ScrollLeft         Action = "scroll-left"
+	ScrollRight        Action = "scroll-right"
+	ScrollPageUp       Action = "scroll-page-up"
+	ScrollPageDown     Action = "scroll-page-down"
+	ScrollHalfPageUp   Action = "scroll-half-page-up"
+	ScrollHalfPageDown Action = "scroll-half-page-down"
+	ScrollStart        Action = "scroll-start"
+	ScrollEnd          Action = "scroll-end"
 	// Insert is what Lookup returns for a character the field types. A
 	// keymap does not bind it.
 	Insert Action = "insert"
@@ -47,6 +61,9 @@ var actions = map[Action]bool{
 	DeleteWordBackward: true, DeleteWordForward: true, DeleteToLineStart: true, DeleteToLineEnd: true,
 	LinePrevious: true, LineNext: true, PageUp: true, PageDown: true,
 	InputStart: true, InputEnd: true, Newline: true, Submit: true, Program: true,
+	ScrollUp: true, ScrollDown: true, ScrollLeft: true, ScrollRight: true,
+	ScrollPageUp: true, ScrollPageDown: true, ScrollHalfPageUp: true, ScrollHalfPageDown: true,
+	ScrollStart: true, ScrollEnd: true,
 }
 
 // Multiline reports whether only a multi-line field (a textarea, an
@@ -55,6 +72,17 @@ var actions = map[Action]bool{
 func (a Action) Multiline() bool {
 	switch a {
 	case LinePrevious, LineNext, PageUp, PageDown, InputStart, InputEnd, Newline:
+		return true
+	}
+	return false
+}
+
+// Scrolls reports whether the action is a scroll action, which only an
+// element that is not a text field has (SPEC §10.2).
+func (a Action) Scrolls() bool {
+	switch a {
+	case ScrollUp, ScrollDown, ScrollLeft, ScrollRight, ScrollPageUp, ScrollPageDown,
+		ScrollHalfPageUp, ScrollHalfPageDown, ScrollStart, ScrollEnd:
 		return true
 	}
 	return false
@@ -496,7 +524,8 @@ func isRegional(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
 // Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a
 // data-keys value; Resolve makes the one a field uses, whose Lookup says
 // what the field does with a key. Program says whether any focused
-// element's keymap gives a key to the program.
+// element's keymap gives a key to the program, and Scroll which scroll
+// action it binds a key to.
 type Keymap struct {
 	keys      []string
 	actions   map[string]Action
@@ -509,14 +538,18 @@ type Keymap struct {
 // action it does not know, and Tab, Shift+Tab and Escape.
 func ParseKeymap(value string) *Keymap {
 	m := &Keymap{}
-	for _, b := range strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(" \t\n\f\r", r) }) {
-		i := strings.LastIndexByte(b, '=')
-		if i < 0 {
-			continue
-		}
-		m.Bind(b[:i], Action(b[i+1:]))
-	}
+	bindings(value, func(k string, a Action) { m.Bind(k, a) })
 	return m
+}
+
+// bindings calls f with each binding of a data-keys value, in order, as
+// written: the key not yet parsed, and the action not yet checked.
+func bindings(value string, f func(key string, a Action)) {
+	for _, b := range strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(" \t\n\f\r", r) }) {
+		if i := strings.LastIndexByte(b, '='); i >= 0 {
+			f(b[:i], Action(b[i+1:]))
+		}
+	}
 }
 
 // Bind binds a key to an action, and reports whether it did: a host
@@ -553,7 +586,9 @@ func (m *Keymap) Format() string {
 
 // Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an
 // input or for a multi-line field, then each data-keys value in turn, the
-// root's first, each overriding the bindings before it key by key.
+// root's first, each overriding the bindings before it key by key. It
+// leaves out each binding to a scroll action where it stands, in its own
+// value too: one neither acts nor overrides an earlier binding of its key.
 func Resolve(multiline bool, values ...string) *Keymap {
 	m := &Keymap{multiline: multiline}
 	enter := Submit
@@ -572,10 +607,11 @@ func Resolve(multiline bool, values ...string) *Keymap {
 		m.Bind(b.key, b.action)
 	}
 	for _, v := range values {
-		p := ParseKeymap(v)
-		for _, k := range p.keys {
-			m.Bind(k, p.actions[k])
-		}
+		bindings(v, func(k string, a Action) {
+			if !a.Scrolls() {
+				m.Bind(k, a)
+			}
+		})
 	}
 	return m
 }
@@ -599,16 +635,34 @@ func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
 // to program, or, for a key with Shift that no binding names, binds it
 // without Shift (SPEC §10.2, keys for the program).
 //
-// Every focused element has a keymap, and outside a text field program is
-// the only action it gives. A host reads the element's as a field's, from
-// the data-keys values of the elements from the root down to it, but with
-// no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key
-// the keymap binds to program to the program before the element uses it,
-// and before the surface scrolls with it; a nearer binding of the key to
-// another action takes it back. In a field, Lookup says as much.
+// Every focused element has a keymap, and outside a text field program and
+// the scroll actions are the only actions it gives. A host reads the
+// element's as a field's, from the data-keys values of the elements from
+// the root down to it, but with its scroll actions and no default keymap:
+// ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds
+// to program to the program before the element uses it, and before the
+// surface scrolls with it; a nearer binding of the key to another action
+// takes it back. In a field, Lookup says as much.
 func (m *Keymap) Program(name string) bool {
 	_, a, bound, _ := m.bound(name)
 	return bound && a == Program
+}
+
+// Scroll is the scroll action the keymap binds a key to, or "" for none:
+// the key's own binding, or, for a key with Shift that no binding names,
+// the binding without Shift (SPEC §10.2, scrolling keys).
+//
+// A host asks it of the keymap it asks Program of, for a key the focused
+// element does not use (Space on a button, a character on a select are the
+// element's). A key bound to one scrolls the nearest element that scrolls,
+// from the focused one outward, never the terminal; along an axis the
+// document does not scroll (Scroll, SPEC §5.1), it goes on as if the
+// keymap did not bind it.
+func (m *Keymap) Scroll(name string) Action {
+	if _, a, bound, _ := m.bound(name); bound && a.Scrolls() {
+		return a
+	}
+	return ""
 }
 
 // Lookup says what a field with this keymap does with a key (SPEC §10.2):
