@@ -419,7 +419,14 @@ func eventView(e Event) map[string]any {
 		view["fit_rows"] = r
 	}
 	if d, ok := e.Drag(); ok {
-		view["drag"] = map[string]any{"c": d.Col, "r": d.Row, "keys": d.Keys}
+		drag := map[string]any{"c": d.Col, "r": d.Row, "keys": d.Keys}
+		if d.HasX {
+			drag["x"] = d.X
+		}
+		if d.HasY {
+			drag["y"] = d.Y
+		}
+		view["drag"] = drag
 	}
 	if h, ok := e.Hover(); ok {
 		view["hover"] = map[string]any{"c": h.Col, "r": h.Row, "out": h.Out}
@@ -436,7 +443,7 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  map[string]any{"w": c.Cell.W, "h": c.Cell.H},
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "host": c.Host, "version": c.Version, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	supports, sends := map[string]any{}, map[string]any{}

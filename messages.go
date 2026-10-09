@@ -212,6 +212,14 @@ type Drag struct {
 	// Keys are the modifier keys held: "shift", "ctrl", "alt" and "meta",
 	// in that order.
 	Keys []string
+	// X and Y are where in the dragged element the pointer is, for an
+	// element with data-steps (SPEC §9.1): a step from 0 to its count,
+	// along its width and down its height, measured against the element
+	// the drag started on wherever the pointer is. HasX and HasY say
+	// whether the detail has them: an element with no steps along an axis
+	// has none, and 0 is a step like any other.
+	X, Y       int
+	HasX, HasY bool
 }
 
 // Has reports whether a modifier key was held: "shift", "ctrl", "alt" or
@@ -236,11 +244,24 @@ func (e Event) Drag() (Drag, bool) {
 	var d struct {
 		C, R *whole
 		Keys []string
+		X, Y json.RawMessage
 	}
 	if json.Unmarshal(e.Detail, &d) != nil || d.C == nil || d.R == nil {
 		return Drag{}, false
 	}
-	return Drag{Col: int(*d.C), Row: int(*d.R), Keys: d.Keys}, true
+	drag := Drag{Col: int(*d.C), Row: int(*d.R), Keys: d.Keys}
+	// A step that is not a whole number is absent, and the rest stands.
+	drag.X, drag.HasX = step(d.X)
+	drag.Y, drag.HasY = step(d.Y)
+	return drag, true
+}
+
+func step(raw json.RawMessage) (int, bool) {
+	var w whole
+	if raw == nil || json.Unmarshal(raw, &w) != nil {
+		return 0, false
+	}
+	return int(w), true
 }
 
 // Fields is a submit event's detail: the form's fields by name. A value
@@ -411,6 +432,10 @@ type Caps struct {
 	// surface that take no pointer (SPEC §9.3); a host that does not says
 	// nothing, and every window takes the pointer wherever it is.
 	Passthrough bool `json:"passthrough,omitempty"`
+	// Steps is true when a drag of an element with data-steps says where
+	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
+	// that does not says nothing, and its drags carry cells only.
+	Steps bool `json:"steps,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `json:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -467,6 +492,7 @@ func (c *Caps) UnmarshalJSON(data []byte) error {
 	}
 	field("scroll", &c.Scroll)
 	field("passthrough", &c.Passthrough)
+	field("steps", &c.Steps)
 	field("host", &c.Host)
 	field("version", &c.Version)
 	return nil
