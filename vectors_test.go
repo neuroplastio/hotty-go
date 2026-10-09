@@ -776,13 +776,25 @@ type keymapVector struct {
 	Multiline    bool               `json:"multiline"`
 	Keys         []string           `json:"keys"`
 	Lookup       map[string]*string `json:"lookup"`
+	Program      map[string]bool    `json:"program"`
 }
 
-// TestKeymapVectors formats keymaps, and looks keys up in resolved ones.
+// TestKeymapVectors formats keymaps, looks keys up in resolved ones, and
+// asks an element's keymap, with no default, which keys it gives the
+// program.
 func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
+			if v.Program != nil {
+				m := ParseKeymap(strings.Join(v.Keys, " "))
+				for k, want := range v.Program {
+					if got := m.Program(k); got != want {
+						t.Errorf("Program(%q) = %v, want %v", k, got, want)
+					}
+				}
+				return
+			}
 			if v.Lookup == nil {
 				value := TerminalKeys
 				if v.Parse != nil {

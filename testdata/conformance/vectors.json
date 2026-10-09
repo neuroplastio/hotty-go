@@ -10648,6 +10648,36 @@
     "Control+s": "submit",
     "Enter": "submit"
    }
+  },
+  {
+   "name": "outside a text field a keymap has no default, and only program counts: a key bound to it, or an unbound key with Shift whose key without it is; a nearer binding of the key to another action cancels it, and Escape and Tab cannot be bound (SPEC \u00a710.2)",
+   "keys": [
+    "ArrowDown=program End=program PageUp=program Control+n=program Escape=program Tab=program",
+    "End=line-end"
+   ],
+   "program": {
+    "ArrowDown": true,
+    "Shift+ArrowDown": true,
+    "PageUp": true,
+    "Control+n": true,
+    "End": false,
+    "ArrowUp": false,
+    "Control+ArrowDown": false,
+    "Enter": false,
+    "Escape": false,
+    "Tab": false
+   }
+  },
+  {
+   "name": "a nearer binding with Shift takes that key, and leaves the key without Shift to the farther program (SPEC \u00a710.2)",
+   "keys": [
+    "ArrowDown=program",
+    "Shift+ArrowDown=line-next"
+   ],
+   "program": {
+    "ArrowDown": true,
+    "Shift+ArrowDown": false
+   }
   }
  ],
  "edit": [
