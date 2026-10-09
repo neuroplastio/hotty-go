@@ -51,8 +51,11 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
   - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
+  - [`func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragEndStep)
   - [`func (h *Host) DragMove(id string, c, r int, keys ...string) error`](#Host.DragMove)
+  - [`func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragMoveStep)
   - [`func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error`](#Host.DragStart)
+  - [`func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error`](#Host.DragStartStep)
   - [`func (h *Host) Dragging() bool`](#Host.Dragging)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
   - [`func (h *Host) Errors() []string`](#Host.Errors)
@@ -264,6 +267,14 @@ func (h *Host) DragEnd(id string, c, r int, keys ...string) error
 
 DragEnd releases the button of the drag in progress over the element with an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its t as DragMove's. A drag that ends on the element it began on is also that element's click, after dragend, if it reports clicks.
 
+### <a id="Host.DragEndStep"></a>func (*Host) DragEndStep
+
+```go
+func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error
+```
+
+DragEndStep is DragEnd with the pointer at step x, y of the element the drag began on (DragStartStep).
+
 ### <a id="Host.DragMove"></a>func (*Host) DragMove
 
 ```go
@@ -271,6 +282,14 @@ func (h *Host) DragMove(id string, c, r int, keys ...string) error
 ```
 
 DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: the nearest one with an id and drag in its data-on, from it outward, or empty; while that is empty, when the cell changes instead.
+
+### <a id="Host.DragMoveStep"></a>func (*Host) DragMoveStep
+
+```go
+func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error
+```
+
+DragMoveStep is DragMove with the pointer at step x, y of the element the drag began on, wherever the pointer is (DragStartStep). It also reports drag when the step changes.
 
 ### <a id="Host.DragStart"></a>func (*Host) DragStart
 
@@ -281,6 +300,14 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error
 DragStart presses a mouse's primary button on the element with an id and starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier keys held ("shift", "ctrl", "alt", "meta"). The press is a press like any other: press first, if the placement asks for presses; then dragstart, from the nearest element from it outward with drag in its data-on; then the keyboard, as a click moves it. ErrNoReport, and no drag, if no element opts in or the one that does has no id.
 
 The host lays nothing out, so a test names what is under the pointer: DragMove for each element or cell crossed, then DragEnd.
+
+### <a id="Host.DragStartStep"></a>func (*Host) DragStartStep
+
+```go
+func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error
+```
+
+DragStartStep is DragStart on an element with data-steps (SPEC §9.1), with the pointer at step x, y of it. The host lays nothing out, so the test says where in the element the pointer is; a step past the element's count is clamped to it, and one along an axis it does not count is ignored. The host reports steps only when its capabilities say Steps (Caps).
 
 ### <a id="Host.Dragging"></a>func (*Host) Dragging
 

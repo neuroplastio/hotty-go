@@ -101,6 +101,9 @@ func Caps(c hotty.Caps) Option {
 		if c.Host != "" {
 			d.Host = c.Host
 		}
+		if c.Steps {
+			d.Steps = true
+		}
 	}
 }
 
@@ -956,6 +959,8 @@ type drag struct {
 	id    string     // its id
 	t     string     // the element under the pointer, as last reported
 	c, r  int        // the cell under the pointer, as last reported
+	n     [2]int     // the element's data-steps when the drag began: none is 0
+	x, y  int        // the step as last reported, along each counted axis
 }
 
 // DragStart presses a mouse's primary button on the element with an id and
@@ -969,6 +974,20 @@ type drag struct {
 // The host lays nothing out, so a test names what is under the pointer:
 // DragMove for each element or cell crossed, then DragEnd.
 func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
+	return h.dragStart(surface, id, c, r, 0, 0, keys)
+}
+
+// DragStartStep is DragStart on an element with data-steps (SPEC §9.1),
+// with the pointer at step x, y of it. The host lays nothing out, so the
+// test says where in the element the pointer is; a step past the
+// element's count is clamped to it, and one along an axis it does not
+// count is ignored. The host reports steps only when its capabilities say
+// Steps (Caps).
+func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error {
+	return h.dragStart(surface, id, c, r, x, y, keys)
+}
+
+func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -990,8 +1009,13 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
 	}
 	if on := closest(el, listens("drag")); on != nil {
 		if rid, ok := attr(on, "id"); ok {
-			h.drag = &drag{s: s, start: on, id: rid, t: rid, c: c, r: r}
-			h.event(s, hotty.EventDragStart, rid, dragDetail(c, r, keys))
+			d := &drag{s: s, start: on, id: rid, t: rid, c: c, r: r}
+			if h.caps.Steps {
+				d.n = steps(on)
+			}
+			d.x, d.y = d.clamp(x, y)
+			h.drag = d
+			h.event(s, hotty.EventDragStart, rid, d.detail(c, r, keys))
 		}
 	}
 	if f := closest(el, focusable); f != nil {
@@ -1014,15 +1038,32 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
 func (h *Host) DragMove(id string, c, r int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragMove(id, c, r, h.drag.x, h.drag.y, keys)
+}
+
+// DragMoveStep is DragMove with the pointer at step x, y of the element
+// the drag began on, wherever the pointer is (DragStartStep). It also
+// reports drag when the step changes.
+func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.dragMove(id, c, r, x, y, keys)
+}
+
+func (h *Host) dragMove(id string, c, r, x, y int, keys []string) error {
 	d, t, err := h.dragOver(id)
 	if err != nil {
 		return err
 	}
-	if t == d.t && (t != "" || (c == d.c && r == d.r)) {
+	x, y = d.clamp(x, y)
+	if t == d.t && (t != "" || (c == d.c && r == d.r)) && x == d.x && y == d.y {
 		return nil
 	}
-	d.t, d.c, d.r = t, c, r
-	h.event(d.s, hotty.EventDrag, t, dragDetail(c, r, keys))
+	d.t, d.c, d.r, d.x, d.y = t, c, r, x, y
+	h.event(d.s, hotty.EventDrag, t, d.detail(c, r, keys))
 	return nil
 }
 
@@ -1033,12 +1074,28 @@ func (h *Host) DragMove(id string, c, r int, keys ...string) error {
 func (h *Host) DragEnd(id string, c, r int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragEnd(id, c, r, h.drag.x, h.drag.y, keys)
+}
+
+// DragEndStep is DragEnd with the pointer at step x, y of the element the
+// drag began on (DragStartStep).
+func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.dragEnd(id, c, r, x, y, keys)
+}
+
+func (h *Host) dragEnd(id string, c, r, x, y int, keys []string) error {
 	d, t, err := h.dragOver(id)
 	if err != nil {
 		return err
 	}
+	d.x, d.y = d.clamp(x, y)
 	h.drag = nil
-	h.event(d.s, hotty.EventDragEnd, t, dragDetail(c, r, keys))
+	h.event(d.s, hotty.EventDragEnd, t, d.detail(c, r, keys))
 	if t == d.id && reportsClick(d.start) {
 		var detail any
 		if v, ok := attr(d.start, "value"); ok {
@@ -1080,7 +1137,7 @@ func (h *Host) dragOver(id string) (*drag, string, error) {
 func (h *Host) cutDrag() {
 	d := h.drag
 	h.drag = nil
-	h.event(d.s, hotty.EventDragEnd, "", dragDetail(d.c, d.r, nil))
+	h.event(d.s, hotty.EventDragEnd, "", d.detail(d.c, d.r, nil))
 }
 
 // listens reports whether an element has kind in its data-on.
@@ -1094,16 +1151,49 @@ func listens(kind string) func(*html.Node) bool {
 	}
 }
 
-// dragDetail is a drag event's detail: the cell, and the modifier keys in
-// the order SPEC §9.1 gives them.
-func dragDetail(c, r int, keys []string) map[string]any {
+// detail is a drag event's detail: the cell, the modifier keys in the
+// order SPEC §9.1 gives them, and the step along each axis the element
+// counts.
+func (d *drag) detail(c, r int, keys []string) map[string]any {
 	held := []string{}
 	for _, k := range []string{"shift", "ctrl", "alt", "meta"} {
 		if slices.Contains(keys, k) {
 			held = append(held, k)
 		}
 	}
-	return map[string]any{"c": c, "r": r, "keys": held}
+	m := map[string]any{"c": c, "r": r, "keys": held}
+	if d.n[0] > 0 {
+		m["x"] = d.x
+	}
+	if d.n[1] > 0 {
+		m["y"] = d.y
+	}
+	return m
+}
+
+// clamp keeps a step within the element's counts, 0 along an axis it does
+// not count.
+func (d *drag) clamp(x, y int) (int, int) {
+	return min(max(x, 0), d.n[0]), min(max(y, 0), d.n[1])
+}
+
+// steps reads an element's data-steps (SPEC §9.1): "<x>" or "<x> <y>",
+// whole numbers from 0 up; anything else is none.
+func steps(n *html.Node) [2]int {
+	v, _ := attr(n, "data-steps")
+	f := strings.Fields(v)
+	if len(f) < 1 || len(f) > 2 {
+		return [2]int{}
+	}
+	var out [2]int
+	for i, s := range f {
+		k, err := strconv.Atoi(s)
+		if err != nil || k < 0 || strings.HasPrefix(s, "+") {
+			return [2]int{}
+		}
+		out[i] = k
+	}
+	return out
 }
 
 func reportsClick(n *html.Node) bool {

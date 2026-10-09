@@ -952,6 +952,56 @@ func TestDrag(t *testing.T) {
 	expect(t, sent(h), `ev dragstart t=b {"c":1,"keys":[],"r":0}`)
 }
 
+// Steps (SPEC §9.1): a host whose capabilities say Steps reports where in
+// an element with data-steps the pointer is, as the test gives it: clamped
+// to the counts, measured against the element the drag began on wherever
+// the pointer goes, with a drag each time it changes.
+func TestDragSteps(t *testing.T) {
+	h := New(t, Caps(hotty.Caps{Steps: true}))
+	doc := `<i id=track data-on=drag data-steps=20>t</i><i id=pad data-on=drag data-steps="0 4">p</i>` +
+		`<i id=bad data-on=drag data-steps="2.5">b</i><i id=other data-on=drag>o</i>`
+	send(h, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 4}))
+	sent(h)
+	_ = h.DragStartStep("s", "track", 0, 0, 3, 9)
+	_ = h.DragMoveStep("track", 1, 0, 3, 0) // the same element and step: nothing
+	_ = h.DragMoveStep("track", 2, 0, 5, 0) // another step: drag
+	_ = h.DragMoveStep("", 2, 2, 5, 0)      // off the track, at the same step
+	_ = h.DragMoveStep("", 9, 2, 99, 0)     // past its end: clamped
+	_ = h.DragMove("other", 5, 3)           // a move with no step keeps the last
+	_ = h.DragEndStep("", -4, 3, -1, 0)
+	expect(t, sent(h),
+		`ev dragstart t=track {"c":0,"keys":[],"r":0,"x":3}`,
+		`ev drag t=track {"c":2,"keys":[],"r":0,"x":5}`,
+		`ev drag t= {"c":2,"keys":[],"r":2,"x":5}`,
+		`ev drag t= {"c":9,"keys":[],"r":2,"x":20}`,
+		`ev drag t=other {"c":5,"keys":[],"r":3,"x":20}`,
+		`ev dragend t= {"c":-4,"keys":[],"r":3,"x":0}`)
+
+	// Only the axes an element counts; a value that is not one or two whole
+	// numbers counts none.
+	_ = h.DragStartStep("s", "pad", 0, 1, 7, 2)
+	_ = h.DragEndStep("pad", 0, 1, 7, 3)
+	_ = h.DragStartStep("s", "bad", 0, 2, 1, 1)
+	_ = h.DragEnd("bad", 0, 2)
+	expect(t, sent(h),
+		`ev dragstart t=pad {"c":0,"keys":[],"r":1,"y":2}`,
+		`ev dragend t=pad {"c":0,"keys":[],"r":1,"y":3}`,
+		`ev dragstart t=bad {"c":0,"keys":[],"r":2}`,
+		`ev dragend t=bad {"c":0,"keys":[],"r":2}`)
+
+	// A hide cuts it short with the last step.
+	_ = h.DragStartStep("s", "track", 0, 0, 12, 0)
+	send(h, hotty.Hide("s"))
+	expect(t, sent(h), `ev dragstart t=track {"c":0,"keys":[],"r":0,"x":12}`, `ev dragend t= {"c":0,"keys":[],"r":0,"x":12}`)
+
+	// A host that does not say Steps reports none.
+	plain := New(t)
+	send(plain, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 4}))
+	sent(plain)
+	_ = plain.DragStartStep("s", "track", 0, 0, 3, 0)
+	expect(t, sent(plain), `ev dragstart t=track {"c":0,"keys":[],"r":0}`)
+}
+
 func TestReplies(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("x", "<p id=p>p</p>", hotty.N(1)), hotty.SetText("x", "p", "q", hotty.Q(hotty.ReplyAlways)))
