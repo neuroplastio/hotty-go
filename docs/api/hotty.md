@@ -116,6 +116,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m *Keymap) Bind(name string, a Action) bool`](#Keymap.Bind)
   - [`func (m *Keymap) Format() string`](#Keymap.Format)
   - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
+  - [`func (m *Keymap) Program(name string) bool`](#Keymap.Program)
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
   - [`func (m Message) Get(k string) string`](#Message.Get)
@@ -1029,7 +1030,7 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key.
+Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key. Program says whether any focused element's keymap gives a key to the program.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
@@ -1070,6 +1071,16 @@ func (m *Keymap) Lookup(name string) Action
 ```
 
 Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a character it types; or "" when the key is not the field's, and reaches the program (or, for Tab, moves focus). A key with Shift that no binding names is looked up without Shift.
+
+### <a id="Keymap.Program"></a>func (*Keymap) Program
+
+```go
+func (m *Keymap) Program(name string) bool
+```
+
+Program reports whether the keymap gives a key to the program: binds it to program, or, for a key with Shift that no binding names, binds it without Shift (SPEC §10.2, keys for the program).
+
+Every focused element has a keymap, and outside a text field program is the only action it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds to program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
 
 ## <a id="Message"></a>type Message
 

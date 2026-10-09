@@ -495,7 +495,8 @@ func isRegional(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
 
 // Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a
 // data-keys value; Resolve makes the one a field uses, whose Lookup says
-// what the field does with a key.
+// what the field does with a key. Program says whether any focused
+// element's keymap gives a key to the program.
 type Keymap struct {
 	keys      []string
 	actions   map[string]Action
@@ -579,23 +580,48 @@ func Resolve(multiline bool, values ...string) *Keymap {
 	return m
 }
 
+// bound is the action the keymap binds a key to, and the key, canonical: a
+// key with Shift that no binding names is looked up without Shift. ok is
+// false when the name does not parse.
+func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
+	if k, ok = splitKey(name); !ok {
+		return key{}, "", false, false
+	}
+	k = k.canonical()
+	a, bound = m.actions[k.String()]
+	if !bound && k.mods&modShift != 0 {
+		a, bound = m.actions[key{k.mods &^ modShift, k.value}.String()]
+	}
+	return k, a, bound, true
+}
+
+// Program reports whether the keymap gives a key to the program: binds it
+// to program, or, for a key with Shift that no binding names, binds it
+// without Shift (SPEC §10.2, keys for the program).
+//
+// Every focused element has a keymap, and outside a text field program is
+// the only action it gives. A host reads the element's as a field's, from
+// the data-keys values of the elements from the root down to it, but with
+// no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key
+// the keymap binds to program to the program before the element uses it,
+// and before the surface scrolls with it; a nearer binding of the key to
+// another action takes it back. In a field, Lookup says as much.
+func (m *Keymap) Program(name string) bool {
+	_, a, bound, _ := m.bound(name)
+	return bound && a == Program
+}
+
 // Lookup says what a field with this keymap does with a key (SPEC §10.2):
 // an action; Insert for a character it types; or "" when the key is not the
 // field's, and reaches the program (or, for Tab, moves focus). A key with
 // Shift that no binding names is looked up without Shift.
 func (m *Keymap) Lookup(name string) Action {
-	k, ok := splitKey(name)
+	k, a, bound, ok := m.bound(name)
 	if !ok {
 		return ""
 	}
-	k = k.canonical()
-	c := k.String()
-	if c == "Tab" || c == "Shift+Tab" || c == "Escape" {
+	if c := k.String(); c == "Tab" || c == "Shift+Tab" || c == "Escape" {
 		return ""
-	}
-	a, bound := m.actions[c]
-	if !bound && k.mods&modShift != 0 {
-		a, bound = m.actions[key{k.mods &^ modShift, k.value}.String()]
 	}
 	switch {
 	case bound && (a == Program || a.Multiline() && !m.multiline):
