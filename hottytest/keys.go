@@ -26,17 +26,22 @@ import (
 // its keymap says (hotty.Resolve, with the data-keys of the elements from
 // the root to it): it edits its value at a caret this host keeps, as
 // hottyedit.Field does, with an input event for each edit (data-on~=input);
-// submit commits it and submits its form; characters type. The other
-// elements take the keys of their row of the table, unmodified or with
-// Shift only:
+// submit commits it and submits its form; characters type.
+//
+// Any other element has a keymap too, read the same way but with no
+// default keymap (hotty.Keymap.Program): a key it binds to program reaches
+// the program, and its other bindings do nothing. The element takes the
+// other keys of its row of the table, unmodified or with Shift only:
 //   - a button, a link, a summary: Space and Enter click it;
 //   - a checkbox or a radio button: Space checks it, Enter submits its
 //     form;
 //   - a date or time input: the keys a text input's default keymap binds,
 //     and characters; the arrows up and down and the page keys are used;
-//   - a select: the arrows, Home and End pick an option (change), a
-//     character the next option it starts; Space, Enter and the page keys
-//     are used.
+//   - a select: the arrows, Home and End pick an option, the page keys
+//     as far as Home and End, a character the next option its label
+//     starts, past disabled ones; a pick sends input (with data-on~=input)
+//     and change at once. Space and Enter do nothing: this host shows no
+//     list.
 //
 // Every other key reaches the program, as typed (Type) when it has a
 // terminal encoding here: characters, Enter, Tab, Escape, Backspace, the
@@ -68,6 +73,11 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	}
 	if textField(el) {
 		return h.fieldKey(s, el, key)
+	}
+	// Any other element's keymap gives keys to the program, and does
+	// nothing else.
+	if hotty.ParseKeymap(strings.Join(keymaps(el), " ")).Program(key) {
+		return false
 	}
 	if !shiftOnly {
 		return false
@@ -111,11 +121,7 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 	multi := el.DataAtom == atom.Textarea || editingHost(el)
 	var values []string
 	if textField(el) {
-		for n := el; n != nil; n = n.Parent {
-			if v, ok := attr(n, "data-keys"); ok {
-				values = append([]string{v}, values...)
-			}
-		}
+		values = keymaps(el)
 	}
 	f := s.fields[el]
 	if f == nil {
@@ -138,6 +144,19 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 		h.typeInto(s, el, f.Value)
 	}
 	return true
+}
+
+// keymaps are the data-keys values of the elements from the root down to
+// el, el's last: its keymap, as SPEC §10.2 reads it.
+func keymaps(el *html.Node) []string {
+	var values []string
+	for n := el; n != nil; n = n.Parent {
+		if v, ok := attr(n, "data-keys"); ok {
+			values = append(values, v)
+		}
+	}
+	slices.Reverse(values)
+	return values
 }
 
 // textField reports whether an element edits text with a keymap (SPEC
@@ -247,7 +266,11 @@ func (h *Host) selectKey(s *Surface, el *html.Node, name string, char bool) bool
 		if !ok {
 			v = textOf(o)
 		}
-		vals, labels = append(vals, v), append(labels, textOf(o))
+		label, ok := attr(o, "label")
+		if !ok {
+			label = textOf(o)
+		}
+		vals, labels = append(vals, v), append(labels, label)
 	})
 	i := slices.Index(vals, s.valueOf(el))
 	pick := -1
@@ -263,21 +286,32 @@ func (h *Host) selectKey(s *Surface, el *html.Node, name string, char bool) bool
 		pick = min(i+1, len(vals)-1)
 	case name == "ArrowUp":
 		pick = max(i-1, 0)
-	case name == "Home":
+	case name == "Home" || name == "PageUp":
 		pick = 0
-	case name == "End":
+	case name == "End" || name == "PageDown":
 		pick = len(vals) - 1
-	case name == " " || name == "Enter" || name == "PageUp" || name == "PageDown":
+	case name == " " || name == "Enter":
 	default:
 		return false
 	}
 	if pick >= 0 && pick < len(vals) && pick != i {
-		s.values[el] = vals[pick]
-		if id, ok := attr(el, "id"); ok {
-			h.event(s, hotty.EventChange, id, map[string]string{"value": vals[pick]})
-		}
+		h.pick(s, el, vals[pick])
 	}
 	return true
+}
+
+// pick picks a select's option by its value: input, with data-on~=input,
+// and change come at once, as a browser's select sends them (SPEC §10.2).
+func (h *Host) pick(s *Surface, el *html.Node, v string) {
+	s.values[el] = v
+	id, ok := attr(el, "id")
+	if !ok {
+		return
+	}
+	if listens("input")(el) {
+		h.event(s, hotty.EventInput, id, map[string]string{"value": v})
+	}
+	h.event(s, hotty.EventChange, id, map[string]string{"value": v})
 }
 
 // textInput: an input that takes text.

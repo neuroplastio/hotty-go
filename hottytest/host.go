@@ -1259,7 +1259,8 @@ func (h *Host) Check(surface, id string, on bool) error {
 	return nil
 }
 
-// Choose picks an option of a select by its value: change comes at once.
+// Choose picks an option of a select by its value, as from its list: input
+// (with data-on~=input) and change come at once.
 func (h *Host) Choose(surface, id, value string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1291,8 +1292,7 @@ func (h *Host) Choose(surface, id, value string) error {
 		return fmt.Errorf("%w: no option %q", ErrNotControl, value)
 	}
 	h.takeKeyboard(s, el, true)
-	s.values[el] = value
-	h.event(s, hotty.EventChange, id, map[string]string{"value": value})
+	h.pick(s, el, value)
 	return nil
 }
 

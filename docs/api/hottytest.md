@@ -203,7 +203,7 @@ Check sets a checkbox, or chooses a radio button (on must then be true), as the 
 func (h *Host) Choose(surface, id, value string) error
 ```
 
-Choose picks an option of a select by its value: change comes at once.
+Choose picks an option of a select by its value, as from its list: input (with data-on~=input) and change come at once.
 
 ### <a id="Host.Click"></a>func (*Host) Click
 
@@ -339,12 +339,14 @@ func (h *Host) Key(key string) (used bool)
 
 Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it: a W3C UI Events key value after its modifiers, joined by "+": "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
 
-Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); submit commits it and submits its form; characters type. The other elements take the keys of their row of the table, unmodified or with Shift only:
+Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); submit commits it and submits its form; characters type.
+
+Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. The element takes the other keys of its row of the table, unmodified or with Shift only:
 
   - a button, a link, a summary: Space and Enter click it;
   - a checkbox or a radio button: Space checks it, Enter submits its form;
   - a date or time input: the keys a text input's default keymap binds, and characters; the arrows up and down and the page keys are used;
-  - a select: the arrows, Home and End pick an option (change), a character the next option it starts; Space, Enter and the page keys are used.
+  - a select: the arrows, Home and End pick an option, the page keys as far as Home and End, a character the next option its label starts, past disabled ones; a pick sends input (with data-on~=input) and change at once. Space and Enter do nothing: this host shows no list.
 
 Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, Enter, Tab, Escape, Backspace, the arrows and the editing keys, and Control or Alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
 
