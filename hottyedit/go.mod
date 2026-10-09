@@ -6,7 +6,7 @@ go 1.24.0
 
 require (
 	github.com/clipperhouse/uax29/v2 v2.7.0
-	github.com/neuroplastio/hotty-go v0.0.0-20261008211527-abe0d44c8516
+	github.com/neuroplastio/hotty-go v0.0.0-20261009104144-1dc9beac6b47
 )
 
 // The SDK's modules build against each other as they are in this
