@@ -621,7 +621,11 @@ func Resolve(multiline bool, values ...string) *Keymap {
 		{"Control+Backspace", DeleteWordBackward}, {"Control+Delete", DeleteWordForward},
 		{"Alt+Backspace", DeleteWordBackward}, {"Alt+Delete", DeleteWordForward},
 		{"ArrowUp", LinePrevious}, {"ArrowDown", LineNext}, {"PageUp", PageUp}, {"PageDown", PageDown},
-		{"Control+a", SelectAll}, {"Enter", enter},
+		{"Control+a", SelectAll},
+		{"Meta+ArrowLeft", LineStart}, {"Meta+ArrowRight", LineEnd},
+		{"Meta+ArrowUp", InputStart}, {"Meta+ArrowDown", InputEnd},
+		{"Meta+Backspace", DeleteToLineStart}, {"Meta+a", SelectAll},
+		{"Enter", enter},
 	} {
 		m.Bind(b.key, b.action)
 	}
