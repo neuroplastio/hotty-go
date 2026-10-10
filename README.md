@@ -6,6 +6,11 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
+It speaks HOTTY 0.2: a host's replies and events carry msgpack bodies
+(SPEC §3.3), and its query lists the version it speaks (`a=q:n=1:v=0.2`,
+SPEC §4). A terminal of another HOTTY version, a 0.1 one included, is no
+host to it, and the program draws in cells.
+
 The SDK:
 
 - encodes the protocol, and cuts it out of a byte stream, for a program
