@@ -65,6 +65,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func ValidName(s string) bool`](#ValidName)
 - [`func WithdrawLate() string`](#WithdrawLate)
 - [`type Action`](#Action)
+  - [`func (a Action) Moves() bool`](#Action.Moves)
   - [`func (a Action) Multiline() bool`](#Action.Multiline)
   - [`func (a Action) Scrolls() bool`](#Action.Scrolls)
 - [`type Area`](#Area)
@@ -120,6 +121,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
   - [`func (m *Keymap) Program(name string) bool`](#Keymap.Program)
   - [`func (m *Keymap) Scroll(name string) Action`](#Keymap.Scroll)
+  - [`func (m *Keymap) Selects(name string) bool`](#Keymap.Selects)
 - [`type Message`](#Message)
   - [`func (m Message) Event() (Event, bool)`](#Message.Event)
   - [`func (m Message) Get(k string) string`](#Message.Get)
@@ -227,7 +229,7 @@ Error codes, in a reply's Code (SPEC §3.6).
 const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
 	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
 	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
-	"Home=line-start Control+a=line-start End=line-end Control+e=line-end " +
+	"Home=line-start End=line-end Control+e=line-end " +
 	"Backspace=delete-char-backward Control+h=delete-char-backward " +
 	"Delete=delete-char-forward Control+d=delete-char-forward " +
 	"Alt+Backspace=delete-word-backward Control+w=delete-word-backward Control+Backspace=delete-word-backward " +
@@ -236,10 +238,11 @@ const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight
 	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
 	"PageUp=page-up PageDown=page-down " +
 	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
+	"Control+a=select-all " +
 	"Control+m=newline"
 ```
 
-TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles). A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
+TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for Control+a, which selects all, as in a GUI field and SPEC §10.2's default keymap (Home still goes to the line's start). A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
 
 ## <a id="Blur"></a>func Blur
 
@@ -499,7 +502,7 @@ type Action string
 
 Action is what a text field does with a key (SPEC §10.2): a keymap binds keys to actions, and Lookup says which one a key does.
 
-<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
+<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="SelectAll"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
 
 ```go
 const (
@@ -521,6 +524,7 @@ const (
 	PageDown           Action = "page-down"
 	InputStart         Action = "input-start"
 	InputEnd           Action = "input-end"
+	SelectAll          Action = "select-all"
 	Newline            Action = "newline"
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
@@ -546,6 +550,14 @@ const (
 ```
 
 The actions a keymap binds (SPEC §10.2).
+
+### <a id="Action.Moves"></a>func (Action) Moves
+
+```go
+func (a Action) Moves() bool
+```
+
+Moves reports whether the action is a move, which selects when done with Shift (SPEC §10.2, Shift selects; Keymap.Selects).
 
 ### <a id="Action.Multiline"></a>func (Action) Multiline
 
@@ -1081,7 +1093,7 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
+Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
@@ -1142,6 +1154,14 @@ func (m *Keymap) Scroll(name string) Action
 Scroll is the scroll action the keymap binds a key to, or "" for none: the key's own binding, or, for a key with Shift that no binding names, the binding without Shift (SPEC §10.2, scrolling keys).
 
 A host asks it of the keymap it asks Program of, for a key the focused element does not use (Space on a button, a character on a select are the element's). A key bound to one scrolls the nearest element that scrolls, from the focused one outward, never the terminal; along an axis the document does not scroll (Scroll, SPEC §5.1), it goes on as if the keymap did not bind it.
+
+### <a id="Keymap.Selects"></a>func (*Keymap) Selects
+
+```go
+func (m *Keymap) Selects(name string) bool
+```
+
+Selects reports whether a field with this keymap selects with a key (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves), and its canonical name has Shift, bound so or looked up without it ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+\<"). The field then keeps its anchor and moves the caret (hottyedit.Field.Extend).
 
 ## <a id="Message"></a>type Message
 

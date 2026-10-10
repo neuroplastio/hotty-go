@@ -31,6 +31,7 @@ const (
 	PageDown           Action = "page-down"
 	InputStart         Action = "input-start"
 	InputEnd           Action = "input-end"
+	SelectAll          Action = "select-all"
 	Newline            Action = "newline"
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
@@ -60,7 +61,7 @@ var actions = map[Action]bool{
 	LineStart: true, LineEnd: true, DeleteCharBackward: true, DeleteCharForward: true,
 	DeleteWordBackward: true, DeleteWordForward: true, DeleteToLineStart: true, DeleteToLineEnd: true,
 	LinePrevious: true, LineNext: true, PageUp: true, PageDown: true,
-	InputStart: true, InputEnd: true, Newline: true, Submit: true, Program: true,
+	InputStart: true, InputEnd: true, SelectAll: true, Newline: true, Submit: true, Program: true,
 	ScrollUp: true, ScrollDown: true, ScrollLeft: true, ScrollRight: true,
 	ScrollPageUp: true, ScrollPageDown: true, ScrollHalfPageUp: true, ScrollHalfPageDown: true,
 	ScrollStart: true, ScrollEnd: true,
@@ -71,7 +72,18 @@ var actions = map[Action]bool{
 // the program.
 func (a Action) Multiline() bool {
 	switch a {
-	case LinePrevious, LineNext, PageUp, PageDown, InputStart, InputEnd, Newline:
+	case LinePrevious, LineNext, PageUp, PageDown, Newline:
+		return true
+	}
+	return false
+}
+
+// Moves reports whether the action is a move, which selects when done
+// with Shift (SPEC §10.2, Shift selects; Keymap.Selects).
+func (a Action) Moves() bool {
+	switch a {
+	case CharBackward, CharForward, WordBackward, WordForward, LineStart, LineEnd,
+		LinePrevious, LineNext, PageUp, PageDown, InputStart, InputEnd:
 		return true
 	}
 	return false
@@ -89,15 +101,16 @@ func (a Action) Scrolls() bool {
 }
 
 // TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value:
-// the keys of Bubble Tea's text input and text area (bubbles). A program
-// puts it in the data-keys of an element that holds its fields, and edits
-// its fields in cells with Resolve(multiline, TerminalKeys), so that they
-// edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's
-// default.
+// the keys of Bubble Tea's text input and text area (bubbles), but for
+// Control+a, which selects all, as in a GUI field and SPEC §10.2's default
+// keymap (Home still goes to the line's start). A program puts it in the
+// data-keys of an element that holds its fields, and edits its fields in
+// cells with Resolve(multiline, TerminalKeys), so that they edit the same
+// on a surface and in cells. It leaves Enter to SPEC §10.2's default.
 const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
 	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
 	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
-	"Home=line-start Control+a=line-start End=line-end Control+e=line-end " +
+	"Home=line-start End=line-end Control+e=line-end " +
 	"Backspace=delete-char-backward Control+h=delete-char-backward " +
 	"Delete=delete-char-forward Control+d=delete-char-forward " +
 	"Alt+Backspace=delete-word-backward Control+w=delete-word-backward Control+Backspace=delete-word-backward " +
@@ -106,6 +119,7 @@ const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight
 	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
 	"PageUp=page-up PageDown=page-down " +
 	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
+	"Control+a=select-all " +
 	"Control+m=newline"
 
 // The modifiers, in the order a key's name writes them.
@@ -523,9 +537,9 @@ func isRegional(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
 
 // Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a
 // data-keys value; Resolve makes the one a field uses, whose Lookup says
-// what the field does with a key. Program says whether any focused
-// element's keymap gives a key to the program, and Scroll which scroll
-// action it binds a key to.
+// what the field does with a key, and Selects whether it selects as it
+// moves. Program says whether any focused element's keymap gives a key to
+// the program, and Scroll which scroll action it binds a key to.
 type Keymap struct {
 	keys      []string
 	actions   map[string]Action
@@ -599,10 +613,15 @@ func Resolve(multiline bool, values ...string) *Keymap {
 		key    string
 		action Action
 	}{
-		{"ArrowLeft", CharBackward}, {"ArrowRight", CharForward}, {"Home", LineStart}, {"End", LineEnd},
+		{"ArrowLeft", CharBackward}, {"ArrowRight", CharForward},
+		{"Control+ArrowLeft", WordBackward}, {"Control+ArrowRight", WordForward},
+		{"Alt+ArrowLeft", WordBackward}, {"Alt+ArrowRight", WordForward},
+		{"Home", LineStart}, {"End", LineEnd}, {"Control+Home", InputStart}, {"Control+End", InputEnd},
 		{"Backspace", DeleteCharBackward}, {"Delete", DeleteCharForward},
+		{"Control+Backspace", DeleteWordBackward}, {"Control+Delete", DeleteWordForward},
+		{"Alt+Backspace", DeleteWordBackward}, {"Alt+Delete", DeleteWordForward},
 		{"ArrowUp", LinePrevious}, {"ArrowDown", LineNext}, {"PageUp", PageUp}, {"PageDown", PageDown},
-		{"Enter", enter},
+		{"Control+a", SelectAll}, {"Enter", enter},
 	} {
 		m.Bind(b.key, b.action)
 	}
@@ -686,4 +705,14 @@ func (m *Keymap) Lookup(name string) Action {
 		return Insert
 	}
 	return ""
+}
+
+// Selects reports whether a field with this keymap selects with a key
+// (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves),
+// and its canonical name has Shift, bound so or looked up without it
+// ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+<"). The field then
+// keeps its anchor and moves the caret (hottyedit.Field.Extend).
+func (m *Keymap) Selects(name string) bool {
+	k, ok := splitKey(name)
+	return ok && k.canonical().mods&modShift != 0 && m.Lookup(name).Moves()
 }

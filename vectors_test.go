@@ -793,13 +793,14 @@ type keymapVector struct {
 	Multiline    bool               `json:"multiline"`
 	Keys         []string           `json:"keys"`
 	Lookup       map[string]*string `json:"lookup"`
+	Selects      map[string]bool    `json:"selects"`
 	Program      map[string]bool    `json:"program"`
 	Scroll       map[string]*string `json:"scroll"`
 }
 
-// TestKeymapVectors formats keymaps, looks keys up in resolved ones, and
-// asks an element's keymap, with no default, which keys it gives the
-// program and which scroll actions it binds them to.
+// TestKeymapVectors formats keymaps, looks keys up in resolved ones and
+// asks which select, and asks an element's keymap, with no default, which
+// keys it gives the program and which scroll actions it binds them to.
 func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
@@ -844,6 +845,11 @@ func TestKeymapVectors(t *testing.T) {
 				}
 				if got := m.Lookup(k); got != w {
 					t.Errorf("Lookup(%q) = %q, want %q", k, got, w)
+				}
+			}
+			for k, want := range v.Selects {
+				if got := m.Selects(k); got != want {
+					t.Errorf("Selects(%q) = %v, want %v", k, got, want)
 				}
 			}
 		})

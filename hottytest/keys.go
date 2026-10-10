@@ -24,9 +24,12 @@ import (
 // left out; past the last, or before the first, the surface loses the
 // keyboard (blur). A text field (a text-like input, a textarea) does what
 // its keymap says (hotty.Resolve, with the data-keys of the elements from
-// the root to it): it edits its value at a caret this host keeps, as
-// hottyedit.Field does, with an input event for each edit (data-on~=input);
-// submit commits it and submits its form; characters type.
+// the root to it): it edits its value at a caret and a selection this host
+// keeps, as hottyedit.Field does, with an input event for each edit
+// (data-on~=input); a move whose key has Shift selects
+// (hotty.Keymap.Selects), select-all selects the value, characters type in
+// place of the selection, and submit commits the value and submits its
+// form.
 //
 // Any other element has a keymap too, read the same way but with no
 // default keymap (hotty.Keymap.Program): a key it binds to program reaches

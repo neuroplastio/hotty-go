@@ -347,7 +347,7 @@ Events are the events the host sent the program, in order: what the user's actio
 func (h *Host) Fill(surface, id, text string) error
 ```
 
-Fill types text into a text control, as the user does: the surface takes the keyboard there (a focus event, if it did not have it), the control's value becomes text (an input event, with data-on~=input), and the change is committed when focus leaves it (Blur, another control, Submit).
+Fill types text into a text control, as the user does: the surface takes the keyboard there (a focus event, if it did not have it), the control's value becomes text (an input event, with data-on~=input), the caret goes to its end with nothing selected, and the change is committed when focus leaves it (Blur, another control, Submit).
 
 ### <a id="Host.Hover"></a>func (*Host) Hover
 
@@ -375,7 +375,7 @@ func (h *Host) Key(key string) (used bool)
 
 Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it: a W3C UI Events key value after its modifiers, joined by "+": "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
 
-Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); submit commits it and submits its form; characters type.
+Tab and Shift+Tab move focus among the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out; past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); a move whose key has Shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit commits the value and submits its form.
 
 Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with Shift only:
 

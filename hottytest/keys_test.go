@@ -101,6 +101,25 @@ func TestKeys(t *testing.T) {
 	expect(t, sent(h), `"\x1b"`)
 }
 
+// Shift selects in a text field, and typing replaces the selection; Fill
+// leaves the caret at the end of its text with nothing selected (SPEC
+// §10.2).
+func TestKeysSelect(t *testing.T) {
+	h := shown(t, "k", `<input id=name data-on=input>`)
+	send(h, hotty.Focus("k", "name"))
+	for _, k := range []string{"a", "b", "c", "Shift+ArrowLeft", "Shift+ArrowLeft", "x"} {
+		h.Key(k)
+	}
+	if err := h.Fill("k", "name", "foo"); err != nil {
+		t.Fatal(err)
+	}
+	h.Key("Shift+Home")
+	h.Key("Shift+ArrowRight")
+	h.Key("y")
+	expect(t, sent(h), `ev input t=name {"value":"a"}`, `ev input t=name {"value":"ab"}`, `ev input t=name {"value":"abc"}`,
+		`ev input t=name {"value":"ax"}`, `ev input t=name {"value":"foo"}`, `ev input t=name {"value":"fy"}`)
+}
+
 // A key the focused element's keymap binds to program reaches the program,
 // whatever the element: its keymap is read from data-keys as a field's is,
 // with no default keymap, and outside a text field its other bindings do

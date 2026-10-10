@@ -29,13 +29,19 @@ case changed:
 }
 ```
 
+A field has a selection, from its anchor to the caret, as a host's does: Key extends it with a move whose key has Shift (hotty.Keymap.Selects), select-all selects the whole value, and Select sets it for the pointer. Selection says what to draw as selected.
+
 Characters are grapheme clusters (Unicode UAX #29): the caret counts them. A field in cells does not wrap, so its rows are its lines.
 
 ## <a id="pkg-index"></a>Index
 
 - [`type Field`](#Field)
+  - [`func (f *Field) Anchor() (anchor int, ok bool)`](#Field.Anchor)
   - [`func (f *Field) Do(a hotty.Action) (changed bool)`](#Field.Do)
+  - [`func (f *Field) Extend(a hotty.Action) (changed bool)`](#Field.Extend)
   - [`func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool)`](#Field.Key)
+  - [`func (f *Field) Select(anchor, caret int)`](#Field.Select)
+  - [`func (f *Field) Selection() (start, end int)`](#Field.Selection)
   - [`func (f *Field) Type(text string) (changed bool)`](#Field.Type)
 
 ### <a id="pkg-examples"></a>Examples
@@ -63,7 +69,15 @@ type Field struct {
 }
 ```
 
-Field is a text field's value and caret.
+Field is a text field's value, caret and selection.
+
+### <a id="Field.Anchor"></a>func (*Field) Anchor
+
+```go
+func (f *Field) Anchor() (anchor int, ok bool)
+```
+
+Anchor is where the selection began, the end of it the caret is not at. ok is false when nothing is selected, and anchor is then the caret.
 
 ### <a id="Field.Do"></a>func (*Field) Do
 
@@ -71,7 +85,17 @@ Field is a text field's value and caret.
 func (f *Field) Do(a hotty.Action) (changed bool)
 ```
 
-Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing; they are the program's to act on. An action only a multi-line field has does nothing in an input.
+Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing, the selection included; they are the program's to act on. An action only a multi-line field has does nothing in an input.
+
+A selection comes first (SPEC §10.2): a delete deletes it and nothing else; a move starts from its start when it goes back or up, and from its end otherwise, and ends it, and char-backward and char-forward stop there; select-all selects the whole value, the anchor at its start and the caret at its end.
+
+### <a id="Field.Extend"></a>func (*Field) Extend
+
+```go
+func (f *Field) Extend(a hotty.Action) (changed bool)
+```
+
+Extend does a move as Shift does it (SPEC §10.2, Shift selects): the anchor stays, or is set where the caret is when nothing is selected, and the caret moves from where it is. When it comes back to the anchor, nothing is selected. An action that is not a move is Do's.
 
 ### <a id="Field.Key"></a>func (*Field) Key
 
@@ -79,7 +103,7 @@ Do does an action, and reports whether the value changed: then the program repor
 func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool)
 ```
 
-Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): it types a character, or does an action. It returns the action (hotty.Insert for a character), "" when the key is not the field's, and whether the value changed.
+Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): it types a character, or does an action, with Extend when the keymap Selects with the key and with Do otherwise. It returns the action (hotty.Insert for a character), "" when the key is not the field's, and whether the value changed.
 
 #### <a id="example-Field.Key"></a>Example
 
@@ -94,6 +118,11 @@ f.Key(km, "o")         // types it
 fmt.Printf("%q %d\n", f.Value, f.Caret)
 f.Key(km, "Control+w") // delete-word-backward
 fmt.Printf("%q %d\n", f.Value, f.Caret)
+f.Key(km, "Shift+End") // line-end, selecting: hello [rld]
+start, end := f.Selection()
+fmt.Println(start, end)
+f.Key(km, "Z") // types in place of the selection
+fmt.Printf("%q %d\n", f.Value, f.Caret)
 ```
 
 Output:
@@ -101,7 +130,25 @@ Output:
 ```
 "hello world" 8
 "hello rld" 6
+6 9
+"hello Z" 7
 ```
+
+### <a id="Field.Select"></a>func (*Field) Select
+
+```go
+func (f *Field) Select(anchor, caret int)
+```
+
+Select selects from anchor to caret, as the user does with the pointer. Select(p, p) puts the caret at p, with nothing selected. It ends a run of row moves, as an action does.
+
+### <a id="Field.Selection"></a>func (*Field) Selection
+
+```go
+func (f *Field) Selection() (start, end int)
+```
+
+Selection is the selection's start and end, in characters, for a rendition to draw: equal when nothing is selected.
 
 ### <a id="Field.Type"></a>func (*Field) Type
 
@@ -109,4 +156,4 @@ Output:
 func (f *Field) Type(text string) (changed bool)
 ```
 
-Type types text at the caret, and reports whether the value changed.
+Type types text in place of the selection, or at the caret, and reports whether the value changed.

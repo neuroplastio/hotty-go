@@ -32,7 +32,7 @@ type Surface struct {
 	values  map[*html.Node]string
 	checked map[*html.Node]bool
 	edited  map[*html.Node]bool             // text controls edited since their last commit
-	fields  map[*html.Node]*hottyedit.Field // text fields' carets, once used
+	fields  map[*html.Node]*hottyedit.Field // text fields' carets and selections, once used
 	focused *html.Node
 	keyb    bool // the surface has the keyboard
 }

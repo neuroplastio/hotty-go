@@ -17,6 +17,11 @@
 //		// report the input
 //	}
 //
+// A field has a selection, from its anchor to the caret, as a host's does:
+// Key extends it with a move whose key has Shift (hotty.Keymap.Selects),
+// select-all selects the whole value, and Select sets it for the pointer.
+// Selection says what to draw as selected.
+//
 // Characters are grapheme clusters (Unicode UAX #29): the caret counts
 // them. A field in cells does not wrap, so its rows are its lines.
 package hottyedit
@@ -30,7 +35,7 @@ import (
 	"github.com/neuroplastio/hotty-go"
 )
 
-// Field is a text field's value and caret.
+// Field is a text field's value, caret and selection.
 type Field struct {
 	// Value is the field's text.
 	Value string
@@ -46,16 +51,76 @@ type Field struct {
 	// when less.
 	Rows int
 
+	// anchor is where the selection began, plus one; 0 when there is
+	// none, so that a Field literal selects nothing. Nothing is selected
+	// either when it is at the caret.
+	anchor int
 	// goal is the place along the row a run of row moves keeps, plus one;
 	// 0 when no run is under way.
 	goal int
 }
 
+// Anchor is where the selection began, the end of it the caret is not at.
+// ok is false when nothing is selected, and anchor is then the caret.
+func (f *Field) Anchor() (anchor int, ok bool) {
+	if f.anchor == 0 || f.anchor-1 == f.Caret {
+		return f.Caret, false
+	}
+	return f.anchor - 1, true
+}
+
+// Selection is the selection's start and end, in characters, for a
+// rendition to draw: equal when nothing is selected.
+func (f *Field) Selection() (start, end int) {
+	return f.selection(len(chars(f.Value)))
+}
+
+// selection is Selection, for a value of n characters.
+func (f *Field) selection(n int) (start, end int) {
+	p := min(max(f.Caret, 0), n)
+	a := p
+	if f.anchor > 0 {
+		a = min(f.anchor-1, n)
+	}
+	return min(a, p), max(a, p)
+}
+
+// Select selects from anchor to caret, as the user does with the pointer.
+// Select(p, p) puts the caret at p, with nothing selected. It ends a run of
+// row moves, as an action does.
+func (f *Field) Select(anchor, caret int) {
+	f.Caret = caret
+	f.goal = 0
+	f.anchor = 0
+	if anchor != caret {
+		f.anchor = max(anchor, 0) + 1
+	}
+}
+
 // Do does an action, and reports whether the value changed: then the
-// program reports an input event. Submit and Program change nothing; they
-// are the program's to act on. An action only a multi-line field has does
-// nothing in an input.
+// program reports an input event. Submit and Program change nothing, the
+// selection included; they are the program's to act on. An action only a
+// multi-line field has does nothing in an input.
+//
+// A selection comes first (SPEC §10.2): a delete deletes it and nothing
+// else; a move starts from its start when it goes back or up, and from its
+// end otherwise, and ends it, and char-backward and char-forward stop
+// there; select-all selects the whole value, the anchor at its start and
+// the caret at its end.
 func (f *Field) Do(a hotty.Action) (changed bool) {
+	return f.act(a, false)
+}
+
+// Extend does a move as Shift does it (SPEC §10.2, Shift selects): the
+// anchor stays, or is set where the caret is when nothing is selected,
+// and the caret moves from where it is. When it comes back to the anchor,
+// nothing is selected. An action that is not a move is Do's.
+func (f *Field) Extend(a hotty.Action) (changed bool) {
+	return f.act(a, a.Moves())
+}
+
+// act does an action, extending the selection with a move when extend.
+func (f *Field) act(a hotty.Action, extend bool) bool {
 	c := chars(f.Value)
 	p := min(max(f.Caret, 0), len(c))
 	switch a {
@@ -65,6 +130,29 @@ func (f *Field) Do(a hotty.Action) (changed bool) {
 	}
 	if a.Multiline() && !f.Multiline {
 		return false
+	}
+	switch lo, hi := f.selection(len(c)); {
+	case extend:
+		if f.anchor == 0 {
+			f.anchor = p + 1
+		}
+	case lo < hi && a.Moves():
+		// From the start going back or up, from the end otherwise.
+		f.anchor = 0
+		p = hi
+		switch a {
+		case hotty.CharBackward, hotty.WordBackward, hotty.LineStart, hotty.LinePrevious, hotty.PageUp, hotty.InputStart:
+			p = lo
+		}
+		if a == hotty.CharBackward || a == hotty.CharForward {
+			f.Caret = p
+			return false
+		}
+	case lo < hi && strings.HasPrefix(string(a), "delete-"):
+		f.anchor = 0
+		return f.delete(c, lo, hi)
+	case lo == hi:
+		f.anchor = 0
 	}
 	start, end := f.line(c, p)
 	rows := max(f.Rows, 1)
@@ -93,6 +181,8 @@ func (f *Field) Do(a hotty.Action) (changed bool) {
 		f.Caret = 0
 	case hotty.InputEnd:
 		f.Caret = len(c)
+	case hotty.SelectAll:
+		f.anchor, f.Caret = 1, len(c)
 	case hotty.DeleteCharBackward:
 		return f.delete(c, max(p-1, 0), p)
 	case hotty.DeleteCharForward:
@@ -108,25 +198,31 @@ func (f *Field) Do(a hotty.Action) (changed bool) {
 	case hotty.Newline:
 		return f.Type("\n")
 	}
+	if f.anchor == f.Caret+1 {
+		f.anchor = 0
+	}
 	return false
 }
 
-// Type types text at the caret, and reports whether the value changed.
+// Type types text in place of the selection, or at the caret, and reports
+// whether the value changed.
 func (f *Field) Type(text string) (changed bool) {
 	f.goal = 0
 	if text == "" {
 		return false
 	}
 	c := chars(f.Value)
-	p := min(max(f.Caret, 0), len(c))
-	before := strings.Join(c[:p], "") + text
-	f.Value = before + strings.Join(c[p:], "")
+	lo, hi := f.selection(len(c))
+	f.anchor = 0
+	before := strings.Join(c[:lo], "") + text
+	f.Value = before + strings.Join(c[hi:], "")
 	f.Caret = len(chars(before))
 	return true
 }
 
 // Key does what a keymap says the field does with a key (hotty.Keymap's
-// Lookup): it types a character, or does an action. It returns the action
+// Lookup): it types a character, or does an action, with Extend when the
+// keymap Selects with the key and with Do otherwise. It returns the action
 // (hotty.Insert for a character), "" when the key is not the field's, and
 // whether the value changed.
 func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) {
@@ -144,6 +240,9 @@ func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) 
 			k = k[i+1:]
 		}
 		return a, f.Type(k)
+	}
+	if m.Selects(key) {
+		return a, f.Extend(a)
 	}
 	return a, f.Do(a)
 }

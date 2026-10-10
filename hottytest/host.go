@@ -1302,8 +1302,9 @@ func (h *Host) pressAt(s *Surface, el *html.Node) {
 
 // Fill types text into a text control, as the user does: the surface takes
 // the keyboard there (a focus event, if it did not have it), the control's
-// value becomes text (an input event, with data-on~=input), and the change
-// is committed when focus leaves it (Blur, another control, Submit).
+// value becomes text (an input event, with data-on~=input), the caret goes
+// to its end with nothing selected, and the change is committed when focus
+// leaves it (Blur, another control, Submit).
 func (h *Host) Fill(surface, id, text string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1323,6 +1324,7 @@ func (h *Host) Fill(surface, id, text string) error {
 	}
 	h.takeKeyboard(s, el, true)
 	s.values[el] = text
+	delete(s.fields, el)
 	s.dirty()[el] = true
 	if on, _ := attr(el, "data-on"); slices.Contains(strings.Fields(on), "input") {
 		h.event(s, hotty.EventInput, id, map[string]string{"value": text})

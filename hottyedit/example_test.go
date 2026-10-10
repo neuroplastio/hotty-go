@@ -17,7 +17,14 @@ func ExampleField_Key() {
 	fmt.Printf("%q %d\n", f.Value, f.Caret)
 	f.Key(km, "Control+w") // delete-word-backward
 	fmt.Printf("%q %d\n", f.Value, f.Caret)
+	f.Key(km, "Shift+End") // line-end, selecting: hello [rld]
+	start, end := f.Selection()
+	fmt.Println(start, end)
+	f.Key(km, "Z") // types in place of the selection
+	fmt.Printf("%q %d\n", f.Value, f.Caret)
 	// Output:
 	// "hello world" 8
 	// "hello rld" 6
+	// 6 9
+	// "hello Z" 7
 }
