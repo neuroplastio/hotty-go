@@ -10,6 +10,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottytest"
 )
 
 // fake is a terminal on two pipes: what the program writes, and what the
@@ -38,7 +39,7 @@ func (f *fake) readQuery(t *testing.T) {
 
 func capsReply() string {
 	return hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "1"}},
-		[]byte(`{"v":"0.1","cell":{"w":9,"h":18},"limits":{"surfaces":64}}`))
+		hottytest.Body(`{"v":"0.2","cell":{"w":9,"h":18},"limits":{"surfaces":64}}`))
 }
 
 func TestDetectHost(t *testing.T) {
@@ -107,15 +108,15 @@ func TestEventsMessage(t *testing.T) {
 	f.t.Detect(context.Background())
 	evs := f.t.Events(context.Background())
 	ev := hotty.Encode(hotty.Control{{K: "a", V: "ev"}, {K: "s", V: "tool-7-form"}, {K: "e", V: "submit"}, {K: "t", V: "f"}},
-		[]byte(`{"name":"Ada"}`))
+		hottytest.Body(`{"name":"Ada"}`))
 	go func() { _, _ = io.WriteString(f.answer, ev) }()
 	got := <-evs
 	m, ok := got.(Message)
 	if !ok {
 		t.Fatalf("got %#v, want a Message", got)
 	}
-	e, ok := m.Event()
-	if !ok || e.Kind != "submit" || e.Fields()["name"] != "Ada" || e.Surface != f.t.Surface("form") {
+	e, ok := hotty.EventOf(m.Message)
+	if !ok || e.Kind != "submit" || e.Fields["name"] != "Ada" || e.Surface != f.t.Surface("form") {
 		t.Errorf("event %+v", e)
 	}
 }
@@ -191,7 +192,7 @@ func TestDetectIgnoresAnotherNumber(t *testing.T) {
 	f := newFake(nil)
 	go func() {
 		f.readQuery(t)
-		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, []byte(`{"v":"0.1"}`))
+		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, hottytest.Body(`{"v":"0.2"}`))
 		_, _ = io.WriteString(f.answer, other+"\x1b[?62;22c")
 	}()
 	if f.t.Detect(context.Background()) {

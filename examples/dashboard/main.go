@@ -304,13 +304,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := []tea.Cmd{cmd}
 	switch msg := msg.(type) {
 	case hottytea.ReadyMsg:
-		m.light = msg.Caps.Light()
+		m.light = hotty.Light(msg.Caps)
 	case hottytea.EventMsg:
 		if i, ok := m.endpointOf(msg.Surface); ok && msg.Kind == hotty.EventPress {
 			m.sel = i
 		}
 	case hottytea.ErrorMsg:
-		m.problem = msg.Err().Error()
+		m.problem = hotty.Err(msg.Reply).Error()
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 	case tickMsg:
@@ -397,7 +397,7 @@ func (m *model) layout() (rows, shown int) {
 // chartSize is a card's chart in CSS pixels: the card less its first row,
 // the header, and its 1px ring.
 func (m *model) chartSize(rows int) (w, h float64) {
-	cw, ch := m.s.Caps.CellCSS()
+	cw, ch := hotty.CellCSS(m.s.Caps)
 	return float64(m.w)*cw - 2, max(float64(rows-1)*ch-1, 1)
 }
 
@@ -431,7 +431,7 @@ func (m *model) line(e *endpoint, w, h float64) chart.Line {
 // card is endpoint i's document, as it is now.
 func (m *model) card(i int, w, h float64) string {
 	e := m.eps[i]
-	_, ch := m.s.Caps.CellCSS()
+	_, ch := hotty.CellCSS(m.s.Caps)
 	ring := ringDark
 	if m.light {
 		ring = ringLight

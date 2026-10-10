@@ -1,7 +1,9 @@
 package hottytest
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
@@ -10,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/tinylib/msgp/msgp"
 )
 
 // drain takes what the host has sent the program, unread.
@@ -27,7 +30,7 @@ func (h *Host) sentReplies() []hotty.Reply {
 	var out []hotty.Reply
 	for _, seq := range oscs(h.drain()) {
 		if m, r := d.Feed(seq); r == hotty.Complete {
-			if rep, ok := m.Reply(); ok {
+			if rep, ok := hotty.ReplyOf(m); ok {
 				out = append(out, rep)
 			}
 		}
@@ -106,7 +109,7 @@ func (h *Host) sentEvents() []hotty.Event {
 	var out []hotty.Event
 	for _, seq := range oscs(h.drain()) {
 		if m, r := d.Feed(seq); r == hotty.Complete {
-			if e, ok := m.Event(); ok {
+			if e, ok := hotty.EventOf(m); ok {
 				out = append(out, e)
 			}
 		}
@@ -141,9 +144,8 @@ func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
 		if w.Detail == nil {
 			continue
 		}
-		var gd, wd any
-		_ = json.Unmarshal(g.Detail, &gd)
-		_ = json.Unmarshal(w.Detail, &wd)
+		// Each value of its type (conformance/README.md, Numbers).
+		gd, wd := fromMsgpack(g.Detail), fromJSON(w.Detail)
 		// This host lays nothing out, so it knows no element's area.
 		if m, ok := wd.(map[string]any); ok {
 			delete(m, "area")
@@ -152,9 +154,73 @@ func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
 			}
 		}
 		if !reflect.DeepEqual(gd, wd) {
-			t.Errorf("step %d (%s): event %d detail %s, want %s", i, name, j, g.Detail, w.Detail)
+			t.Errorf("step %d (%s): event %d detail %#v, want %s", i, name, j, gd, w.Detail)
 		}
 	}
+}
+
+// fromMsgpack is a body's value: ints as int64, floats as float64; nil
+// for none.
+func fromMsgpack(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	v, err := msgp.NewReader(bytes.NewReader(b)).ReadIntf()
+	if err != nil {
+		return fmt.Sprintf("not msgpack: %x", b)
+	}
+	return normal(v)
+}
+
+func normal(v any) any {
+	switch v := v.(type) {
+	case uint64:
+		return int64(v)
+	case float32:
+		return float64(v)
+	case []any:
+		for i := range v {
+			v[i] = normal(v[i])
+		}
+	case map[string]any:
+		for k := range v {
+			v[k] = normal(v[k])
+		}
+	}
+	return v
+}
+
+// fromJSON is a vector's value: a number with a fraction or an exponent a
+// float64, any other an int64.
+func fromJSON(raw []byte) any {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	var v any
+	if d.Decode(&v) != nil {
+		return nil
+	}
+	return numbers(v)
+}
+
+func numbers(v any) any {
+	switch v := v.(type) {
+	case json.Number:
+		if strings.ContainsAny(string(v), ".eE") {
+			f, _ := v.Float64()
+			return f
+		}
+		n, _ := v.Int64()
+		return n
+	case []any:
+		for i := range v {
+			v[i] = numbers(v[i])
+		}
+	case map[string]any:
+		for k := range v {
+			v[k] = numbers(v[k])
+		}
+	}
+	return v
 }
 
 // vectorControl is a vector's control as the program sends it: a first, the
@@ -169,10 +235,10 @@ func vectorControl(m map[string]string) hotty.Control {
 	sort.Strings(keys)
 	var c hotty.Control
 	if a, ok := m["a"]; ok {
-		c = c.With("a", a)
+		c = hotty.With(c, "a", a)
 	}
 	for _, k := range keys {
-		c = c.With(k, m[k])
+		c = hotty.With(c, k, m[k])
 	}
 	return c
 }
@@ -266,7 +332,7 @@ func TestConformanceVectors(t *testing.T) {
 						case "detail":
 							got = r.Detail
 						default:
-							got = r.Message.Get(k)
+							got = hotty.Get(r.Message.Control, k)
 						}
 						if got != val {
 							t.Errorf("step %d: %s=%q, want %q (%v)", i, k, got, val, r.Message.Control)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/chart"
 	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
@@ -70,7 +71,7 @@ func ping(w io.Writer, seq int, ms float64) {
 func docs(h *hottytest.Host) int {
 	n := 0
 	for _, c := range h.Commands() {
-		if c.Get("a") == "doc" {
+		if hotty.Get(c.Control, "a") == "doc" {
 			n++
 		}
 	}

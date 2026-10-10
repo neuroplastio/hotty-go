@@ -46,7 +46,7 @@ func run(ctx context.Context, stdout, stderr io.Writer, open func() (*hottyterm.
 	// cause (EQUOTA: no room for another surface), the rest follow from it.
 	replies, err := t.Fence(ctx)
 	if len(replies) > 0 {
-		err = replies[0].Err()
+		err = hotty.Err(replies[0])
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "hello:", err)

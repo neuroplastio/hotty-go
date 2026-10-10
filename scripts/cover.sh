@@ -2,6 +2,8 @@
 # Coverage by package, from a profile written by go test -coverprofile, and
 # the gate: every public package (not internal, not a command) covers at
 # least MIN percent of its statements. A public package with no tests is 0%.
+# Generated code (*_gen.go, msgp's codecs) is the generator's, and is not
+# counted.
 # MODULES are the directories of the modules whose packages count.
 #
 #   GO="mise x -- go" MODULES=". term" sh scripts/cover.sh coverage.out 85
@@ -13,6 +15,7 @@ MODULES=${MODULES:-.}
 
 table=$(awk -F'[: ]' '
 	NR == 1 && /^mode:/ { next }
+	$1 ~ /_gen\.go$/ { next }
 	{
 		file = $1
 		pkg = file; sub(/\/[^\/]*$/, "", pkg)

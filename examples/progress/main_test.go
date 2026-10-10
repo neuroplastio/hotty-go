@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
 )
@@ -35,7 +36,7 @@ func TestBar(t *testing.T) {
 	// Each step is one synchronized batch of three small deltas.
 	var steps int
 	for _, cmd := range h.Commands() {
-		if cmd.Get("op") == "var" {
+		if hotty.Get(cmd.Control, "op") == "var" {
 			steps++
 		}
 	}

@@ -49,8 +49,8 @@ fmt.Println(len(cmds), "commands; the form takes", spec.Rows(), "rows; focus at"
 
 // What the host sends when the user presses Enter (SPEC §9).
 ev := hotty.Event{Surface: surface, Kind: hotty.EventSubmit, Target: form.FormID,
-	Detail: json.RawMessage(`{"env":"production","version":"v1.4.2","notify":"true"}`)}
-answers, problems := spec.Read(ev.Fields())
+	Fields: map[string]string{"env": "production", "version": "v1.4.2", "notify": "true"}}
+answers, problems := spec.Read(ev.Fields)
 out, _ := json.Marshal(answers)
 fmt.Println(string(out), len(problems), "problems")
 ```
@@ -445,15 +445,15 @@ Show what keeps a form from being submitted: the problem under its field, the fi
 spec, _ := form.Parse([]byte(deploy))
 ev := hotty.Event{Kind: hotty.EventSubmit, Target: form.FormID,
 	Detail: json.RawMessage(`{"env":"staging","version":"  "}`)}
-_, problems := spec.Read(ev.Fields())
+_, problems := spec.Read(ev.Fields)
 for _, p := range problems {
 	fmt.Printf("%s: %s\n", spec.Fields[p.Field].Name, p.Message)
 }
 var d hotty.Decoder
 for _, cmd := range spec.Show("deploy-4121-form", problems) {
 	m, _ := d.Feed(cmd)
-	if m.Get("t") == form.ProblemID(1) || m.Get("a") == "focus" {
-		fmt.Printf("%s %s %s %q\n", m.Get("a"), m.Get("op"), m.Get("t"), m.Payload)
+	if hotty.Get(m.Control, "t") == form.ProblemID(1) || hotty.Get(m.Control, "a") == "focus" {
+		fmt.Printf("%s %s %s %q\n", hotty.Get(m.Control, "a"), hotty.Get(m.Control, "op"), hotty.Get(m.Control, "t"), m.Payload)
 	}
 }
 ```
@@ -492,7 +492,7 @@ A program that submits the form itself, on a key the controls leave to it such a
 ```go
 spec, _ := form.Parse([]byte(deploy))
 st := spec.NewState()
-st.Apply(hotty.Event{Kind: hotty.EventChange, Target: form.ControlID(1), Detail: json.RawMessage(`{"value":"v2.0.0"}`)})
+st.Apply(hotty.Event{Kind: hotty.EventChange, Target: form.ControlID(1), Value: "v2.0.0"})
 answers, _ := spec.Read(st.Fields())
 out, _ := json.Marshal(answers)
 fmt.Println(string(out))

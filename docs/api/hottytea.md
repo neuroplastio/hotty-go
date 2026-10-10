@@ -139,13 +139,13 @@ func main() {
 	// What the program sent the host, placements aside: one document, two
 	// deltas, and the delete on its way out.
 	for _, c := range h.Commands() {
-		switch c.Get("a") {
+		switch hotty.Get(c.Control, "a") {
 		case "doc":
-			fmt.Println("doc", c.Get("s"))
+			fmt.Println("doc", hotty.Get(c.Control, "s"))
 		case "delta":
-			fmt.Println("delta", c.Get("s"), "#"+c.Get("t"), string(c.Payload))
+			fmt.Println("delta", hotty.Get(c.Control, "s"), "#"+hotty.Get(c.Control, "t"), string(c.Payload))
 		case "del":
-			fmt.Println("del", c.Get("s"))
+			fmt.Println("del", hotty.Get(c.Control, "s"))
 		}
 	}
 }

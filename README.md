@@ -54,7 +54,7 @@ of what it imports:
 
 | module | packages | needs |
 | --- | --- | --- |
-| `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library |
+| `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library, and tinylib/msgp's runtime for a host's msgpack bodies |
 | `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
 | `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
 | `github.com/neuroplastio/hotty-go/hottyedit` | `hottyedit` | uax29, Unicode's grapheme segmentation |

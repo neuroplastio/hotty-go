@@ -19,7 +19,7 @@
 //     any angle, and its joins stay round. usvg has no
 //     vector-effect: non-scaling-stroke, and a viewBox far from the box's
 //     shape draws steep segments thin. Take W and H from the box's cells
-//     (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
+//     (hotty.CellCSS), and send new ones with Delta when it changes.
 //   - The <svg> is absolutely positioned in its .chart-box (CSS), which has
 //     the size: as a grid or flex item, an <svg> is sized by its aspect
 //     ratio in some engines (Blitz) instead of stretched.

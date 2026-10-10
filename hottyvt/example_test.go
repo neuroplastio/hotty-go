@@ -12,7 +12,7 @@ func show(cmds []string) {
 	var d hotty.Decoder
 	for _, cmd := range cmds {
 		m, _ := d.Feed(cmd)
-		fmt.Printf("%s %s %s\n", m.Get("op"), m.Get("t"), m.Payload)
+		fmt.Printf("%s %s %s\n", hotty.Get(m.Control, "op"), hotty.Get(m.Control, "t"), m.Payload)
 	}
 }
 

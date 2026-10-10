@@ -35,6 +35,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 ## <a id="pkg-index"></a>Index
 
 - [Variables](#pkg-variables)
+- [`func Body(js string) []byte`](#Body)
 - [`func DefaultCaps() hotty.Caps`](#DefaultCaps)
 - [`type Child`](#Child)
 - [`type Element`](#Element)
@@ -121,6 +122,14 @@ var (
 ```
 
 Errors of the user's actions.
+
+## <a id="Body"></a>func Body
+
+```go
+func Body(js string) []byte
+```
+
+Body is a body written as JSON, as the msgpack a host sends (SPEC §3.3): a number with a fraction or an exponent is a float, any other an int, as the conformance vectors write them. It is for a test that makes up what a host says, such as Body(\`{"code":"ENOENT"}\`) in an error reply. It panics when js is not JSON.
 
 ## <a id="DefaultCaps"></a>func DefaultCaps
 
@@ -323,7 +332,7 @@ Dragging reports whether a drag is in progress.
 func (h *Host) Emit(surface, kind, target string, detail any) error
 ```
 
-Emit sends any event from a surface, for what the other actions do not cover (a resize, a kind from a later version). detail is marshalled as JSON; nil sends none.
+Emit sends any event from a surface, for what the other actions do not cover (a resize, a kind from a later version). detail is written as msgpack, each Go int an int and each float64 a float (SPEC §3.3); nil sends none.
 
 ### <a id="Host.Errors"></a>func (*Host) Errors
 

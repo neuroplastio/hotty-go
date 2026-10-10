@@ -13,7 +13,8 @@
 //     Bubble Tea program, through tea.Raw, so they stay in order with its
 //     frames.
 //   - A Decoder turns the OSC sequences the program reads back into
-//     Messages: replies (Message.Reply) and events (Message.Event).
+//     Messages: replies (ReplyOf) and events (EventOf), their msgpack
+//     bodies read by the types in wire.go.
 //
 // The packages beside it do the I/O: term for a command that prints and
 // exits or asks a question, hottytea for a full-screen Bubble Tea program,
@@ -57,7 +58,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package implements, as the
 	// capabilities report it (SPEC §4).
-	Version = "0.1"
+	Version = "0.2"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
@@ -78,20 +79,42 @@ const (
 // KV is one control key and its value.
 type KV struct{ K, V string }
 
-// Control is a command's keys, in the order they are sent.
+// Control is a command's or a message's keys, in the order they are sent.
 type Control []KV
 
-// With returns a copy of the control with a key set: in place if the
+// Get returns a control's value for a key, "" when it lacks the key.
+func Get(c Control, k string) string {
+	v, _ := Lookup(c, k)
+	return v
+}
+
+// Lookup returns a control's value for a key, and whether it has the key.
+func Lookup(c Control, k string) (string, bool) {
+	for _, kv := range c {
+		if kv.K == k {
+			return kv.V, true
+		}
+	}
+	return "", false
+}
+
+// Has reports whether a control has a key.
+func Has(c Control, k string) bool {
+	_, ok := Lookup(c, k)
+	return ok
+}
+
+// With returns a copy of a control with a key set: in place if the
 // control has it, at the end if not (SDK.md §3.2).
-func (c Control) With(k, v string) Control {
+func With(c Control, k, v string) Control {
 	out := slices.Clone(c)
-	out.set(k, v)
+	set(&out, k, v)
 	return out
 }
 
-// Without returns a copy of the control without a key: what a relay
+// Without returns a copy of a control without a key: what a relay
 // forwards with the keys it owns taken off.
-func (c Control) Without(k string) Control {
+func Without(c Control, k string) Control {
 	out := make(Control, 0, len(c))
 	for _, kv := range c {
 		if kv.K != k {
@@ -101,24 +124,8 @@ func (c Control) Without(k string) Control {
 	return out
 }
 
-// Has reports whether the control has a key.
-func (c Control) Has(k string) bool {
-	_, ok := c.Get(k)
-	return ok
-}
-
-// Get returns a key's value, and whether the control has the key.
-func (c Control) Get(k string) (string, bool) {
-	for _, kv := range c {
-		if kv.K == k {
-			return kv.V, true
-		}
-	}
-	return "", false
-}
-
 // set changes a key's value, or adds the key.
-func (c *Control) set(k, v string) {
+func set(c *Control, k, v string) {
 	for i := range *c {
 		if (*c)[i].K == k {
 			(*c)[i].V = v
@@ -158,9 +165,9 @@ func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string 
 	if numbered && !given {
 		q = int(ReplyAlways)
 	}
-	ctl.set("q", strconv.Itoa(q))
+	set(&ctl, "q", strconv.Itoa(q))
 	if numbered {
-		ctl.set("n", strconv.Itoa(n))
+		set(&ctl, "n", strconv.Itoa(n))
 	}
 	return Encode(ctl, payload)
 }

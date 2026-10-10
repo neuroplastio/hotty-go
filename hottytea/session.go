@@ -308,10 +308,10 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 		case hotty.Partial, hotty.Invalid:
 			return nil, nil
 		}
-		if r, ok := hm.Reply(); ok {
+		if r, ok := hotty.ReplyOf(hm); ok {
 			return h.reply(r)
 		}
-		if ev, ok := hm.Event(); ok {
+		if ev, ok := hotty.EventOf(hm); ok {
 			return EventMsg{ev}, nil
 		}
 		return nil, nil

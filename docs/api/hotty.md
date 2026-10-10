@@ -18,7 +18,7 @@ A HOTTY host is a terminal that shows surfaces: small HTML documents placed on r
 This package is the wire, and does no I/O:
 
   - The command functions (Doc, Place, Delta, …) return escape sequences as strings. Write them to the terminal like any other output; in a Bubble Tea program, through tea.Raw, so they stay in order with its frames.
-  - A Decoder turns the OSC sequences the program reads back into Messages: replies (Message.Reply) and events (Message.Event).
+  - A Decoder turns the OSC sequences the program reads back into Messages: replies (ReplyOf) and events (EventOf), their msgpack bodies read by the types in wire.go.
 
 The packages beside it do the I/O: term for a command that prints and exits or asks a question, hottytea for a full-screen Bubble Tea program, and hottytest for testing either against a host that runs in the test.
 
@@ -34,6 +34,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 
 - [Constants](#pkg-constants)
 - [`func Blur(surface string, opts ...ReplyOption) string`](#Blur)
+- [`func CellCSS(c Caps) (w, h float64)`](#CellCSS)
 - [`func CursorBelow(rows int) string`](#CursorBelow)
 - [`func DecodeKeys(input []byte) []string`](#DecodeKeys)
 - [`func Del(surface string, opts ...ReplyOption) string`](#Del)
@@ -42,24 +43,34 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string`](#Delta)
 - [`func Detach(surface string, opts ...ReplyOption) string`](#Detach)
 - [`func Doc(surface, html string, opts ...DocOption) string`](#Doc)
+- [`func Drags(c Caps) bool`](#Drags)
 - [`func Encode(ctl Control, payload []byte) string`](#Encode)
+- [`func EncodeEvent(e Event) string`](#EncodeEvent)
 - [`func EncodePlain(ctl Control, payload []byte) string`](#EncodePlain)
+- [`func Err(r Reply) error`](#Err)
 - [`func Focus(surface, target string, opts ...ReplyOption) string`](#Focus)
+- [`func Get(c Control, k string) string`](#Get)
+- [`func Has(c Control, k string) bool`](#Has)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
+- [`func Hovers(c Caps) bool`](#Hovers)
+- [`func Light(c Caps) bool`](#Light)
+- [`func Lookup(c Control, k string) (string, bool)`](#Lookup)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
 - [`func ParseKey(name string) (canonical string, ok bool)`](#ParseKey)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
 - [`func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string`](#PlaceAt)
 - [`func Query(n int, opts ...QueryOption) string`](#Query)
 - [`func RemoveAttr(surface, target, name string, opts ...ReplyOption) string`](#RemoveAttr)
-- [`func ReplyCaps(n string, caps json.RawMessage) string`](#ReplyCaps)
+- [`func ReplyCaps(n string, caps Caps) string`](#ReplyCaps)
 - [`func ReplyErr(n, surface, re, code, detail string) string`](#ReplyErr)
 - [`func ReplyOK(n, surface, re string, extra Control, body []byte) string`](#ReplyOK)
 - [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
 - [`func Sanitize(v string) string`](#Sanitize)
+- [`func Sends(c Caps, kind string) bool`](#Sends)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
 - [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
+- [`func Supports(c Caps, op Op) bool`](#Supports)
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
@@ -69,20 +80,21 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (a Action) Multiline() bool`](#Action.Multiline)
   - [`func (a Action) Scrolls() bool`](#Action.Scrolls)
 - [`type Area`](#Area)
+  - [`func (z *Area) DecodeMsg(dc *msgp.Reader) (err error)`](#Area.DecodeMsg)
+  - [`func (z *Area) EncodeMsg(en *msgp.Writer) (err error)`](#Area.EncodeMsg)
+  - [`func (z *Area) Msgsize() (s int)`](#Area.Msgsize)
 - [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
-  - [`func (c Caps) CellCSS() (w, h float64)`](#Caps.CellCSS)
-  - [`func (c Caps) Drags() bool`](#Caps.Drags)
-  - [`func (c Caps) Hovers() bool`](#Caps.Hovers)
-  - [`func (c Caps) Light() bool`](#Caps.Light)
-  - [`func (c Caps) Sends(kind string) bool`](#Caps.Sends)
-  - [`func (c Caps) Supports(op Op) bool`](#Caps.Supports)
-  - [`func (c *Caps) UnmarshalJSON(data []byte) error`](#Caps.UnmarshalJSON)
+  - [`func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error)`](#Caps.DecodeMsg)
+  - [`func (z *Caps) EncodeMsg(en *msgp.Writer) (err error)`](#Caps.EncodeMsg)
+  - [`func (z *Caps) Msgsize() (s int)`](#Caps.Msgsize)
+- [`type Cell`](#Cell)
+  - [`func (z *Cell) DecodeMsg(dc *msgp.Reader) (err error)`](#Cell.DecodeMsg)
+  - [`func (z Cell) EncodeMsg(en *msgp.Writer) (err error)`](#Cell.EncodeMsg)
+  - [`func (z Cell) Msgsize() (s int)`](#Cell.Msgsize)
 - [`type Control`](#Control)
-  - [`func (c Control) Get(k string) (string, bool)`](#Control.Get)
-  - [`func (c Control) Has(k string) bool`](#Control.Has)
-  - [`func (c Control) With(k, v string) Control`](#Control.With)
-  - [`func (c Control) Without(k string) Control`](#Control.Without)
+  - [`func With(c Control, k, v string) Control`](#With)
+  - [`func Without(c Control, k string) Control`](#Without)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
 - [`type DetectState`](#DetectState)
@@ -97,20 +109,10 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func Detached() DocOption`](#Detached)
   - [`func Scroll(axes Axes) DocOption`](#Scroll)
 - [`type Drag`](#Drag)
-  - [`func (d Drag) Has(key string) bool`](#Drag.Has)
 - [`type Error`](#Error)
   - [`func (e *Error) Error() string`](#Error.Error)
 - [`type Event`](#Event)
-  - [`func (e Event) Area() (Area, bool)`](#Event.Area)
-  - [`func (e Event) Checked() (checked, ok bool)`](#Event.Checked)
-  - [`func (e Event) Drag() (Drag, bool)`](#Event.Drag)
-  - [`func (e Event) Encode() string`](#Event.Encode)
-  - [`func (e Event) Fields() map[string]string`](#Event.Fields)
-  - [`func (e Event) FitRows() (rows int, ok bool)`](#Event.FitRows)
-  - [`func (e Event) Hover() (Hover, bool)`](#Event.Hover)
-  - [`func (e Event) Link() (href, url string, ok bool)`](#Event.Link)
-  - [`func (e Event) Size() (w, h float64, ok bool)`](#Event.Size)
-  - [`func (e Event) Value() string`](#Event.Value)
+  - [`func EventOf(m Message) (Event, bool)`](#EventOf)
 - [`type Hover`](#Hover)
 - [`type KV`](#KV)
 - [`type Keymap`](#Keymap)
@@ -122,20 +124,16 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m *Keymap) Program(name string) bool`](#Keymap.Program)
   - [`func (m *Keymap) Scroll(name string) Action`](#Keymap.Scroll)
   - [`func (m *Keymap) Selects(name string) bool`](#Keymap.Selects)
+- [`type Link`](#Link)
 - [`type Message`](#Message)
-  - [`func (m Message) Event() (Event, bool)`](#Message.Event)
-  - [`func (m Message) Get(k string) string`](#Message.Get)
-  - [`func (m Message) Has(k string) bool`](#Message.Has)
-  - [`func (m Message) Placement() (Placement, error)`](#Message.Placement)
-  - [`func (m Message) Reply() (Reply, bool)`](#Message.Reply)
 - [`type Op`](#Op)
 - [`type Placement`](#Placement)
+  - [`func PlacementOf(m Message) (Placement, error)`](#PlacementOf)
 - [`type QueryOption`](#QueryOption)
   - [`func Late() QueryOption`](#Late)
 - [`type Quiet`](#Quiet)
 - [`type Reply`](#Reply)
-  - [`func (r Reply) Caps() (Caps, bool)`](#Reply.Caps)
-  - [`func (r Reply) Err() error`](#Reply.Err)
+  - [`func ReplyOf(m Message) (Reply, bool)`](#ReplyOf)
 - [`type ReplyOption`](#ReplyOption)
   - [`func N(n int) ReplyOption`](#N)
   - [`func Q(q Quiet) ReplyOption`](#Q)
@@ -149,6 +147,10 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type Segment`](#Segment)
 - [`type SegmentKind`](#SegmentKind)
   - [`func (k SegmentKind) String() string`](#SegmentKind.String)
+- [`type Size`](#Size)
+  - [`func (z *Size) DecodeMsg(dc *msgp.Reader) (err error)`](#Size.DecodeMsg)
+  - [`func (z Size) EncodeMsg(en *msgp.Writer) (err error)`](#Size.EncodeMsg)
+  - [`func (z Size) Msgsize() (s int)`](#Size.Msgsize)
 - [`type Window`](#Window)
 
 ## <a id="pkg-constants"></a>Constants
@@ -179,7 +181,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package implements, as the
 	// capabilities report it (SPEC §4).
-	Version = "0.1"
+	Version = "0.2"
 )
 ```
 
@@ -199,7 +201,7 @@ const (
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
-	// events (Caps.Drags), EventDrag stands for all three.
+	// events (Drags), EventDrag stands for all three.
 	EventDragStart = "dragstart" // the primary button pressed on the element
 	EventDrag      = "drag"      // the element under the pointer changed
 	EventDragEnd   = "dragend"   // the button released, or the drag cut short
@@ -222,6 +224,14 @@ const (
 ```
 
 Error codes, in a reply's Code (SPEC §3.6).
+
+<a id="MaxDepth"></a>
+
+```go
+const MaxDepth = 32
+```
+
+MaxDepth is how deep a body may nest, its map being the first level (SDK.md §3.9). A body nested deeper does not decode, so that no body can exhaust a stack: TinyGo's is 64 KB.
 
 <a id="TerminalKeys"></a>
 
@@ -251,6 +261,14 @@ func Blur(surface string, opts ...ReplyOption) string
 ```
 
 Blur takes the keyboard back from a surface. Its focused control commits its value first, so a change event may come before the blur event.
+
+## <a id="CellCSS"></a>func CellCSS
+
+```go
+func CellCSS(c Caps) (w, h float64)
+```
+
+CellCSS is a cell's size in CSS pixels: what a document's layout and an SVG's viewBox are measured in. Before a host has said, or if it said nothing, it is a usual 9×18.
 
 ## <a id="CursorBelow"></a>func CursorBelow
 
@@ -318,6 +336,14 @@ func Doc(surface, html string, opts ...DocOption) string
 
 Doc creates a surface, or replaces its document (SPEC §5.1). The surface is the program's, even one it had detached: it reports what the user does in it, and takes the keyboard on the program's behalf (SPEC §5.5), unless the document is sent Detached. It is answered on error: EQUOTA when the host holds no more surfaces.
 
+## <a id="Drags"></a>func Drags
+
+```go
+func Drags(c Caps) bool
+```
+
+Drags reports whether the host sends drags (SPEC §9.1): drag in its events, which stands for dragstart, drag and dragend. Unlike Sends, a host that lists no kinds is taken not to, since drags came after the first hosts: a program offers another way to do what its drags do.
+
 ## <a id="Encode"></a>func Encode
 
 ```go
@@ -325,6 +351,14 @@ func Encode(ctl Control, payload []byte) string
 ```
 
 Encode returns one command: the control and the payload, compressed when that makes it smaller, base64-encoded, and split into chunks of at most Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are cleaned (Sanitize). The keys o and m are Encode's to set: a control given with them goes out without them.
+
+## <a id="EncodeEvent"></a>func EncodeEvent
+
+```go
+func EncodeEvent(e Event) string
+```
+
+EncodeEvent is the event as a host sends it (SPEC §9): what a relay writes to a program, the surface named as the program knows it, or a host's own. The detail is e.Detail when it has one, as it came, and otherwise what e carries for its kind, each field as its type. Never compressed (SPEC §3.3).
 
 ## <a id="EncodePlain"></a>func EncodePlain
 
@@ -334,6 +368,14 @@ func EncodePlain(ctl Control, payload []byte) string
 
 EncodePlain is Encode without compression: what a host, or a relay speaking as one, writes to a program, since hosts never compress (SPEC §3.3).
 
+## <a id="Err"></a>func Err
+
+```go
+func Err(r Reply) error
+```
+
+Err is the reply as an error: nil when OK, else an \*Error.
+
 ## <a id="Focus"></a>func Focus
 
 ```go
@@ -342,6 +384,22 @@ func Focus(surface, target string, opts ...ReplyOption) string
 
 Focus gives a surface the keyboard (SPEC §10.1), at an element if target is not empty; else its focused element keeps focus, or its first focusable element takes it.
 
+## <a id="Get"></a>func Get
+
+```go
+func Get(c Control, k string) string
+```
+
+Get returns a control's value for a key, "" when it lacks the key.
+
+## <a id="Has"></a>func Has
+
+```go
+func Has(c Control, k string) bool
+```
+
+Has reports whether a control has a key.
+
 ## <a id="Hide"></a>func Hide
 
 ```go
@@ -349,6 +407,30 @@ func Hide(surface string, opts ...ReplyOption) string
 ```
 
 Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Deltas still apply to it.
+
+## <a id="Hovers"></a>func Hovers
+
+```go
+func Hovers(c Caps) bool
+```
+
+Hovers reports whether the host sends hover (SPEC §9.4). Like Drags, a host that lists no kinds is taken not to: without it a program never hears the pointer leave for a surface, and clears what it lit on the next key or press instead.
+
+## <a id="Light"></a>func Light
+
+```go
+func Light(c Caps) bool
+```
+
+Light reports whether the terminal's colour scheme is light.
+
+## <a id="Lookup"></a>func Lookup
+
+```go
+func Lookup(c Control, k string) (string, bool)
+```
+
+Lookup returns a control's value for a key, and whether it has the key.
 
 ## <a id="MorphTo"></a>func MorphTo
 
@@ -401,10 +483,10 @@ RemoveAttr removes an attribute from an element.
 ## <a id="ReplyCaps"></a>func ReplyCaps
 
 ```go
-func ReplyCaps(n string, caps json.RawMessage) string
+func ReplyCaps(n string, caps Caps) string
 ```
 
-ReplyCaps is a host's answer to a query numbered n (SPEC §4), with the capabilities' JSON as it is: a relay passes on Caps.Raw, so that fields it does not know reach the program.
+ReplyCaps is a host's answer to a query numbered n (SPEC §4): caps.Raw as it is when caps has one, so that a relay passes on the fields it does not know, and caps written otherwise.
 
 ## <a id="ReplyErr"></a>func ReplyErr
 
@@ -412,7 +494,7 @@ ReplyCaps is a host's answer to a query numbered n (SPEC §4), with the capabili
 func ReplyErr(n, surface, re, code, detail string) string
 ```
 
-ReplyErr is a host's error reply (SPEC §3.6): the code and detail as its JSON body.
+ReplyErr is a host's error reply (SPEC §3.6): the code and detail as its body.
 
 ## <a id="ReplyOK"></a>func ReplyOK
 
@@ -420,7 +502,7 @@ ReplyErr is a host's error reply (SPEC §3.6): the code and detail as its JSON b
 func ReplyOK(n, surface, re string, extra Control, body []byte) string
 ```
 
-ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering for one writes it to a program: n and surface echo the command's, each left out when "", re names the action answered, extra keys follow it (a placement's c and r), and body is its JSON, if any. Never compressed (SPEC §3.3).
+ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering for one writes it to a program: n and surface echo the command's, each left out when "", re names the action answered, extra keys follow it (a placement's c and r), and body is its msgpack, if any. Never compressed (SPEC §3.3).
 
 ## <a id="Res"></a>func Res
 
@@ -437,6 +519,14 @@ func Sanitize(v string) string
 ```
 
 Sanitize makes v a control value (SPEC §3.2): each character a value may not hold becomes '\_', one for each character, not each byte, and one for each byte that is not UTF-8. Above 0x7e is not merely untidy: UTF-8 can hold 0x9c, which a terminal that reads C1 controls takes for ST, ending the sequence early.
+
+## <a id="Sends"></a>func Sends
+
+```go
+func Sends(c Caps, kind string) bool
+```
+
+Sends reports whether the host sends an event kind. A host that lists no kinds is taken to send them all. Drag in its events stands for dragstart, drag and dragend (SPEC §4).
 
 ## <a id="SetAttr"></a>func SetAttr
 
@@ -461,6 +551,14 @@ func SetVar(surface, target, name, value string, opts ...ReplyOption) string
 ```
 
 SetVar sets the custom property --name on an element: the cheap way to move a bar or a needle every frame, with CSS that reads it.
+
+## <a id="Supports"></a>func Supports
+
+```go
+func Supports(c Caps, op Op) bool
+```
+
+Supports reports whether the host supports a delta op. A host that lists no ops is taken to support them all.
 
 ## <a id="SurfaceName"></a>func SurfaceName
 
@@ -578,10 +676,39 @@ Scrolls reports whether the action is a scroll action, which only an element tha
 ## <a id="Area"></a>type Area
 
 ```go
-type Area struct{ Col, Row, W, H int }
+type Area struct {
+	Col int `msg:"c"`
+	Row int `msg:"r"`
+	W   int `msg:"w"`
+	H   int `msg:"h"`
+}
 ```
 
 Area is the cells an element covers (SPEC §9), counted as a drag's are: Col and Row are the first column and row it touches, from 0 at the surface's top left (not its window's), and W and H the columns and rows it spans. An element partly clipped or scrolled away has its whole area, so Col and Row may be negative or past the surface.
+
+### <a id="Area.DecodeMsg"></a>func (*Area) DecodeMsg
+
+```go
+func (z *Area) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="Area.EncodeMsg"></a>func (*Area) EncodeMsg
+
+```go
+func (z *Area) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="Area.Msgsize"></a>func (*Area) Msgsize
+
+```go
+func (z *Area) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
 ## <a id="Axes"></a>type Axes
 
@@ -606,109 +733,109 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements: "0.1".
-	V string `json:"v"`
+	// V is the protocol version the host implements: "0.2".
+	V string `msg:"v"`
 	// Ops are the delta ops it supports.
-	Ops []string `json:"ops,omitempty"`
+	Ops []string `msg:"ops,omitempty"`
 	// Events are the event kinds it sends.
-	Events []string `json:"events,omitempty"`
-	// Cell is a cell's size in device pixels.
-	Cell struct {
-		W float64 `json:"w"`
-		H float64 `json:"h"`
-	} `json:"cell,omitzero"`
+	Events []string `msg:"events,omitempty"`
+	// Cell is a cell's size in device pixels; nil when the host did not
+	// say.
+	Cell *Cell `msg:"cell,omitempty"`
 	// Scale is device pixels per CSS pixel.
-	Scale float64 `json:"scale,omitempty"`
+	Scale float64 `msg:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
-	Scheme string `json:"scheme,omitempty"`
+	Scheme string `msg:"scheme,omitempty"`
 	// Limits are the host's limits, such as "surfaces" (a count) and
 	// "resources" (bytes) (SPEC §13).
-	Limits map[string]int `json:"limits,omitempty"`
+	Limits map[string]int `msg:"limits,omitempty"`
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
-	Net map[string][]string `json:"net,omitempty"`
+	Net map[string][]string `msg:"net,omitempty"`
 	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
 	// a host that does not says nothing, and clips.
-	Scroll bool `json:"scroll,omitempty"`
+	Scroll bool `msg:"scroll,omitempty"`
 	// Passthrough is true when the pointer passes through the parts of a
 	// surface that take no pointer (SPEC §9.3); a host that does not says
 	// nothing, and every window takes the pointer wherever it is.
-	Passthrough bool `json:"passthrough,omitempty"`
+	Passthrough bool `msg:"passthrough,omitempty"`
 	// Steps is true when a drag of an element with data-steps says where
 	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
 	// that does not says nothing, and its drags carry cells only.
-	Steps bool `json:"steps,omitempty"`
+	Steps bool `msg:"steps,omitempty"`
 	// Host names the implementation, if it says.
-	Host string `json:"host,omitempty"`
+	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
 	// numbers, compared one by one ("0.0.10" is after "0.0.9").
-	Version string `json:"version,omitempty"`
+	Version string `msg:"version,omitempty"`
 
-	// Raw is the JSON the capabilities were read from, fields this
-	// package does not know included: what a relay announces to the
-	// programs behind it (SPEC §2.7). Marshalling Caps writes the fields
-	// above, not Raw.
-	Raw json.RawMessage `json:"-"`
+	// Raw is the body the capabilities were read from, fields this package
+	// does not know included: what a relay announces to the programs
+	// behind it (SPEC §2.7). Writing Caps writes the fields above, not Raw.
+	Raw []byte `msg:"-"`
 }
 ```
 
-Caps is what a host says about itself in its reply to a query (SPEC §4). Each field is read on its own (SDK.md §2.7): one of an unexpected type is ignored, as one the program does not know is, and so is an element of a list or a map.
+Caps is what a host says about itself in its reply to a query (SPEC §4).
 
-### <a id="Caps.CellCSS"></a>func (Caps) CellCSS
-
-```go
-func (c Caps) CellCSS() (w, h float64)
-```
-
-CellCSS is a cell's size in CSS pixels: what a document's layout and an SVG's viewBox are measured in. Before a host has said, or if it said nothing, it is a usual 9×18.
-
-### <a id="Caps.Drags"></a>func (Caps) Drags
+### <a id="Caps.DecodeMsg"></a>func (*Caps) DecodeMsg
 
 ```go
-func (c Caps) Drags() bool
+func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error)
 ```
 
-Drags reports whether the host sends drags (SPEC §9.1): drag in its events, which stands for dragstart, drag and dragend. Unlike Sends, a host that lists no kinds is taken not to, since drags came after the first hosts: a program offers another way to do what its drags do.
+DecodeMsg implements msgp.Decodable
 
-### <a id="Caps.Hovers"></a>func (Caps) Hovers
+### <a id="Caps.EncodeMsg"></a>func (*Caps) EncodeMsg
 
 ```go
-func (c Caps) Hovers() bool
+func (z *Caps) EncodeMsg(en *msgp.Writer) (err error)
 ```
 
-Hovers reports whether the host sends hover (SPEC §9.4). Like Drags, a host that lists no kinds is taken not to: without it a program never hears the pointer leave for a surface, and clears what it lit on the next key or press instead.
+EncodeMsg implements msgp.Encodable
 
-### <a id="Caps.Light"></a>func (Caps) Light
+### <a id="Caps.Msgsize"></a>func (*Caps) Msgsize
 
 ```go
-func (c Caps) Light() bool
+func (z *Caps) Msgsize() (s int)
 ```
 
-Light reports whether the terminal's colour scheme is light.
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
-### <a id="Caps.Sends"></a>func (Caps) Sends
+## <a id="Cell"></a>type Cell
 
 ```go
-func (c Caps) Sends(kind string) bool
+type Cell struct {
+	W int `msg:"w"`
+	H int `msg:"h"`
+}
 ```
 
-Sends reports whether the host sends an event kind. A host that lists no kinds is taken to send them all. Drag in its events stands for dragstart, drag and dragend (SPEC §4).
+Cell is a cell's size in device pixels.
 
-### <a id="Caps.Supports"></a>func (Caps) Supports
+### <a id="Cell.DecodeMsg"></a>func (*Cell) DecodeMsg
 
 ```go
-func (c Caps) Supports(op Op) bool
+func (z *Cell) DecodeMsg(dc *msgp.Reader) (err error)
 ```
 
-Supports reports whether the host supports a delta op. A host that lists no ops is taken to support them all.
+DecodeMsg implements msgp.Decodable
 
-### <a id="Caps.UnmarshalJSON"></a>func (*Caps) UnmarshalJSON
+### <a id="Cell.EncodeMsg"></a>func (Cell) EncodeMsg
 
 ```go
-func (c *Caps) UnmarshalJSON(data []byte) error
+func (z Cell) EncodeMsg(en *msgp.Writer) (err error)
 ```
 
-UnmarshalJSON reads capabilities leniently: a field of an unexpected type is left zero, and the rest are read. JSON that is not an object is an error, and null changes nothing.
+EncodeMsg implements msgp.Encodable
+
+### <a id="Cell.Msgsize"></a>func (Cell) Msgsize
+
+```go
+func (z Cell) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
 ## <a id="Control"></a>type Control
 
@@ -716,39 +843,23 @@ UnmarshalJSON reads capabilities leniently: a field of an unexpected type is lef
 type Control []KV
 ```
 
-Control is a command's keys, in the order they are sent.
+Control is a command's or a message's keys, in the order they are sent.
 
-### <a id="Control.Get"></a>func (Control) Get
-
-```go
-func (c Control) Get(k string) (string, bool)
-```
-
-Get returns a key's value, and whether the control has the key.
-
-### <a id="Control.Has"></a>func (Control) Has
+### <a id="With"></a>func With
 
 ```go
-func (c Control) Has(k string) bool
+func With(c Control, k, v string) Control
 ```
 
-Has reports whether the control has a key.
+With returns a copy of a control with a key set: in place if the control has it, at the end if not (SDK.md §3.2).
 
-### <a id="Control.With"></a>func (Control) With
+### <a id="Without"></a>func Without
 
 ```go
-func (c Control) With(k, v string) Control
+func Without(c Control, k string) Control
 ```
 
-With returns a copy of the control with a key set: in place if the control has it, at the end if not (SDK.md §3.2).
-
-### <a id="Control.Without"></a>func (Control) Without
-
-```go
-func (c Control) Without(k string) Control
-```
-
-Without returns a copy of the control without a key: what a relay forwards with the keys it owns taken off.
+Without returns a copy of a control without a key: what a relay forwards with the keys it owns taken off.
 
 ## <a id="Decoder"></a>type Decoder
 
@@ -932,14 +1043,6 @@ type Drag struct {
 
 Drag is where a drag's pointer is, and the modifier keys held (SPEC §9.1).
 
-### <a id="Drag.Has"></a>func (Drag) Has
-
-```go
-func (d Drag) Has(key string) bool
-```
-
-Has reports whether a modifier key was held: "shift", "ctrl", "alt" or "meta".
-
 ## <a id="Error"></a>type Error
 
 ```go
@@ -972,93 +1075,45 @@ type Event struct {
 	// blur and resize, for a link without one (its href is in the
 	// detail), and for a press on nothing with an id.
 	Target string
-	// Detail is the event's JSON detail; nil when it has none, or when
-	// what came is not JSON.
-	Detail json.RawMessage
+
+	// Value is a control's value (change, input), or the value attribute
+	// of what was clicked (click).
+	Value string
+	// Checked is a checkbox's or a radio button's state, in a change.
+	Checked *bool
+	// Fields are a submitted form's fields by name.
+	Fields map[string]string
+	// Link is a clicked link's.
+	Link *Link
+	// Size is a resize's new size, in CSS pixels.
+	Size *Size
+	// FitRows is the rows a fit says the document needs now.
+	FitRows int
+	// Drag is a dragstart's, a drag's or a dragend's.
+	Drag *Drag
+	// Hover is a hover's (SPEC §9.4).
+	Hover *Hover
+	// Area is the cells of the element a click or a press reports, a
+	// keyboard click's too: what a program places something next to the
+	// element by, as a browser places a select's list or a menu by its
+	// control.
+	Area *Area
+
+	// Detail is the detail as it came, msgpack: nil when the event has
+	// none. It is what a relay passes on (EncodeEvent).
+	Detail []byte
 }
 ```
 
 Event is what the user did in a surface (SPEC §9).
 
-### <a id="Event.Area"></a>func (Event) Area
+### <a id="EventOf"></a>func EventOf
 
 ```go
-func (e Event) Area() (Area, bool)
+func EventOf(m Message) (Event, bool)
 ```
 
-Area is the cells of the element a click or a press reports, a keyboard click's too: what a program places something next to the element by, as a browser places a select's list or a menu by its control. ok is false for any other event, and when the detail lacks any of the four.
-
-### <a id="Event.Checked"></a>func (Event) Checked
-
-```go
-func (e Event) Checked() (checked, ok bool)
-```
-
-Checked is a checkbox's or a radio button's state in a change event; ok is false for any other event.
-
-### <a id="Event.Drag"></a>func (Event) Drag
-
-```go
-func (e Event) Drag() (Drag, bool)
-```
-
-Drag is a dragstart, drag or dragend event's detail; ok is false for any other event.
-
-### <a id="Event.Encode"></a>func (Event) Encode
-
-```go
-func (e Event) Encode() string
-```
-
-Encode is the event as a host sends it (SPEC §9): what a relay writes to a program, the surface named as the program knows it. Never compressed (SPEC §3.3).
-
-### <a id="Event.Fields"></a>func (Event) Fields
-
-```go
-func (e Event) Fields() map[string]string
-```
-
-Fields is a submit event's detail: the form's fields by name. A value that is not a string is given as its JSON, a null as nothing.
-
-### <a id="Event.FitRows"></a>func (Event) FitRows
-
-```go
-func (e Event) FitRows() (rows int, ok bool)
-```
-
-FitRows is the rows a fit event says the document needs now; ok is false for any other event.
-
-### <a id="Event.Hover"></a>func (Event) Hover
-
-```go
-func (e Event) Hover() (Hover, bool)
-```
-
-Hover is a hover event's detail; the element is the event's Target, empty over nothing with an id and when Out. ok is false for any other event.
-
-### <a id="Event.Link"></a>func (Event) Link
-
-```go
-func (e Event) Link() (href, url string, ok bool)
-```
-
-Link is a clicked link's href, as the document has it, and its URL resolved against the document's base (SPEC §7.3); url is "" when the href resolves to nothing outside the document. ok is false for an event that is not a link's click.
-
-### <a id="Event.Size"></a>func (Event) Size
-
-```go
-func (e Event) Size() (w, h float64, ok bool)
-```
-
-Size is a resize event's new size in CSS pixels; ok is false for any other event.
-
-### <a id="Event.Value"></a>func (Event) Value
-
-```go
-func (e Event) Value() string
-```
-
-Value is the "value" of the event's detail: a control's value, or the value attribute of what was clicked. "" when it has none.
+EventOf returns the message as an event, if it is one, its detail read by its kind.
 
 ## <a id="Hover"></a>type Hover
 
@@ -1074,7 +1129,7 @@ type Hover struct {
 }
 ```
 
-Hover is where a hover event says the pointer is (SPEC §9.4).
+Hover is where a hover event says the pointer is (SPEC §9.4); the element is the event's Target, empty over nothing with an id and when Out.
 
 ## <a id="KV"></a>type KV
 
@@ -1163,6 +1218,14 @@ func (m *Keymap) Selects(name string) bool
 
 Selects reports whether a field with this keymap selects with a key (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves), and its canonical name has Shift, bound so or looked up without it ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+\<"). The field then keeps its anchor and moves the caret (hottyedit.Field.Extend).
 
+## <a id="Link"></a>type Link
+
+```go
+type Link struct{ Href, URL string }
+```
+
+Link is a clicked link: its href, as the document has it, and its URL resolved against the document's base (SPEC §7.3), "" when the href resolves to nothing outside the document.
+
 ## <a id="Message"></a>type Message
 
 ```go
@@ -1173,46 +1236,6 @@ type Message struct {
 ```
 
 Message is one HOTTY message: a reply or an event from the host, or a command from the program (what a host, a relay or a test decodes). Its control is in the order the keys came, so a relay that forwards it sends the same bytes.
-
-### <a id="Message.Event"></a>func (Message) Event
-
-```go
-func (m Message) Event() (Event, bool)
-```
-
-Event returns the message as an event, if it is one.
-
-### <a id="Message.Get"></a>func (Message) Get
-
-```go
-func (m Message) Get(k string) string
-```
-
-Get returns a control key's value, "" when the message lacks it.
-
-### <a id="Message.Has"></a>func (Message) Has
-
-```go
-func (m Message) Has(k string) bool
-```
-
-Has reports whether the message's control has a key.
-
-### <a id="Message.Placement"></a>func (Message) Placement
-
-```go
-func (m Message) Placement() (Placement, error)
-```
-
-Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). A command out of range is an \*Error with Code EINVAL, as a host answers it.
-
-### <a id="Message.Reply"></a>func (Message) Reply
-
-```go
-func (m Message) Reply() (Reply, bool)
-```
-
-Reply returns the message as a reply, if it is one.
 
 ## <a id="Op"></a>type Op
 
@@ -1279,6 +1302,14 @@ type Placement struct {
 
 Placement is where and how a surface is shown (SPEC §5.2).
 
+### <a id="PlacementOf"></a>func PlacementOf
+
+```go
+func PlacementOf(m Message) (Placement, error)
+```
+
+Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). A command out of range is an \*Error with Code EINVAL, as a host answers it.
+
 ## <a id="QueryOption"></a>type QueryOption
 
 ```go
@@ -1334,8 +1365,12 @@ type Reply struct {
 	// Cols and Rows are a placement's size, in a reply to place: with
 	// Placement.Rows 0, the rows the host chose.
 	Cols, Rows int
-	// Code and Detail say what went wrong, when not OK.
+	// Code and Detail say what went wrong, when not OK: empty when the
+	// error's body does not decode.
 	Code, Detail string
+	// Caps are the capabilities an ok reply to a query carries: nil when
+	// it carries none, or they do not decode.
+	Caps *Caps
 	// Message is the reply as it came.
 	Message Message
 }
@@ -1343,21 +1378,13 @@ type Reply struct {
 
 Reply is the host's answer to a command (SPEC §3.6).
 
-### <a id="Reply.Caps"></a>func (Reply) Caps
+### <a id="ReplyOf"></a>func ReplyOf
 
 ```go
-func (r Reply) Caps() (Caps, bool)
+func ReplyOf(m Message) (Reply, bool)
 ```
 
-Caps returns the capabilities a reply to a query carries.
-
-### <a id="Reply.Err"></a>func (Reply) Err
-
-```go
-func (r Reply) Err() error
-```
-
-Err is the reply as an error: nil when OK, else an \*Error.
+ReplyOf returns the message as a reply, if it is one, its body read.
 
 ## <a id="ReplyOption"></a>type ReplyOption
 
@@ -1528,6 +1555,41 @@ func (k SegmentKind) String() string
 ```
 
 String names the kind: "pass", "osc" or "da1".
+
+## <a id="Size"></a>type Size
+
+```go
+type Size struct {
+	W float64 `msg:"w"`
+	H float64 `msg:"h"`
+}
+```
+
+Size is a surface's size in CSS pixels, in a resize event.
+
+### <a id="Size.DecodeMsg"></a>func (*Size) DecodeMsg
+
+```go
+func (z *Size) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="Size.EncodeMsg"></a>func (Size) EncodeMsg
+
+```go
+func (z Size) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="Size.Msgsize"></a>func (Size) Msgsize
+
+```go
+func (z Size) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
 ## <a id="Window"></a>type Window
 

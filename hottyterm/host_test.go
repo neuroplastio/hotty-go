@@ -76,7 +76,7 @@ func TestFenceReturnsErrors(t *testing.T) {
 	if replies[0].Code != hotty.ENOENT || replies[1].Code != hotty.ENOENT {
 		t.Errorf("codes %q %q", replies[0].Code, replies[1].Code)
 	}
-	if replies[0].Err() == nil {
+	if hotty.Err(replies[0]) == nil {
 		t.Error("an error reply is an error")
 	}
 }
@@ -155,7 +155,7 @@ func TestEventsWhileRequesting(t *testing.T) {
 			case uv.KeyPressEvent:
 				got = append(got, "key "+ev.String())
 			case hottyterm.Message:
-				e, _ := ev.Event()
+				e, _ := hotty.EventOf(ev.Message)
 				got = append(got, e.Kind+" "+e.Target)
 			}
 		case <-time.After(2 * time.Second):
@@ -257,8 +257,8 @@ func TestLateAnswer(t *testing.T) {
 	select {
 	case ev := <-evs:
 		m, ok := ev.(hottyterm.Message)
-		r, _ := m.Reply()
-		if caps, _ := r.Caps(); !ok || r.Re != "q" || caps.Host != "hottytest" {
+		r, _ := hotty.ReplyOf(m.Message)
+		if caps := r.Caps; !ok || r.Re != "q" || caps == nil || caps.Host != "hottytest" {
 			t.Errorf("the late answer: %#v", ev)
 		}
 	case <-ctx(t).Done():
@@ -286,7 +286,7 @@ func TestLateWithdrawnOnClose(t *testing.T) {
 		_ = tm.Close()
 		h.BecomeHost()
 		cmds := h.Commands()
-		if late && (len(cmds) != 2 || cmds[1].Get("a") != "q" || cmds[1].Get("q") != "2") || !late && len(cmds) != 1 {
+		if late && (len(cmds) != 2 || hotty.Get(cmds[1].Control, "a") != "q" || hotty.Get(cmds[1].Control, "q") != "2") || !late && len(cmds) != 1 {
 			t.Errorf("late %v: commands %v", late, cmds)
 		}
 		if len(h.Replies()) != 0 {

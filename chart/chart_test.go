@@ -123,10 +123,10 @@ func deltas(t *testing.T, cmds []string) []string {
 	var d hotty.Decoder
 	for _, cmd := range cmds {
 		m, r := d.Feed(cmd)
-		if r != hotty.Complete || m.Get("a") != "delta" || m.Get("op") != "attr" || m.Get("s") != "dash" || m.Get("q") != "2" {
+		if r != hotty.Complete || hotty.Get(m.Control, "a") != "delta" || hotty.Get(m.Control, "op") != "attr" || hotty.Get(m.Control, "s") != "dash" || hotty.Get(m.Control, "q") != "2" {
 			t.Fatalf("not an attr delta to dash: %v", m.Control)
 		}
-		out = append(out, m.Get("t")+" "+m.Get("k")+"="+string(m.Payload))
+		out = append(out, hotty.Get(m.Control, "t")+" "+hotty.Get(m.Control, "k")+"="+string(m.Payload))
 	}
 	return out
 }

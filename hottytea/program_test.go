@@ -157,7 +157,7 @@ func command(h *hottytest.Host, keys ...string) (hotty.Message, bool) {
 		m := cmds[i]
 		match := true
 		for j := 0; j+1 < len(keys); j += 2 {
-			if m.Get(keys[j]) != keys[j+1] {
+			if hotty.Get(m.Control, keys[j]) != keys[j+1] {
 				match = false
 				break
 			}
@@ -174,7 +174,7 @@ func count(h *hottytest.Host, keys ...string) int {
 	for _, m := range h.Commands() {
 		match := true
 		for j := 0; j+1 < len(keys); j += 2 {
-			match = match && m.Get(keys[j]) == keys[j+1]
+			match = match && hotty.Get(m.Control, keys[j]) == keys[j+1]
 		}
 		if match {
 			n++
@@ -207,7 +207,7 @@ func TestAProgramOnAHost(t *testing.T) {
 	}
 	// At column 2, row 1, keeping the cursor, asking for presses.
 	place, _ := command(h, "a", "place", "s", cardName)
-	if m := place; m.Get("c") != "20" || m.Get("r") != "3" || m.Get("p") != "1" || m.Get("C") != "1" {
+	if m := place; hotty.Get(m.Control, "c") != "20" || hotty.Get(m.Control, "r") != "3" || hotty.Get(m.Control, "p") != "1" || hotty.Get(m.Control, "C") != "1" {
 		t.Errorf("placement: %v", m.Control)
 	}
 	if !strings.Contains(h.Output(), "\x1b7\x1b[2;3H\x1b]7279;a=place:s="+cardName) {
@@ -316,7 +316,7 @@ func TestAProgramWithdrawsItsLateQuery(t *testing.T) {
 	h.Type("q")
 	wait()
 	cmds := h.Commands()
-	if len(cmds) != 2 || cmds[0].Get("late") != "1" || cmds[1].Get("a") != "q" || cmds[1].Get("q") != "2" {
+	if len(cmds) != 2 || hotty.Get(cmds[0].Control, "late") != "1" || hotty.Get(cmds[1].Control, "a") != "q" || hotty.Get(cmds[1].Control, "q") != "2" {
 		t.Errorf("commands %v, want the query and its withdrawal", cmds)
 	}
 	h.BecomeHost()

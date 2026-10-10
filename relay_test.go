@@ -1,8 +1,9 @@
 package hotty
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,17 +14,17 @@ import (
 func TestControlWith(t *testing.T) {
 	base := make(Control, 0, 8)
 	base = append(base, KV{"a", "doc"}, KV{"s", "x"}, KV{"q", "1"})
-	if got := base.With("s", "y"); !reflect.DeepEqual(got, Control{{"a", "doc"}, {"s", "y"}, {"q", "1"}}) {
+	if got := With(base, "s", "y"); !reflect.DeepEqual(got, Control{{"a", "doc"}, {"s", "y"}, {"q", "1"}}) {
 		t.Errorf("With in place: %v", got)
 	}
-	one, two := base.With("n", "1"), base.With("d", "1")
-	if v, _ := one.Get("n"); v != "1" || one.Has("d") || two.Has("n") {
+	one, two := With(base, "n", "1"), With(base, "d", "1")
+	if v, _ := Lookup(one, "n"); v != "1" || Has(one, "d") || Has(two, "n") {
 		t.Errorf("Withs on one base share it: %v %v", one, two)
 	}
-	if base.Has("n") || len(base) != 3 {
+	if Has(base, "n") || len(base) != 3 {
 		t.Errorf("With changed its control: %v", base)
 	}
-	if got := base.Without("s"); !reflect.DeepEqual(got, Control{{"a", "doc"}, {"q", "1"}}) || !base.Has("s") {
+	if got := Without(base, "s"); !reflect.DeepEqual(got, Control{{"a", "doc"}, {"q", "1"}}) || !Has(base, "s") {
 		t.Errorf("Without: %v, base %v", got, base)
 	}
 }
@@ -53,28 +54,27 @@ func TestMessageForwards(t *testing.T) {
 	if out := Encode(m.Control, m.Payload); out != in {
 		t.Errorf("forwarded %q, came %q", out, in)
 	}
-	if !m.Has("C") || m.Has("x") {
+	if !Has(m.Control, "C") || Has(m.Control, "x") {
 		t.Error("Message.Has")
 	}
 }
 
-// An event with no detail, or one that is not JSON, has none (SDK.md
-// §2.2), and marshals.
+// An event with no detail has none (SDK.md §2.2); one whose detail does
+// not decode carries nothing, and keeps the bytes for a relay to pass on.
 func TestEventDetailAbsent(t *testing.T) {
-	for _, payload := range []string{"", "{not json"} {
-		ev, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "blur"}, {"t", ""}}, payload).Event()
-		if ev.Detail != nil {
-			t.Errorf("%q: detail %q", payload, ev.Detail)
-		}
-		if _, err := json.Marshal(ev); err != nil {
-			t.Errorf("%q: %v", payload, err)
-		}
+	ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "blur"}, {"t", ""}}, ""))
+	if ev.Detail != nil {
+		t.Errorf("detail %q", ev.Detail)
 	}
-	click := Event{Surface: "card", Kind: EventClick, Target: "go", Detail: json.RawMessage(`{"value":"1"}`)}
-	if got := click.Encode(); got != EncodePlain(Control{{"a", "ev"}, {"s", "card"}, {"e", "click"}, {"t", "go"}}, []byte(`{"value":"1"}`)) {
-		t.Errorf("Event.Encode: %q", got)
+	ev, _ = EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "click"}, {"t", "go"}}, "{not msgpack"))
+	if string(ev.Detail) != "{not msgpack" || ev.Value != "" || ev.Area != nil {
+		t.Errorf("a detail that does not decode: %+v", ev)
 	}
-	if e, _ := decodeOne(t, click.Encode()).Event(); !reflect.DeepEqual(e, click) {
+	click := Event{Surface: "card", Kind: EventClick, Target: "go", Value: "1", Detail: body(`{"value":"1"}`)}
+	if got := EncodeEvent(click); got != EncodePlain(Control{{"a", "ev"}, {"s", "card"}, {"e", "click"}, {"t", "go"}}, body(`{"value":"1"}`)) {
+		t.Errorf("EncodeEvent: %q", got)
+	}
+	if e, _ := EventOf(decodeOne(t, EncodeEvent(click))); !reflect.DeepEqual(e, click) {
 		t.Errorf("round trip: %+v", e)
 	}
 }
@@ -83,31 +83,31 @@ func TestHostReplies(t *testing.T) {
 	if got := ReplyOK("3", "card", "place", Control{{"c", "40"}, {"r", "2"}}, nil); got != "\x1b]7279;a=ok:n=3:s=card:re=place:c=40:r=2\x1b\\" {
 		t.Errorf("ReplyOK: %q", got)
 	}
-	r, _ := decodeOne(t, ReplyErr("", "card", "delta", ENOTARGET, "nope")).Reply()
+	r, _ := ReplyOf(decodeOne(t, ReplyErr("", "card", "delta", ENOTARGET, "nope")))
 	if r.OK || r.N != 0 || r.Surface != "card" || r.Re != "delta" || r.Code != ENOTARGET || r.Detail != "nope" {
 		t.Errorf("ReplyErr: %+v", r)
 	}
 	// The capabilities go as they came, fields this package does not know
 	// included, and uncompressed however long.
-	raw := json.RawMessage(`{"v":"0.1","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
-	enc := ReplyCaps("1", raw)
+	raw := body(`{"v":"0.2","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
+	enc := ReplyCaps("1", Caps{Raw: raw})
 	if strings.Contains(enc, "o=z") {
 		t.Error("a caps reply compressed")
 	}
-	r, _ = decodeOne(t, enc).Reply()
-	caps, ok := r.Caps()
-	if !ok || string(caps.Raw) != string(raw) || caps.V != "0.1" {
+	r, _ = ReplyOf(decodeOne(t, enc))
+	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.2" {
 		t.Errorf("ReplyCaps: %+v", caps)
 	}
-	// Marshalled, Caps writes only what it has.
-	if b, _ := json.Marshal(Caps{V: "0.1", Host: "h"}); string(b) != `{"v":"0.1","host":"h"}` {
-		t.Errorf("marshalled: %s", b)
+	// Written, Caps has only what it has.
+	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.2", Host: "h"})))
+	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e32a4686f7374a168" { // {"v":"0.2","host":"h"}
+		t.Errorf("written: %x", r.Message.Payload)
 	}
 }
 
 func TestMessagePlacement(t *testing.T) {
 	place := func(ctl string) (Placement, error) {
-		return decodeOne(t, "\x1b]7279;"+ctl+"\x1b\\").Placement()
+		return PlacementOf(decodeOne(t, "\x1b]7279;"+ctl+"\x1b\\"))
 	}
 	p, err := place("a=place:s=card:c=40:r=3:z=-2:p=1:C=1")
 	if want := (Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}); err != nil || p != want {

@@ -33,7 +33,7 @@
 package hottytest
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -50,6 +50,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/tinylib/msgp/msgp"
 )
 
 // Errors of the user's actions.
@@ -83,7 +84,7 @@ func Caps(c hotty.Caps) Option {
 		if c.Events != nil {
 			d.Events = c.Events
 		}
-		if c.Cell.W > 0 && c.Cell.H > 0 {
+		if c.Cell != nil && c.Cell.W > 0 && c.Cell.H > 0 {
 			d.Cell = c.Cell
 		}
 		if c.Scale > 0 {
@@ -120,7 +121,7 @@ func (h *Host) BecomeHost() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.text = false
-	if m := h.held; m != nil && m.Get("late") == "1" {
+	if m := h.held; m != nil && hotty.Get(m.Control, "late") == "1" {
 		h.command(*m)
 	}
 	h.held = nil
@@ -145,9 +146,8 @@ func AutoRows(f func(s *Surface, cols int) int) Option { return func(h *Host) { 
 // DefaultCaps are the capabilities a Host reports unless Caps says
 // otherwise.
 func DefaultCaps() hotty.Caps {
-	c := hotty.Caps{V: hotty.Version, Scale: 1, Scheme: "dark", Host: "hottytest",
+	c := hotty.Caps{V: hotty.Version, Cell: &hotty.Cell{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
 		Limits: map[string]int{"surfaces": 64}}
-	c.Cell.W, c.Cell.H = 9, 18
 	for _, op := range []hotty.Op{hotty.OpMorph, hotty.OpInner, hotty.OpReplace, hotty.OpAppend, hotty.OpPrepend,
 		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar} {
 		c.Ops = append(c.Ops, string(op))
@@ -435,7 +435,7 @@ func (h *Host) str(seq string) {
 func (h *Host) osc(seq string) {
 	if strings.HasPrefix(seq, "\x1b]11;?") {
 		bg := "rgb:1212/1212/1a1a"
-		if h.caps.Light() {
+		if hotty.Light(h.caps) {
 			bg = "rgb:ffff/ffff/ffff"
 		}
 		h.in.write("\x1b]11;" + bg + "\x1b\\")
@@ -452,7 +452,7 @@ func (h *Host) osc(seq string) {
 	}
 	h.commands = append(h.commands, m)
 	if h.text {
-		if m.Get("a") != "q" {
+		if hotty.Get(m.Control, "a") != "q" {
 			h.protocol("a HOTTY command to a terminal that is not a host (SPEC §14): %v", m.Control)
 			return
 		}
@@ -483,7 +483,7 @@ func (h *Host) protocol(format string, args ...any) {
 
 // command carries out one command and answers it (SPEC §3.6).
 func (h *Host) command(m hotty.Message) {
-	a := m.Get("a")
+	a := hotty.Get(m.Control, "a")
 	code, detail, extra := h.do(a, m)
 	if code == "" {
 		// After the reply: the host lays the document out on its next
@@ -493,17 +493,16 @@ func (h *Host) command(m hotty.Message) {
 	if code == hotty.EINVAL {
 		h.protocol("%s refused: EINVAL (%s): %v", a, detail, m.Control)
 	}
-	q := m.Get("q")
+	q := hotty.Get(m.Control, "q")
 	if q == "2" || q == "1" && code == "" {
 		return
 	}
-	n, s := m.Get("n"), m.Get("s")
+	n, s := hotty.Get(m.Control, "n"), hotty.Get(m.Control, "s")
 	switch {
 	case code != "":
 		h.send(hotty.ReplyErr(n, s, a, code, detail))
 	case a == "q":
-		caps, _ := json.Marshal(h.caps)
-		h.send(hotty.ReplyCaps(n, caps))
+		h.send(hotty.ReplyCaps(n, h.caps))
 	default:
 		h.send(hotty.ReplyOK(n, s, a, extra, nil))
 	}
@@ -514,10 +513,10 @@ func (h *Host) command(m hotty.Message) {
 func (h *Host) send(enc string) {
 	var d hotty.Decoder
 	if m, r := d.Feed(enc); r == hotty.Complete {
-		if _, ok := m.Reply(); ok {
+		if _, ok := hotty.ReplyOf(m); ok {
 			h.replies = append(h.replies, m)
 		}
-		if ev, ok := m.Event(); ok {
+		if ev, ok := hotty.EventOf(m); ok {
 			h.events = append(h.events, ev)
 		}
 	}
@@ -529,7 +528,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		return "", "", nil
 	}
 	if a == "res" {
-		id := m.Get("id")
+		id := hotty.Get(m.Control, "id")
 		if id == "" {
 			return hotty.EINVAL, "missing id", nil
 		}
@@ -537,15 +536,15 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if limit := h.caps.Limits["resources"]; limit > 0 && h.resBytes()-len(old.data)+len(m.Payload) > limit {
 			return hotty.EQUOTA, "resources", nil
 		}
-		h.res[id] = resource{mime: m.Get("type"), data: m.Payload}
+		h.res[id] = resource{mime: hotty.Get(m.Control, "type"), data: m.Payload}
 		return "", "", nil
 	}
 	if a == "del" {
-		if id, ok := m.Control.Get("id"); ok && m.Get("s") == "" {
+		if id, ok := hotty.Lookup(m.Control, "id"); ok && hotty.Get(m.Control, "s") == "" {
 			delete(h.res, id)
 			return "", "", nil
 		}
-		if !m.Has("s") {
+		if !hotty.Has(m.Control, "s") {
 			h.surfaces = map[string]*Surface{}
 			h.keyboard = nil
 			return "", "", nil
@@ -556,7 +555,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	default:
 		return hotty.EINVAL, "unknown action " + a, nil
 	}
-	name, ok := m.Control.Get("s")
+	name, ok := hotty.Lookup(m.Control, "s")
 	if !ok || !hotty.ValidName(name) {
 		return hotty.EINVAL, "bad surface name", nil
 	}
@@ -574,7 +573,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 				h.keyboard = nil
 			}
 			if h.drag != nil && h.drag.s == s {
-				if m.Get("d") == "1" {
+				if hotty.Get(m.Control, "d") == "1" {
 					h.drag = nil // detached: it reports nothing more
 				} else {
 					h.cutDrag() // a new document ends it
@@ -582,7 +581,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			}
 			s.setDoc(string(m.Payload))
 		}
-		s.detached = m.Get("d") == "1"
+		s.detached = hotty.Get(m.Control, "d") == "1"
 		return "", "", nil
 	}
 	if s == nil {
@@ -601,14 +600,14 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		s.placed = false
 		s.heard = nil
 	case "delta":
-		op := hotty.Op(m.Get("op"))
+		op := hotty.Op(hotty.Get(m.Control, "op"))
 		if op == "" {
 			op = hotty.OpMorph
 		}
 		if !slices.Contains(DefaultCaps().Ops, string(op)) {
 			return hotty.EINVAL, "unknown op " + string(op), nil
 		}
-		t, k := m.Get("t"), m.Get("k")
+		t, k := hotty.Get(m.Control, "t"), hotty.Get(m.Control, "k")
 		if t == "" && op != hotty.OpMorph {
 			return hotty.EINVAL, "missing t", nil
 		}
@@ -641,7 +640,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			return hotty.EDETACHED, name, nil
 		}
 		var el *html.Node
-		if t := m.Get("t"); t != "" {
+		if t := hotty.Get(m.Control, "t"); t != "" {
 			if el = s.byID(t); el == nil {
 				return hotty.ENOTARGET, t, nil
 			}
@@ -669,7 +668,7 @@ func (h *Host) resBytes() int {
 }
 
 func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra hotty.Control) {
-	p, err := m.Placement()
+	p, err := hotty.PlacementOf(m)
 	if e := (*hotty.Error)(nil); errors.As(err, &e) {
 		return e.Code, e.Detail, nil
 	}
@@ -732,7 +731,7 @@ func (h *Host) refit(a string, m hotty.Message) {
 			check = append(check, h.surfaces[name])
 		}
 	case "doc", "delta", "place":
-		if s := h.surfaces[m.Get("s")]; s != nil {
+		if s := h.surfaces[hotty.Get(m.Control, "s")]; s != nil {
 			check = append(check, s)
 		}
 	}
@@ -747,12 +746,20 @@ func (h *Host) refit(a string, m hotty.Message) {
 	}
 }
 
+// event sends an event with its detail as msgpack: a Go int as an int, a
+// float64 as a float (SPEC §3.3), nil for none.
 func (h *Host) event(s *Surface, kind, target string, detail any) {
 	var payload []byte
 	if detail != nil {
-		payload, _ = json.Marshal(detail)
+		var buf bytes.Buffer
+		w := msgp.NewWriter(&buf)
+		if err := w.WriteIntf(detail); err != nil || w.Flush() != nil {
+			h.tb.Errorf("hottytest: a %s detail: %v", kind, err)
+			return
+		}
+		payload = buf.Bytes()
 	}
-	h.send(hotty.Event{Surface: s.name, Kind: kind, Target: target, Detail: payload}.Encode())
+	h.send(hotty.EncodePlain(hotty.Control{{K: "a", V: "ev"}, {K: "s", V: s.name}, {K: "e", V: kind}, {K: "t", V: target}}, payload))
 }
 
 // takeKeyboard gives a surface the keyboard at el, taking it from another
@@ -1552,8 +1559,9 @@ func (h *Host) leave(s *Surface) {
 }
 
 // Emit sends any event from a surface, for what the other actions do not
-// cover (a resize, a kind from a later version). detail is marshalled as
-// JSON; nil sends none.
+// cover (a resize, a kind from a later version). detail is written as
+// msgpack, each Go int an int and each float64 a float (SPEC §3.3); nil
+// sends none.
 func (h *Host) Emit(surface, kind, target string, detail any) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()

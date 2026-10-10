@@ -19,7 +19,7 @@ A Line is one series: its box, its scale and its colour. SVG is the chart in a b
 The SVG keeps to rules that make it draw the same in every host:
 
   - Presentation attributes only (fill, stroke, stroke-width), never CSS. Some hosts hand inline SVG to an SVG library: hotty-blitz gives it to usvg, which the document's stylesheet never reaches.
-  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
+  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.CellCSS), and send new ones with Delta when it changes.
   - The \<svg> is absolutely positioned in its .chart-box (CSS), which has the size: as a grid or flex item, an \<svg> is sized by its aspect ratio in some engines (Blitz) instead of stretched.
 
 Values that change over time go best in buckets fixed in time (Xs), so that what was drawn stays put and a tick's delta moves the line along rather than reshaping it.

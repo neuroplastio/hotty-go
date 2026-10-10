@@ -129,14 +129,14 @@ func (d *Detector) Reply(r Reply, now time.Time) bool {
 	}
 	if d.State == Detecting {
 		d.State, d.Decided = Native, true
-		d.Caps, _ = r.Caps()
+		d.Caps = capsOf(r)
 		d.after = now.Add(DetectAfterReply)
 		if !d.timeout.IsZero() && d.timeout.Before(d.after) {
 			d.after = d.timeout
 		}
 	} else if d.State == Text && d.Late {
 		d.State = Native
-		d.Caps, _ = r.Caps()
+		d.Caps = capsOf(r)
 	}
 	return true
 }
@@ -183,4 +183,12 @@ func (d *Detector) update() {
 	default:
 		d.Deadline = d.timeout
 	}
+}
+
+// capsOf is the capabilities a reply carries, zero when none.
+func capsOf(r Reply) Caps {
+	if r.Caps == nil {
+		return Caps{}
+	}
+	return *r.Caps
 }

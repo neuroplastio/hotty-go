@@ -292,9 +292,9 @@ func textOf(n *nethtml.Node) string {
 // message does what a HOTTY message from the program says. The screen
 // answers nothing: the program that made a recording had its answers.
 func (s *Screen) message(m hotty.Message) {
-	name := m.Get("s")
+	name := hotty.Get(m.Control, "s")
 	sf := s.surfaces[name]
-	switch m.Get("a") {
+	switch hotty.Get(m.Control, "a") {
 	case "doc":
 		if !hotty.ValidName(name) {
 			return
@@ -313,9 +313,9 @@ func (s *Screen) message(m hotty.Message) {
 			s.delta(sf, m)
 		}
 	case "res":
-		s.resource(m.Get("id"), m.Get("type"), m.Payload)
+		s.resource(hotty.Get(m.Control, "id"), hotty.Get(m.Control, "type"), m.Payload)
 	case "del":
-		switch id := m.Get("id"); {
+		switch id := hotty.Get(m.Control, "id"); {
 		case name != "":
 			if sf != nil {
 				s.drop(sf)
@@ -471,7 +471,7 @@ func stylesheet(n *nethtml.Node) bool {
 // refused (EINVAL: a size, a window or a z out of range) changes nothing,
 // as it changed nothing where the program was recorded.
 func (s *Screen) place(sf *surface, m hotty.Message) {
-	p, err := m.Placement()
+	p, err := hotty.PlacementOf(m)
 	if err != nil {
 		return
 	}
@@ -561,16 +561,16 @@ func (s *Screen) Resources() []string {
 // delta of the screen's surface. One the screen cannot apply, it leaves
 // out: the host would refuse it too.
 func (s *Screen) delta(sf *surface, m hotty.Message) {
-	o := hotty.Op(m.Get("op"))
+	o := hotty.Op(hotty.Get(m.Control, "op"))
 	if o == "" {
 		o = hotty.OpMorph
 	}
-	key, payload := m.Get("k"), string(m.Payload)
-	if o == hotty.OpMorph && m.Get("t") == "" {
+	key, payload := hotty.Get(m.Control, "k"), string(m.Payload)
+	if o == hotty.OpMorph && hotty.Get(m.Control, "t") == "" {
 		s.morphByIDs(sf, payload)
 		return
 	}
-	tid := sf.sc.ids + m.Get("t")
+	tid := sf.sc.ids + hotty.Get(m.Control, "t")
 	target := sf.find(tid)
 	if target == nil {
 		return

@@ -361,7 +361,7 @@ func (t *Term) Detect(ctx context.Context) bool {
 		took := false
 		switch ev := ev.(type) {
 		case Message:
-			if r, ok := ev.Reply(); ok {
+			if r, ok := hotty.ReplyOf(ev.Message); ok {
 				was := d.State
 				took = d.Reply(r, time.Now())
 				if late && took {
@@ -461,7 +461,7 @@ func (t *Term) Request(ctx context.Context, build func(hotty.ReplyOption) string
 	got := make(chan hotty.Reply, 1)
 	remove := t.listen(func(ev Event) bool {
 		if m, ok := ev.(Message); ok {
-			if r, ok := m.Reply(); ok && r.N == n {
+			if r, ok := hotty.ReplyOf(m.Message); ok && r.N == n {
 				got <- r
 				return true
 			}
@@ -509,7 +509,7 @@ func (t *Term) Fence(ctx context.Context) ([]hotty.Reply, error) {
 		kept := queue[:0]
 		for _, ev := range queue {
 			if m, ok := ev.(Message); ok {
-				if r, ok := m.Reply(); ok && r.N == 0 {
+				if r, ok := hotty.ReplyOf(m.Message); ok && r.N == 0 {
 					replies = append(replies, r)
 					continue
 				}
@@ -524,7 +524,7 @@ func (t *Term) Fence(ctx context.Context) ([]hotty.Reply, error) {
 		}
 		switch ev := ev.(type) {
 		case Message:
-			if r, ok := ev.Reply(); ok && r.N == 0 {
+			if r, ok := hotty.ReplyOf(ev.Message); ok && r.N == 0 {
 				replies = append(replies, r)
 				return true
 			}

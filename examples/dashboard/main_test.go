@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/chart"
 	"github.com/neuroplastio/hotty-go/hottytest"
 )
@@ -98,8 +99,8 @@ func selected(h *hottytest.Host, i int) bool {
 func docs(h *hottytest.Host) map[string]int {
 	n := map[string]int{}
 	for _, c := range h.Commands() {
-		if c.Get("a") == "doc" {
-			n[c.Get("s")]++
+		if hotty.Get(c.Control, "a") == "doc" {
+			n[hotty.Get(c.Control, "s")]++
 		}
 	}
 	return n

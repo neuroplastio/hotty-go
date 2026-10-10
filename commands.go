@@ -22,7 +22,7 @@ type QueryOption interface{ query(*Control) }
 
 type late struct{}
 
-func (late) query(c *Control) { c.set("late", "1") }
+func (late) query(c *Control) { set(c, "late", "1") }
 
 // Late asks for a late answer (late=1, SPEC §4). What stands between the
 // program and the terminal and has no host yet, such as a multiplexer
@@ -71,7 +71,7 @@ func (ReplyOption) doc(*Control) {}
 
 type detached struct{}
 
-func (detached) doc(c *Control) { c.set("d", "1") }
+func (detached) doc(c *Control) { set(c, "d", "1") }
 
 // Detached sends a document the program only shows (d=1, SPEC §5.5): the
 // surface is created detached, or its document replaced and the surface
@@ -99,7 +99,7 @@ type scroll Axes
 
 func (s scroll) doc(c *Control) {
 	if s != 0 {
-		c.set("scroll", strconv.Itoa(int(s)))
+		set(c, "scroll", strconv.Itoa(int(s)))
 	}
 }
 
@@ -151,31 +151,31 @@ type Placement struct {
 	KeepCursor bool
 }
 
-func (p Placement) control(surface string) Control {
+func placementControl(p Placement, surface string) Control {
 	ctl := Control{{"a", "place"}, {"s", surface}, {"c", strconv.Itoa(p.Cols)}}
 	if p.Rows > 0 {
-		ctl = ctl.With("r", strconv.Itoa(p.Rows))
+		ctl = With(ctl, "r", strconv.Itoa(p.Rows))
 	} else {
-		ctl = ctl.With("r", "auto")
+		ctl = With(ctl, "r", "auto")
 	}
 	if w := p.Window; w != (Window{}) && (p.Rows <= 0 || w != (Window{0, 0, p.Cols, p.Rows})) {
 		ctl = append(ctl, KV{"x", strconv.Itoa(w.X)}, KV{"y", strconv.Itoa(w.Y)},
 			KV{"w", strconv.Itoa(w.W)}, KV{"h", strconv.Itoa(w.H)})
 	}
 	if p.Z != 0 {
-		ctl = ctl.With("z", strconv.Itoa(p.Z))
+		ctl = With(ctl, "z", strconv.Itoa(p.Z))
 	}
 	if p.Press {
-		ctl = ctl.With("p", "1")
+		ctl = With(ctl, "p", "1")
 	}
 	if p.Fit {
-		ctl = ctl.With("f", "1")
+		ctl = With(ctl, "f", "1")
 	}
 	if p.Hover {
-		ctl = ctl.With("v", "1")
+		ctl = With(ctl, "v", "1")
 	}
 	if p.KeepCursor {
-		ctl = ctl.With("C", "1")
+		ctl = With(ctl, "C", "1")
 	}
 	return ctl
 }
@@ -185,22 +185,22 @@ func (p Placement) control(surface string) Control {
 // its defaults filled in: w reaches the surface's right edge, and h its
 // bottom, which with Rows 0 is the host's to find (H 0). A command out of
 // range is an *Error with Code EINVAL, as a host answers it.
-func (m Message) Placement() (Placement, error) {
+func PlacementOf(m Message) (Placement, error) {
 	fail := func(detail string) (Placement, error) {
-		return Placement{}, &Error{Code: EINVAL, Detail: detail, Re: m.Get("a"), Surface: m.Get("s")}
+		return Placement{}, &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
 	}
-	if m.Get("a") != "place" {
+	if Get(m.Control, "a") != "place" {
 		return fail("not a place command")
 	}
 	num := func(k string, def, lo, hi int) (int, bool) {
-		v, ok := m.Control.Get(k)
+		v, ok := Lookup(m.Control, k)
 		if !ok {
 			return def, true
 		}
 		n, err := strconv.Atoi(v)
 		return n, err == nil && n >= lo && n <= hi
 	}
-	if !m.Has("c") {
+	if !Has(m.Control, "c") {
 		return fail("missing c")
 	}
 	var p Placement
@@ -208,12 +208,12 @@ func (m Message) Placement() (Placement, error) {
 	if p.Cols, ok = num("c", 0, 1, MaxSize); !ok {
 		return fail("c out of range")
 	}
-	if v := m.Get("r"); m.Has("r") && v != "auto" {
+	if v := Get(m.Control, "r"); Has(m.Control, "r") && v != "auto" {
 		if p.Rows, ok = num("r", 0, 1, MaxSize); !ok {
 			return fail("r out of range")
 		}
 	}
-	if m.Has("x") || m.Has("y") || m.Has("w") || m.Has("h") {
+	if Has(m.Control, "x") || Has(m.Control, "y") || Has(m.Control, "w") || Has(m.Control, "h") {
 		x, okx := num("x", 0, 0, MaxSize-1)
 		y, oky := num("y", 0, 0, MaxSize-1)
 		w, okw := num("w", p.Cols-x, 1, MaxSize)
@@ -226,7 +226,7 @@ func (m Message) Placement() (Placement, error) {
 	if p.Z, ok = num("z", 0, -1000, 1000); !ok {
 		return fail("z out of range")
 	}
-	p.Press, p.Fit, p.Hover, p.KeepCursor = m.Get("p") == "1", m.Get("f") == "1", m.Get("v") == "1", m.Get("C") == "1"
+	p.Press, p.Fit, p.Hover, p.KeepCursor = Get(m.Control, "p") == "1", Get(m.Control, "f") == "1", Get(m.Control, "v") == "1", Get(m.Control, "C") == "1"
 	return p, nil
 }
 
@@ -243,7 +243,7 @@ func CursorBelow(rows int) string {
 // such surface (it may have dropped it), EINVAL for a size or window out of
 // range. A reply to a placement with Rows 0 carries the rows chosen.
 func Place(surface string, p Placement, opts ...ReplyOption) string {
-	return command(p.control(surface), nil, ReplyOnError, opts)
+	return command(placementControl(p, surface), nil, ReplyOnError, opts)
 }
 
 // PlaceAt places a surface with its window's top-left corner at cell (x,
@@ -254,7 +254,7 @@ func Place(surface string, p Placement, opts ...ReplyOption) string {
 func PlaceAt(surface string, x, y int, p Placement, opts ...ReplyOption) string {
 	p.KeepCursor = true
 	return "\x1b7\x1b[" + strconv.Itoa(y+1) + ";" + strconv.Itoa(x+1) + "H" +
-		command(p.control(surface), nil, ReplyOnError, opts) + "\x1b8"
+		command(placementControl(p, surface), nil, ReplyOnError, opts) + "\x1b8"
 }
 
 // Hide removes a surface's placement and keeps its document, to place it
@@ -288,10 +288,10 @@ const (
 func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string {
 	ctl := Control{{"a", "delta"}, {"s", surface}, {"op", string(op)}}
 	if target != "" {
-		ctl = ctl.With("t", target)
+		ctl = With(ctl, "t", target)
 	}
 	if key != "" {
-		ctl = ctl.With("k", key)
+		ctl = With(ctl, "k", key)
 	}
 	return command(ctl, payload, NoReply, opts)
 }
@@ -368,7 +368,7 @@ func Detach(surface string, opts ...ReplyOption) string {
 func Focus(surface, target string, opts ...ReplyOption) string {
 	ctl := Control{{"a", "focus"}, {"s", surface}}
 	if target != "" {
-		ctl = ctl.With("t", target)
+		ctl = With(ctl, "t", target)
 	}
 	return command(ctl, nil, NoReply, opts)
 }

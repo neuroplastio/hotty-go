@@ -18,15 +18,6 @@ type Message struct {
 	Payload []byte
 }
 
-// Get returns a control key's value, "" when the message lacks it.
-func (m Message) Get(k string) string {
-	v, _ := m.Control.Get(k)
-	return v
-}
-
-// Has reports whether the message's control has a key.
-func (m Message) Has(k string) bool { return m.Control.Has(k) }
-
 // Result is what a Decoder made of one sequence.
 type Result int
 
@@ -96,7 +87,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 	if !ok {
 		return Message{}, d.bad()
 	}
-	more, hasMore := ctl.Get("m")
+	more, hasMore := Lookup(ctl, "m")
 
 	if d.pending != nil {
 		if continuation(ctl) {
@@ -116,7 +107,7 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 		return Message{}, d.invalid()
 	}
 
-	ctl = ctl.Without("m")
+	ctl = Without(ctl, "m")
 	if hasMore && more == "1" {
 		d.pending = ctl
 		d.body.WriteString(payload)
@@ -143,18 +134,18 @@ func (d *Decoder) bad() Result {
 func (d *Decoder) abort() { d.pending, d.body = nil, strings.Builder{} }
 
 func (d *Decoder) finish(ctl Control, payload string) (Message, Result) {
-	o, _ := ctl.Get("o")
+	o, _ := Lookup(ctl, "o")
 	p, ok := decodePayload(payload, o)
 	if !ok {
 		return Message{}, d.invalid()
 	}
-	return Message{Control: ctl.Without("o"), Payload: p}, Complete
+	return Message{Control: Without(ctl, "o"), Payload: p}, Complete
 }
 
 // continuation reports whether a control is a further chunk's: m, and q
 // at most (SPEC §3.4).
 func continuation(ctl Control) bool {
-	if !ctl.Has("m") {
+	if !Has(ctl, "m") {
 		return false
 	}
 	for _, kv := range ctl {
@@ -183,7 +174,7 @@ func parseControl(s string) (Control, bool) {
 				return nil, false
 			}
 		}
-		if ctl.Has(k) {
+		if Has(ctl, k) {
 			return nil, false
 		}
 		ctl = append(ctl, KV{k, v})

@@ -130,7 +130,7 @@ func TestScannerPassesAtOnce(t *testing.T) {
 func TestDetector(t *testing.T) {
 	at := func(ms int64) time.Time { return time.UnixMilli(ms) }
 	reply := func(payload string) Reply {
-		r, _ := host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}}, payload).Reply()
+		r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}}, payload))
 		return r
 	}
 	var d Detector
@@ -155,7 +155,7 @@ func TestDetector(t *testing.T) {
 	if !late.Reply(reply(`{"v":"0.1"}`), at(1600)) || late.State != Text {
 		t.Errorf("a late reply: %+v", late)
 	}
-	other, _ := host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`).Reply()
+	other, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`))
 	if late.Reply(other, at(1700)) {
 		t.Error("a reply to another query")
 	}
@@ -175,23 +175,9 @@ func TestDetector(t *testing.T) {
 	}
 }
 
-func TestCapsLenient(t *testing.T) {
-	var c Caps
-	if err := c.UnmarshalJSON([]byte(`[1]`)); err == nil {
-		t.Error("caps from a list")
-	}
-	c.Host = "kept"
-	if err := c.UnmarshalJSON([]byte(`null`)); err != nil || c.Host != "kept" {
-		t.Errorf("null: %v %+v", err, c)
-	}
-	if err := c.UnmarshalJSON([]byte(`{"cell":{"w":9},"net":{"img-src":["https://a",1],"x":"y"},"limits":{"s":1.5},"v":1}`)); err != nil {
-		t.Fatal(err)
-	}
-	if c.Cell.W != 0 || c.Limits != nil || c.V != "" || c.Host != "" || !reflect.DeepEqual(c.Net, map[string][]string{"img-src": {"https://a"}}) {
-		t.Errorf("%+v", c)
-	}
+func TestSendsDrags(t *testing.T) {
 	drags := Caps{Events: []string{EventClick, EventDrag}}
-	if !drags.Sends(EventDragStart) || !drags.Sends(EventDragEnd) || (Caps{Events: []string{EventClick}}).Sends(EventDragEnd) {
+	if !Sends(drags, EventDragStart) || !Sends(drags, EventDragEnd) || Sends((Caps{Events: []string{EventClick}}), EventDragEnd) {
 		t.Error("Sends for dragstart and dragend")
 	}
 }
@@ -199,7 +185,7 @@ func TestCapsLenient(t *testing.T) {
 // A Q given wins over the level N implies, in either order.
 func TestReplyOptionsUnordered(t *testing.T) {
 	for _, cmd := range []string{Hide("s", Q(1), N(4)), Hide("s", N(4), Q(1)), Doc("s", "", Q(1), Detached(), N(4))} {
-		if m := decodeOne(t, cmd); m.Get("q") != "1" || m.Get("n") != "4" {
+		if m := decodeOne(t, cmd); Get(m.Control, "q") != "1" || Get(m.Control, "n") != "4" {
 			t.Errorf("%q: %v", cmd, m.Control)
 		}
 	}

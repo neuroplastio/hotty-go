@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/tinylib/msgp/msgp"
 )
 
 // split cuts a stream into its OSC sequences (the way a terminal-input parser
@@ -117,15 +120,15 @@ func TestCommandsRoundTrip(t *testing.T) {
 
 func TestOptions(t *testing.T) {
 	// N numbers the command and asks for its reply.
-	if m := decodeOne(t, Place("x", Placement{Cols: 10}, N(7))); m.Get("n") != "7" || m.Get("q") != "0" {
+	if m := decodeOne(t, Place("x", Placement{Cols: 10}, N(7))); Get(m.Control, "n") != "7" || Get(m.Control, "q") != "0" {
 		t.Errorf("N: %v", m.Control)
 	}
 	// Q after N asks for less; the key is sent once.
 	cmd := SetText("x", "t", "v", N(3), Q(ReplyOnError))
-	if m := decodeOne(t, cmd); m.Get("n") != "3" || m.Get("q") != "1" || strings.Count(cmd, "q=") != 1 {
+	if m := decodeOne(t, cmd); Get(m.Control, "n") != "3" || Get(m.Control, "q") != "1" || strings.Count(cmd, "q=") != 1 {
 		t.Errorf("N, Q: %q", cmd)
 	}
-	if m := decodeOne(t, Doc("x", "<p>", Q(NoReply))); m.Get("q") != "2" {
+	if m := decodeOne(t, Doc("x", "<p>", Q(NoReply))); Get(m.Control, "q") != "2" {
 		t.Errorf("Q: %v", m.Control)
 	}
 }
@@ -138,11 +141,11 @@ func TestValuesCannotInject(t *testing.T) {
 		t.Fatalf("%d sequences: %q", len(got), cmd)
 	}
 	m := decodeOne(t, cmd)
-	if m.Get("t") != `x_q_0_AAAA_\` || m.Get("q") != "2" || string(m.Payload) != "payload" {
+	if Get(m.Control, "t") != `x_q_0_AAAA_\` || Get(m.Control, "q") != "2" || string(m.Payload) != "payload" {
 		t.Errorf("got %v %q", m.Control, m.Payload)
 	}
-	if m := decodeOne(t, SetAttr("s", "café", "data-x", "1")); m.Get("t") != "caf_" {
-		t.Errorf("non-ASCII: %q", m.Get("t"))
+	if m := decodeOne(t, SetAttr("s", "café", "data-x", "1")); Get(m.Control, "t") != "caf_" {
+		t.Errorf("non-ASCII: %q", Get(m.Control, "t"))
 	}
 	if got := Encode(Control{{"a", "q"}}, nil); got != "\x1b]7279;a=q\x1b\\" {
 		t.Errorf("clean values are sent as they are: %q", got)
@@ -239,7 +242,7 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 	if string(m.Payload) != html {
 		t.Fatal("chunks did not reassemble")
 	}
-	if m.Has("o") {
+	if Has(m.Control, "o") {
 		t.Error("o is the envelope's, not the message's")
 	}
 
@@ -271,7 +274,7 @@ func TestDocDetachedChunked(t *testing.T) {
 			t.Errorf("a continuation chunk carries d: %q", s[:30])
 		}
 	}
-	if m := decodeOne(t, strings.Join(seqs, "")); m.Get("d") != "1" || string(m.Payload) != text {
+	if m := decodeOne(t, strings.Join(seqs, "")); Get(m.Control, "d") != "1" || string(m.Payload) != text {
 		t.Error("the chunks did not reassemble a detached document")
 	}
 }
@@ -319,7 +322,7 @@ func TestDecoder(t *testing.T) {
 	var d Decoder
 	d.Feed("\x1b]7279;a=doc:s=x:m=1;PHA+\x1b\\")
 	m, r := d.Feed("\x1b]7279;a=del\x1b\\")
-	if r != Complete || m.Get("a") != "del" || len(m.Control) != 1 || d.Invalid != 1 {
+	if r != Complete || Get(m.Control, "a") != "del" || len(m.Control) != 1 || d.Invalid != 1 {
 		t.Errorf("after the abort: %v %v, %d invalid", r, m.Control, d.Invalid)
 	}
 
@@ -338,11 +341,11 @@ func TestResultString(t *testing.T) {
 }
 
 func TestControlGet(t *testing.T) {
-	c := Control{{"a", "doc"}}.With("s", "x")
-	if v, ok := c.Get("s"); !ok || v != "x" {
+	c := With(Control{{"a", "doc"}}, "s", "x")
+	if v, ok := Lookup(c, "s"); !ok || v != "x" {
 		t.Errorf("Get(s) = %q, %v", v, ok)
 	}
-	if _, ok := c.Get("q"); ok {
+	if _, ok := Lookup(c, "q"); ok {
 		t.Error("Get(q) found a missing key")
 	}
 }
@@ -350,176 +353,284 @@ func TestControlGet(t *testing.T) {
 // host encodes what a host would send.
 func host(ctl Control, payload string) Message {
 	var d Decoder
-	m, _ := d.Feed(Encode(ctl, []byte(payload)))
+	m, _ := d.Feed(Encode(ctl, body(payload)))
 	return m
 }
 
+// body is a body written as JSON, as msgpack: a number with a fraction or
+// an exponent a float, any other an int (conformance/README.md, Numbers).
+// What is not JSON goes as it is.
+func body(js string) []byte {
+	if js == "" {
+		return nil
+	}
+	d := json.NewDecoder(strings.NewReader(js))
+	d.UseNumber()
+	var v any
+	if d.Decode(&v) != nil {
+		return []byte(js)
+	}
+	var buf bytes.Buffer
+	w := msgp.NewWriter(&buf)
+	if err := w.WriteIntf(typed(v)); err != nil {
+		panic(err)
+	}
+	_ = w.Flush()
+	return buf.Bytes()
+}
+
+// typed is v with its JSON numbers as ints and floats.
+func typed(v any) any {
+	switch v := v.(type) {
+	case json.Number:
+		if strings.ContainsAny(string(v), ".eE") {
+			f, _ := v.Float64()
+			return f
+		}
+		n, _ := v.Int64()
+		return n
+	case []any:
+		for i := range v {
+			v[i] = typed(v[i])
+		}
+	case map[string]any:
+		for k := range v {
+			v[k] = typed(v[k])
+		}
+	}
+	return v
+}
+
 func TestEvents(t *testing.T) {
-	m := host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"name":"Ada","n":3,"ok":true,"none":null}`)
-	ev, ok := m.Event()
+	m := host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"name":"Ada","plan":"pro"}`)
+	ev, ok := EventOf(m)
 	if !ok || ev.Kind != EventSubmit || ev.Surface != "form" || ev.Target != "f" {
 		t.Fatalf("event: %+v", ev)
 	}
-	if got, want := ev.Fields(), map[string]string{"name": "Ada", "n": "3", "ok": "true"}; !reflect.DeepEqual(got, want) {
+	if got, want := ev.Fields, map[string]string{"name": "Ada", "plan": "pro"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Fields = %v", got)
 	}
-
-	change, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "change"}, {"t", "box"}}, `{"checked":true,"value":"on"}`).Event()
-	if c, ok := change.Checked(); !ok || !c || change.Value() != "on" {
-		t.Errorf("checkbox change: %v %v %q", c, ok, change.Value())
+	// A field that is not a string: the detail does not decode.
+	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"name":"Ada","n":3}`)); ev.Fields != nil {
+		t.Errorf("Fields with a number = %v", ev.Fields)
 	}
-	if _, ok := ev.Checked(); ok {
+
+	change, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "change"}, {"t", "box"}}, `{"checked":true,"value":"on"}`))
+	if change.Checked == nil || !*change.Checked || change.Value != "on" {
+		t.Errorf("checkbox change: %v %q", change.Checked, change.Value)
+	}
+	if ev.Checked != nil {
 		t.Error("a submit has no checked")
 	}
 
-	link, _ := host(Control{{"a", "ev"}, {"s", "post"}, {"e", "click"}, {"t", ""}}, `{"href":"../about","url":"https://example.com/about"}`).Event()
-	if href, url, ok := link.Link(); !ok || href != "../about" || url != "https://example.com/about" {
-		t.Errorf("Link = %q %q %v", href, url, ok)
+	link, _ := EventOf(host(Control{{"a", "ev"}, {"s", "post"}, {"e", "click"}, {"t", ""}}, `{"href":"../about","url":"https://example.com/about"}`))
+	if link.Link == nil || *link.Link != (Link{Href: "../about", URL: "https://example.com/about"}) {
+		t.Errorf("Link = %+v", link.Link)
 	}
-	button, _ := host(Control{{"a", "ev"}, {"s", "card"}, {"e", "click"}, {"t", "go"}}, "").Event()
-	if _, _, ok := button.Link(); ok || button.Value() != "" {
+	button, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "click"}, {"t", "go"}}, ""))
+	if button.Link != nil || button.Value != "" || button.Detail != nil {
 		t.Error("a button's click is not a link's")
 	}
 
-	resize, _ := host(Control{{"a", "ev"}, {"s", "card"}, {"e", "resize"}}, `{"w":360,"h":72.5}`).Event()
-	if w, h, ok := resize.Size(); !ok || w != 360 || h != 72.5 {
-		t.Errorf("Size = %v %v %v", w, h, ok)
+	resize, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "resize"}}, `{"w":360.0,"h":72.5}`))
+	if resize.Size == nil || *resize.Size != (Size{W: 360, H: 72.5}) {
+		t.Errorf("Size = %+v", resize.Size)
 	}
-	if _, _, ok := button.Size(); ok {
-		t.Error("a click has no size")
+	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "resize"}}, `{"w":360,"h":72.5}`)); ev.Size != nil {
+		t.Error("a size in an int is not a size")
 	}
 
-	fit, _ := host(Control{{"a", "ev"}, {"s", "card"}, {"e", "fit"}, {"t", ""}}, `{"r":7}`).Event()
-	if r, ok := fit.FitRows(); !ok || r != 7 {
-		t.Errorf("FitRows = %v %v", r, ok)
+	fit, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "fit"}, {"t", ""}}, `{"r":7}`))
+	if fit.FitRows != 7 {
+		t.Errorf("FitRows = %v", fit.FitRows)
 	}
-	for _, bad := range []string{`{"r":0}`, `{}`, `{"r":"7"}`} {
-		if _, ok := (Event{Kind: EventFit, Detail: []byte(bad)}).FitRows(); ok {
+	for _, bad := range []string{`{"r":7.0}`, `{}`, `{"r":"7"}`} {
+		if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "fit"}}, bad)); ev.FitRows != 0 {
 			t.Errorf("FitRows on %s", bad)
 		}
 	}
-	if _, ok := resize.FitRows(); ok {
+	if resize.FitRows != 0 {
 		t.Error("a resize has no fit rows")
 	}
 
-	over, _ := host(Control{{"a", "ev"}, {"s", "list"}, {"e", "hover"}, {"t", "row4"}}, `{"c":2,"r":4}`).Event()
-	if h, ok := over.Hover(); !ok || h.Out || h.Col != 2 || h.Row != 4 || over.Target != "row4" {
-		t.Errorf("Hover = %+v %v", h, ok)
+	over, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "hover"}, {"t", "row4"}}, `{"c":2,"r":4}`))
+	if over.Hover == nil || *over.Hover != (Hover{Col: 2, Row: 4}) || over.Target != "row4" {
+		t.Errorf("Hover = %+v", over.Hover)
 	}
-	out, _ := host(Control{{"a", "ev"}, {"s", "list"}, {"e", "hover"}, {"t", ""}}, `{"out":true}`).Event()
-	if h, ok := out.Hover(); !ok || !h.Out || h.Col != 0 {
-		t.Errorf("Hover out = %+v %v", h, ok)
+	out, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "hover"}, {"t", ""}}, `{"out":true}`))
+	if out.Hover == nil || *out.Hover != (Hover{Out: true}) {
+		t.Errorf("Hover out = %+v", out.Hover)
 	}
-	for _, bad := range []string{`{}`, `{"c":1}`, `[`} {
-		if _, ok := (Event{Kind: EventHover, Detail: []byte(bad)}).Hover(); ok {
+	for _, bad := range []string{`{}`, `{"c":1}`, `{"c":1.0,"r":2}`, `[`} {
+		if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "hover"}}, bad)); ev.Hover != nil {
 			t.Errorf("Hover on %s", bad)
 		}
 	}
-	if _, ok := fit.Hover(); ok {
+	if fit.Hover != nil {
 		t.Error("a fit is no hover")
 	}
 
-	drag, _ := host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"keys":["shift","ctrl"]}`).Event()
-	if d, ok := drag.Drag(); !ok || d.Col != -2 || d.Row != 7 || !d.Has("shift") || !d.Has("ctrl") || d.Has("alt") {
-		t.Errorf("Drag = %+v %v", d, ok)
+	drag, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"keys":["shift","ctrl"]}`))
+	if d := drag.Drag; d == nil || d.Col != -2 || d.Row != 7 || !slices.Equal(d.Keys, []string{"shift", "ctrl"}) || d.HasX || d.HasY {
+		t.Errorf("Drag = %+v", d)
 	}
-	end, _ := host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"keys":[]}`).Event()
-	if d, ok := end.Drag(); !ok || d.Col != 0 || d.Row != 0 || len(d.Keys) != 0 {
-		t.Errorf("a dragend outside: %+v %v", d, ok)
+	steps, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"keys":[],"x":0}`))
+	if d := steps.Drag; d == nil || d.Col != 0 || len(d.Keys) != 0 || !d.HasX || d.X != 0 || d.HasY {
+		t.Errorf("a dragend with a step: %+v", d)
 	}
-	if _, ok := button.Drag(); ok {
+	if button.Drag != nil {
 		t.Error("a click is no drag")
 	}
-	if _, ok := (Event{Kind: EventDragStart, Detail: []byte(`{"r":1}`)}).Drag(); ok {
-		t.Error("a drag's detail without its column")
+	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "drag"}}, `{"c":1,"r":0,"keys":[],"x":2.5}`)); ev.Drag != nil {
+		t.Error("a drag with a step that is not an int")
 	}
 
-	env, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "click"}, {"t", "env"}}, `{"value":"staging","area":{"c":2,"r":0,"w":12,"h":1}}`).Event()
-	if a, ok := env.Area(); !ok || a != (Area{Col: 2, Row: 0, W: 12, H: 1}) || env.Value() != "staging" {
-		t.Errorf("Area = %+v %v", a, ok)
+	env, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "click"}, {"t", "env"}}, `{"value":"staging","area":{"c":2,"r":0,"w":12,"h":1}}`))
+	if env.Area == nil || *env.Area != (Area{Col: 2, Row: 0, W: 12, H: 1}) || env.Value != "staging" {
+		t.Errorf("Area = %+v", env.Area)
 	}
-	title, _ := host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}, {"t", "title"}}, `{"area":{"c":-1,"r":3,"w":5,"h":2}}`).Event()
-	if a, ok := title.Area(); !ok || a.Col != -1 || a.H != 2 {
-		t.Errorf("a press's Area = %+v %v", a, ok)
+	title, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}, {"t", "title"}}, `{"area":{"c":-1,"r":3,"w":5,"h":2}}`))
+	if a := title.Area; a == nil || a.Col != -1 || a.H != 2 {
+		t.Errorf("a press's Area = %+v", a)
 	}
-	for _, bad := range []string{`{}`, `{"area":null}`, `{"area":[2,0,12,1]}`, `{"area":{"c":2,"r":0,"w":12}}`, `{"area":{"c":2,"r":0,"w":12,"h":1.5}}`, `{"area":{"c":2,"r":0,"w":"12","h":1}}`, `[`} {
-		if _, ok := (Event{Kind: EventClick, Detail: []byte(bad)}).Area(); ok {
+	for _, bad := range []string{`{}`, `{"area":null}`, `{"area":[2,0,12,1]}`, `{"area":{"c":2,"r":0,"w":12,"h":1.5}}`, `{"area":{"c":2,"r":0,"w":"12","h":1}}`, `[`} {
+		if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "click"}}, bad)); ev.Area != nil {
 			t.Errorf("Area on %s", bad)
 		}
 	}
-	if _, ok := (Event{Kind: EventChange, Detail: []byte(`{"area":{"c":2,"r":0,"w":12,"h":1}}`)}).Area(); ok {
+	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "change"}}, `{"value":"x","area":{"c":2,"r":0,"w":12,"h":1}}`)); ev.Area != nil || ev.Value != "x" {
 		t.Error("a change has no area")
 	}
 
-	if _, ok := host(Control{{"a", "ok"}, {"re", "doc"}}, "").Event(); ok {
+	if _, ok := EventOf(host(Control{{"a", "ok"}, {"re", "doc"}}, "")); ok {
 		t.Error("a reply is not an event")
+	}
+}
+
+// What a host writes is what a program reads.
+func TestEncodeEvent(t *testing.T) {
+	on, x := true, 3
+	for _, e := range []Event{
+		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}},
+		{Surface: "f", Kind: EventClick, Target: "", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}},
+		{Surface: "f", Kind: EventClick, Target: "plain"},
+		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}},
+		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
+		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
+		{Surface: "f", Kind: EventInput, Target: "q", Value: "ab"},
+		{Surface: "f", Kind: EventSubmit, Target: "form", Fields: map[string]string{"name": "Ada"}},
+		{Surface: "f", Kind: EventResize, Size: &Size{W: 320, H: 48.5}},
+		{Surface: "f", Kind: EventFit, FitRows: 7},
+		{Surface: "g", Kind: EventDrag, Target: "c1", Drag: &Drag{Col: -2, Row: 5, Keys: []string{"shift"}, X: x, HasX: true}},
+		{Surface: "g", Kind: EventDragEnd, Drag: &Drag{Col: 1, Row: 0}},
+		{Surface: "g", Kind: EventHover, Target: "c1", Hover: &Hover{Col: 0, Row: 4}},
+		{Surface: "g", Kind: EventHover, Hover: &Hover{Out: true}},
+		{Surface: "g", Kind: EventFocus, Target: "name"},
+	} {
+		var d Decoder
+		m, _ := d.Feed(EncodeEvent(e))
+		got, ok := EventOf(m)
+		got.Detail = nil
+		if !ok || !reflect.DeepEqual(got, e) {
+			t.Errorf("%s: wrote %+v, read %+v", e.Kind, e, got)
+		}
+	}
+	// A relay's detail goes on as it came.
+	e := Event{Surface: "f", Kind: EventClick, Value: "not this", Detail: body(`{"value":"this","future":[1]}`)}
+	var d Decoder
+	m, _ := d.Feed(EncodeEvent(e))
+	if got, _ := EventOf(m); got.Value != "this" || !bytes.Equal(got.Detail, e.Detail) {
+		t.Errorf("a relay's detail: %+v", got)
 	}
 }
 
 func TestReplies(t *testing.T) {
 	m := host(Control{{"a", "err"}, {"s", "x"}, {"re", "delta"}}, `{"code":"ENOTARGET","detail":"gone"}`)
-	r, ok := m.Reply()
+	r, ok := ReplyOf(m)
 	if !ok || r.OK || r.Code != ENOTARGET || r.Detail != "gone" || r.Re != "delta" || r.Surface != "x" {
 		t.Fatalf("error reply: %+v", r)
 	}
-	err := r.Err()
+	err := Err(r)
 	var he *Error
 	if !errors.As(err, &he) || he.Code != ENOTARGET || err.Error() != "hotty: delta x: ENOTARGET (gone)" {
 		t.Errorf("Err = %v", err)
 	}
-	if err := (Reply{OK: false, Re: "q", Code: EINVAL}).Err(); err.Error() != "hotty: q: EINVAL" {
+	if err := Err((Reply{OK: false, Re: "q", Code: EINVAL})); err.Error() != "hotty: q: EINVAL" {
 		t.Errorf("Err without surface or detail = %v", err)
 	}
+	var d Decoder
+	written, _ := d.Feed(ReplyErr("3", "x", "delta", ENOTARGET, "gone"))
+	if r, _ := ReplyOf(written); r.Code != ENOTARGET || r.Detail != "gone" || r.N != 3 {
+		t.Errorf("ReplyErr read back: %+v", r)
+	}
+	if r, _ := ReplyOf(host(Control{{"a", "err"}, {"re", "doc"}}, `{"code":1}`)); r.OK || r.Code != "" {
+		t.Errorf("an error whose body does not decode: %+v", r)
+	}
 
-	r, _ = host(Control{{"a", "ok"}, {"n", "4"}, {"s", "card"}, {"re", "place"}, {"c", "40"}, {"r", "3"}}, "").Reply()
-	if !r.OK || r.N != 4 || r.Cols != 40 || r.Rows != 3 || r.Err() != nil {
+	r, _ = ReplyOf(host(Control{{"a", "ok"}, {"n", "4"}, {"s", "card"}, {"re", "place"}, {"c", "40"}, {"r", "3"}}, ""))
+	if !r.OK || r.N != 4 || r.Cols != 40 || r.Rows != 3 || Err(r) != nil {
 		t.Errorf("place reply: %+v", r)
 	}
-	if _, ok := r.Caps(); ok {
+	if r.Caps != nil {
 		t.Error("a place reply has no caps")
 	}
-	if _, ok := host(Control{{"a", "ev"}, {"e", "click"}}, "").Reply(); ok {
+	if _, ok := ReplyOf(host(Control{{"a", "ev"}, {"e", "click"}}, "")); ok {
 		t.Error("an event is not a reply")
 	}
 }
 
 func TestCaps(t *testing.T) {
-	r, _ := host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
-		`{"v":"0.1","ops":["text","var"],"events":["click"],"cell":{"w":20,"h":42},"scale":2,"scheme":"light",`+
-			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`).Reply()
-	caps, ok := r.Caps()
-	if !ok || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
+	r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
+		`{"v":"0.2","ops":["text","var"],"events":["click"],"cell":{"w":20,"h":42},"scale":2.0,"scheme":"light",`+
+			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
+	caps := r.Caps
+	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
 		t.Fatalf("caps: %+v", caps)
 	}
-	if w, h := caps.CellCSS(); w != 10 || h != 21 {
+	if !bytes.Equal(caps.Raw, r.Message.Payload) {
+		t.Error("Raw is not the body")
+	}
+	if w, h := CellCSS(*caps); w != 10 || h != 21 {
 		t.Errorf("CellCSS = %v×%v", w, h)
 	}
-	if !caps.Supports(OpText) || caps.Supports(OpMorph) || !caps.Sends(EventClick) || caps.Sends(EventPress) || !caps.Light() {
+	if !Supports(*caps, OpText) || Supports(*caps, OpMorph) || !Sends(*caps, EventClick) || Sends(*caps, EventPress) || !Light(*caps) {
 		t.Errorf("Supports, Sends, Light: %+v", caps)
 	}
 	var none Caps
-	if w, h := none.CellCSS(); w != 9 || h != 18 {
+	if w, h := CellCSS(none); w != 9 || h != 18 {
 		t.Errorf("CellCSS before a host said = %v×%v", w, h)
 	}
-	if !none.Supports(OpMorph) || !none.Sends(EventPress) || none.Light() {
+	if !Supports(none, OpMorph) || !Sends(none, EventPress) || Light(none) {
 		t.Error("a host that lists nothing")
 	}
 	// Drags are only where a host lists them.
-	if caps.Drags() || none.Drags() || !(Caps{Events: []string{EventClick, EventDrag}}).Drags() {
+	if Drags(*caps) || Drags(none) || !Drags((Caps{Events: []string{EventClick, EventDrag}})) {
 		t.Error("Drags")
 	}
 	// So is hover.
-	if caps.Hovers() || none.Hovers() || !(Caps{Events: []string{EventHover}}).Hovers() {
+	if Hovers(*caps) || Hovers(none) || !Hovers((Caps{Events: []string{EventHover}})) {
 		t.Error("Hovers")
 	}
 	// Scroll only where a host says so.
-	scrolls, _ := host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":"0.1","scroll":true}`).Reply()
-	if c, ok := scrolls.Caps(); !ok || !c.Scroll || caps.Scroll {
+	scrolls, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":"0.2","scroll":true}`))
+	if c := scrolls.Caps; c == nil || !c.Scroll || caps.Scroll {
 		t.Error("Scroll")
 	}
-	bad, _ := host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":`).Reply()
-	if _, ok := bad.Caps(); ok {
-		t.Error("caps from bad JSON")
+	for _, bad := range []string{`{"v":`, `{"v":"0.2","scale":2}`, `{"v":"0.2","events":["click",3]}`, `["v"]`} {
+		if r, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, bad)); r.Caps != nil {
+			t.Errorf("caps from %s", bad)
+		}
+	}
+	// What a host writes is what a program reads, and a relay passes on
+	// what it does not know.
+	var d Decoder
+	m, _ := d.Feed(ReplyCaps("1", Caps{V: Version, Cell: &Cell{W: 16, H: 32}, Scale: 2, Events: []string{EventClick}}))
+	if r, _ := ReplyOf(m); r.Caps == nil || r.Caps.Cell == nil || r.Caps.Cell.W != 16 || r.Caps.Scale != 2 || !Sends(*r.Caps, EventClick) {
+		t.Errorf("ReplyCaps read back: %+v", r.Caps)
+	}
+	m, _ = d.Feed(ReplyCaps("2", *caps))
+	if r, _ := ReplyOf(m); r.Caps == nil || !bytes.Equal(r.Caps.Raw, caps.Raw) {
+		t.Error("a relay's caps changed")
 	}
 }
 
@@ -563,12 +674,12 @@ func TestWireVectors(t *testing.T) {
 			}
 			for i, c := range w.Commands {
 				for k, val := range c.Control {
-					if got[i].Get(k) != val {
-						t.Errorf("%s=%q, want %q", k, got[i].Get(k), val)
+					if Get(got[i].Control, k) != val {
+						t.Errorf("%s=%q, want %q", k, Get(got[i].Control, k), val)
 					}
 				}
 				for _, k := range []string{"m", "o"} {
-					if got[i].Has(k) {
+					if Has(got[i].Control, k) {
 						t.Errorf("%s is present", k)
 					}
 				}

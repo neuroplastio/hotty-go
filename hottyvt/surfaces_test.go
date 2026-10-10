@@ -96,7 +96,7 @@ func TestSurfaceShowsAtItsCells(t *testing.T) {
 		t.Errorf("the rows: %q", got)
 	}
 	// The resources, for a host that has not had them.
-	if res := decode(s.Resources()); len(res) != 1 || res[0].Get("id") != "vt-logo" {
+	if res := decode(s.Resources()); len(res) != 1 || hotty.Get(res[0].Control, "id") != "vt-logo" {
 		t.Errorf("Resources: %v", res)
 	}
 }
@@ -125,10 +125,10 @@ func TestSurfacePlacements(t *testing.T) {
 		var box string
 		for _, m := range decode(s.Delta("vt")) {
 			switch {
-			case m.Get("op") == "attr" && m.Get("t") == "vt-p1":
+			case hotty.Get(m.Control, "op") == "attr" && hotty.Get(m.Control, "t") == "vt-p1":
 				box = string(m.Payload)
-			case m.Get("op") == "append" && strings.Contains(string(m.Payload), `style="display:none"`):
-			case m.Get("a") == "delta" && !strings.HasPrefix(m.Get("t"), "vt-r"):
+			case hotty.Get(m.Control, "op") == "append" && strings.Contains(string(m.Payload), `style="display:none"`):
+			case hotty.Get(m.Control, "a") == "delta" && !strings.HasPrefix(hotty.Get(m.Control, "t"), "vt-r"):
 				t.Errorf("step %d: %v %q", i, m.Control, m.Payload)
 			}
 		}
@@ -137,7 +137,7 @@ func TestSurfacePlacements(t *testing.T) {
 		}
 	}
 	_, _ = s.WriteString(hotty.Del("card"))
-	if ms := decode(s.Delta("vt")); len(ms) != 1 || ms[0].Get("op") != "remove" || ms[0].Get("t") != "vt-p1" {
+	if ms := decode(s.Delta("vt")); len(ms) != 1 || hotty.Get(ms[0].Control, "op") != "remove" || hotty.Get(ms[0].Control, "t") != "vt-p1" {
 		t.Errorf("a delete: %v", ms)
 	}
 }
@@ -152,7 +152,7 @@ func TestSurfaceScrollsWithItsLine(t *testing.T) {
 	style := func() string {
 		var st string
 		for _, m := range decode(s.Delta("vt")) {
-			if m.Get("op") == "attr" && m.Get("t") == "vt-p1" {
+			if hotty.Get(m.Control, "op") == "attr" && hotty.Get(m.Control, "t") == "vt-p1" {
 				st = string(m.Payload)
 			}
 		}
@@ -238,7 +238,7 @@ func TestSurfaceIsShownNotUsed(t *testing.T) {
 		}
 	}
 	_, _ = s.WriteString(hotty.SetAttr("d", "go", "href", "/other"))
-	if ms := decode(s.Delta("vt")); len(ms) != 1 || ms[0].Get("op") != "unattr" || ms[0].Get("k") != "href" {
+	if ms := decode(s.Delta("vt")); len(ms) != 1 || hotty.Get(ms[0].Control, "op") != "unattr" || hotty.Get(ms[0].Control, "k") != "href" {
 		t.Errorf("a link's href set: %v", ms)
 	}
 }
@@ -266,7 +266,7 @@ func TestSurfaceDeltasNobodyAskedFor(t *testing.T) {
 	}
 	cmds := s.Delta("vt")
 	ms := decode(cmds)
-	if len(ms) != 1 || ms[0].Get("t") != "vt" || ms[0].Get("op") != "morph" {
+	if len(ms) != 1 || hotty.Get(ms[0].Control, "t") != "vt" || hotty.Get(ms[0].Control, "op") != "morph" {
 		t.Fatalf("%d commands, the first %v", len(ms), ms[0].Control)
 	}
 	send(t, h, hotty.Sync(cmds...))

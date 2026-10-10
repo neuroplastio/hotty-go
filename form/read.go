@@ -204,16 +204,11 @@ func (st *State) Apply(e hotty.Event) bool {
 	if e.Kind != hotty.EventChange {
 		return false
 	}
-	var d struct {
-		Value   *string `json:"value"`
-		Checked *bool   `json:"checked"`
-	}
-	_ = json.Unmarshal(e.Detail, &d)
 	for i, f := range st.spec.Fields {
 		switch f.kind() {
 		case Checkbox:
-			if e.Target == ControlID(i) && d.Checked != nil {
-				if *d.Checked {
+			if e.Target == ControlID(i) && e.Checked != nil {
+				if *e.Checked {
 					st.fields[f.Name] = "true"
 				} else {
 					delete(st.fields, f.Name)
@@ -222,14 +217,15 @@ func (st *State) Apply(e hotty.Event) bool {
 			}
 		case Select, Radio:
 			for j, o := range f.Options {
-				if e.Target == OptionID(i, j) && d.Checked != nil && *d.Checked {
+				if e.Target == OptionID(i, j) && e.Checked != nil && *e.Checked {
 					st.fields[f.Name] = o
 					return true
 				}
 			}
 		default:
-			if e.Target == ControlID(i) && d.Value != nil {
-				st.fields[f.Name] = *d.Value
+			// A text control's change carries its value, "" included.
+			if e.Target == ControlID(i) && e.Checked == nil {
+				st.fields[f.Name] = e.Value
 				return true
 			}
 		}

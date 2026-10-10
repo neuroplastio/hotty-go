@@ -18,6 +18,8 @@ require (
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285 // indirect
 	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010205551-4d256c3d4207 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/tinylib/msgp v1.6.5 // indirect
 )
 
 require (

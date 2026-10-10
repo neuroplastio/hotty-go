@@ -1,6 +1,8 @@
 package hottytest
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/tinylib/msgp/msgp"
 )
 
 // recorder is a test that records what would fail it.
@@ -46,16 +49,16 @@ func sent(h *Host) []string {
 		end := strings.Index(stream, "\x1b\\") + 2
 		m, _ := d.Feed(stream[:end])
 		stream = stream[end:]
-		if ev, ok := m.Event(); ok {
+		if ev, ok := hotty.EventOf(m); ok {
 			line := "ev " + ev.Kind + " t=" + ev.Target
 			if len(ev.Detail) > 0 {
-				line += " " + string(ev.Detail)
+				line += " " + detailJSON(ev.Detail)
 			}
 			out = append(out, line)
 			continue
 		}
-		r, _ := m.Reply()
-		line := m.Get("a") + " re=" + r.Re
+		r, _ := hotty.ReplyOf(m)
+		line := hotty.Get(m.Control, "a") + " re=" + r.Re
 		if r.Surface != "" {
 			line += " s=" + r.Surface
 		}
@@ -65,6 +68,16 @@ func sent(h *Host) []string {
 		out = append(out, line)
 	}
 	return out
+}
+
+// detailJSON is a msgpack detail as JSON, its maps' keys sorted.
+func detailJSON(b []byte) string {
+	v, err := msgp.NewReader(bytes.NewReader(b)).ReadIntf()
+	if err != nil {
+		return fmt.Sprintf("%x", b)
+	}
+	j, _ := json.Marshal(v)
+	return string(j)
 }
 
 func expect(t *testing.T, got []string, want ...string) {
@@ -106,9 +119,9 @@ func TestQueryAndCaps(t *testing.T) {
 	var d hotty.Decoder
 	seqs := oscs(h.drain())
 	m, _ := d.Feed(seqs[0])
-	r, _ := m.Reply()
-	caps, ok := r.Caps()
-	if !ok || r.N != 5 || caps.Host != "mine" || caps.Limits["surfaces"] != 3 || caps.V != hotty.Version || caps.Cell.H != 18 {
+	r, _ := hotty.ReplyOf(m)
+	caps := r.Caps
+	if caps == nil || r.N != 5 || caps.Host != "mine" || caps.Limits["surfaces"] != 3 || caps.V != hotty.Version || caps.Cell == nil || caps.Cell.H != 18 {
 		t.Errorf("caps %+v, reply %+v", caps, r)
 	}
 	// Hosts never compress (SPEC §3.3), however long the reply.
@@ -154,7 +167,7 @@ func TestBecomeHostAnswersALateQuery(t *testing.T) {
 		t.Fatalf("after BecomeHost: %q", seqs)
 	}
 	m, _ := d.Feed(seqs[0])
-	if r, _ := m.Reply(); !r.OK || r.Re != "q" || r.N != 3 {
+	if r, _ := hotty.ReplyOf(m); !r.OK || r.Re != "q" || r.N != 3 {
 		t.Errorf("the late answer: %+v", r)
 	}
 	send(h, hotty.Doc("x", "<p>hi</p>", hotty.N(4)))
@@ -791,7 +804,7 @@ func TestPressAndEmit(t *testing.T) {
 	if err := h.Press("nope", ""); !errors.Is(err, ErrNoSurface) {
 		t.Errorf("Press on no surface: %v", err)
 	}
-	_ = h.Emit("p", hotty.EventResize, "", map[string]int{"w": 90, "h": 36})
+	_ = h.Emit("p", hotty.EventResize, "", map[string]float64{"w": 90, "h": 36})
 	expect(t, sent(h), `ev resize t= {"h":36,"w":90}`)
 	if err := h.Emit("nope", "x", "", nil); !errors.Is(err, ErrNoSurface) {
 		t.Errorf("Emit on no surface: %v", err)
@@ -1020,4 +1033,18 @@ func TestReplies(t *testing.T) {
 	if evs := h.Events(); len(evs) != 1 || evs[0].Kind != "custom" || evs[0].Target != "p" {
 		t.Errorf("Events %+v", evs)
 	}
+}
+
+func TestBody(t *testing.T) {
+	r, _ := hotty.ReplyOf(hotty.Message{Control: hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}},
+		Payload: Body(`{"v":"0.2","scale":2.0,"cell":{"w":9,"h":18},"limits":{"surfaces":3}}`)})
+	if c := r.Caps; c == nil || c.Scale != 2 || c.Cell.W != 9 || c.Limits["surfaces"] != 3 {
+		t.Errorf("caps %+v", c)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("Body of what is not JSON")
+		}
+	}()
+	Body(`{`)
 }

@@ -277,9 +277,9 @@ type surface struct {
 
 // newSurface places the chart, waiting for numbers, under the command line.
 func newSurface(ctx context.Context, t *hottyterm.Term, rows int) *surface {
-	cw, ch := t.Caps().CellCSS()
+	cw, ch := hotty.CellCSS(t.Caps())
 	s := &surface{ctx: ctx, t: t, name: t.Surface("chart"), cols: t.Size().Cols, rows: rows,
-		ch: ch, light: t.Caps().Light(), scale: series.NewScale(), n: -1}
+		ch: ch, light: hotty.Light(t.Caps()), scale: series.NewScale(), n: -1}
 	s.w, s.h = float64(s.cols)*cw, float64(rows-1)*ch
 	_ = t.LineStart(ctx)
 	// Detached from the start: it reports nothing, so nothing is left to

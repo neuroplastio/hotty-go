@@ -199,7 +199,7 @@ func show(ctx context.Context, t *hottyterm.Term, src []byte, read func(string) 
 	}
 	replies, err := t.Fence(ctx)
 	for _, r := range replies {
-		err = errors.Join(err, r.Err())
+		err = errors.Join(err, hotty.Err(r))
 	}
 	return err
 }

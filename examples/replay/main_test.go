@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/neuroplastio/hotty-go"
 	"github.com/neuroplastio/hotty-go/hottyterm"
 	"github.com/neuroplastio/hotty-go/hottytest"
 )
@@ -56,9 +57,9 @@ func TestSurface(t *testing.T) {
 	var titles []string
 	for _, cmd := range h.Commands() {
 		switch {
-		case cmd.Get("a") == "delta" && cmd.Get("t") == "vt-r7":
-			lint = append(lint, cmd.Get("op"))
-		case cmd.Get("a") == "delta" && cmd.Get("t") == "title":
+		case hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "vt-r7":
+			lint = append(lint, hotty.Get(cmd.Control, "op"))
+		case hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "title":
 			titles = append(titles, string(cmd.Payload))
 		}
 	}
@@ -146,7 +147,7 @@ func TestCast(t *testing.T) {
 	}
 	var titles []string
 	for _, cmd := range h.Commands() {
-		if cmd.Get("a") == "delta" && cmd.Get("t") == "title" {
+		if hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "title" {
 			titles = append(titles, string(cmd.Payload))
 		}
 	}

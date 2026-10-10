@@ -41,8 +41,8 @@ func on(h *hottytest.Host) (env, *strings.Builder) {
 func resources(h *hottytest.Host) []string {
 	var ids []string
 	for _, c := range h.Commands() {
-		if c.Get("a") == "res" {
-			ids = append(ids, c.Get("id"))
+		if hotty.Get(c.Control, "a") == "res" {
+			ids = append(ids, hotty.Get(c.Control, "id"))
 		}
 	}
 	return ids

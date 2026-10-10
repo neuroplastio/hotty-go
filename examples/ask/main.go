@@ -130,11 +130,11 @@ func askSurface(ctx context.Context, t *hottyterm.Term, in *input) *form.Answers
 		if !isMsg {
 			continue // other keys belong to the form's controls
 		}
-		e, isEv := m.Event()
+		e, isEv := hotty.EventOf(m.Message)
 		if !isEv || e.Surface != name || e.Kind != hotty.EventSubmit {
 			continue
 		}
-		a, problems := deploy.Read(e.Fields())
+		a, problems := deploy.Read(e.Fields)
 		if len(problems) > 0 {
 			// Shown in the form, which keeps what was typed; the keyboard
 			// goes to the first field that is wrong.

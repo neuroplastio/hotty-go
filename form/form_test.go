@@ -193,11 +193,11 @@ func TestShow(t *testing.T) {
 	msgs := decode(t, s.Show("form-1", []Problem{{Field: 1, Message: "required"}}))
 	var texts, classes []string
 	for _, m := range msgs {
-		switch m.Get("op") {
+		switch hotty.Get(m.Control, "op") {
 		case "text":
-			texts = append(texts, m.Get("t")+"="+string(m.Payload))
+			texts = append(texts, hotty.Get(m.Control, "t")+"="+string(m.Payload))
 		case "attr":
-			classes = append(classes, m.Get("t")+"="+string(m.Payload))
+			classes = append(classes, hotty.Get(m.Control, "t")+"="+string(m.Payload))
 		}
 	}
 	if got, want := strings.Join(texts, ","), "e0=,e1=! required,e2=,e3="; got != want {
@@ -207,12 +207,12 @@ func TestShow(t *testing.T) {
 		t.Errorf("classes %s, want %s", got, want)
 	}
 	last := msgs[len(msgs)-1]
-	if last.Get("a") != "focus" || last.Get("t") != "f1" || last.Get("s") != "form-1" {
+	if hotty.Get(last.Control, "a") != "focus" || hotty.Get(last.Control, "t") != "f1" || hotty.Get(last.Control, "s") != "form-1" {
 		t.Errorf("last command %v: want the keyboard at the field", last.Control)
 	}
 	// Nothing wrong: every problem cleared, and the keyboard left alone.
 	for _, m := range decode(t, s.Show("form-1", nil)) {
-		if m.Get("a") == "focus" {
+		if hotty.Get(m.Control, "a") == "focus" {
 			t.Error("no problems, but a focus")
 		}
 	}
@@ -224,8 +224,17 @@ func TestState(t *testing.T) {
 	if got := st.Fields(); got["env"] != "staging" || got["notify"] != "true" || len(got) != 2 {
 		t.Errorf("defaults %v", got)
 	}
+	// What a host sends, read as a program reads it.
 	ev := func(target string, detail string) hotty.Event {
-		return hotty.Event{Kind: "change", Target: target, Detail: json.RawMessage(detail)}
+		var d struct {
+			Value   string
+			Checked *bool
+		}
+		_ = json.Unmarshal([]byte(detail), &d)
+		var dec hotty.Decoder
+		m, _ := dec.Feed(hotty.EncodeEvent(hotty.Event{Kind: "change", Target: target, Value: d.Value, Checked: d.Checked}))
+		e, _ := hotty.EventOf(m)
+		return e
 	}
 	for _, e := range []hotty.Event{
 		ev("f0-1", `{"checked":true,"value":"production"}`),

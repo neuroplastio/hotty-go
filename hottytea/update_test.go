@@ -13,16 +13,23 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottytest"
 )
 
 // from is what the host sends, as Bubble Tea delivers it.
-func from(ctl hotty.Control, payload string) tea.Msg {
-	return uv.UnknownOscEvent(hotty.Encode(ctl, []byte(payload)))
+// from is a message from the host, its body written as JSON
+// (hottytest.Body); "" for none.
+func from(ctl hotty.Control, body string) tea.Msg {
+	var payload []byte
+	if body != "" {
+		payload = hottytest.Body(body)
+	}
+	return uv.UnknownOscEvent(hotty.Encode(ctl, payload))
 }
 
 func caps(n string) tea.Msg {
 	return from(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: n}},
-		`{"v":"0.1","cell":{"w":9,"h":18},"limits":{"surfaces":64},"host":"test"}`)
+		`{"v":"0.2","cell":{"w":9,"h":18},"limits":{"surfaces":64},"host":"test"}`)
 }
 
 var da1 = uv.PrimaryDeviceAttributesEvent{62, 22}
@@ -124,13 +131,13 @@ func TestMessages(t *testing.T) {
 	ev := from(hotty.Control{{K: "a", V: "ev"}, {K: "s", V: "card"}, {K: "e", V: "click"}, {K: "t", V: "go"}}, `{"value":"1"}`)
 	if msg, _ := s.Update(ev); msg == nil {
 		t.Fatal("an event was swallowed")
-	} else if e, ok := msg.(EventMsg); !ok || e.Surface != "card" || e.Kind != hotty.EventClick || e.Target != "go" || e.Value() != "1" {
+	} else if e, ok := msg.(EventMsg); !ok || e.Surface != "card" || e.Kind != hotty.EventClick || e.Target != "go" || e.Value != "1" {
 		t.Errorf("event: %#v", msg)
 	}
 	refused := from(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "card"}, {K: "re", V: "delta"}}, `{"code":"ENOTARGET","detail":"nope"}`)
 	if msg, _ := s.Update(refused); msg == nil {
 		t.Fatal("an error was swallowed")
-	} else if e, ok := msg.(ErrorMsg); !ok || e.Code != hotty.ENOTARGET || e.Detail != "nope" || e.Err() == nil {
+	} else if e, ok := msg.(ErrorMsg); !ok || e.Code != hotty.ENOTARGET || e.Detail != "nope" || hotty.Err(e.Reply) == nil {
 		t.Errorf("error: %#v", msg)
 	}
 	ok := from(hotty.Control{{K: "a", V: "ok"}, {K: "s", V: "card"}, {K: "re", V: "delta"}}, "")
@@ -161,7 +168,7 @@ func TestAck(t *testing.T) {
 	s := native()
 	ok := from(hotty.Control{{K: "a", V: "ok"}, {K: "n", V: "7"}, {K: "s", V: "field"}, {K: "re", V: "focus"}}, "")
 	msg, _ := s.Update(ok)
-	if a, isAck := msg.(AckMsg); !isAck || a.N != 7 || a.Re != "focus" || a.Surface != "field" || a.Err() != nil {
+	if a, isAck := msg.(AckMsg); !isAck || a.N != 7 || a.Re != "focus" || a.Surface != "field" || hotty.Err(a.Reply) != nil {
 		t.Fatalf("a numbered ok: %#v", msg)
 	}
 	refused := from(hotty.Control{{K: "a", V: "err"}, {K: "n", V: "8"}, {K: "s", V: "field"}, {K: "re", V: "focus"}},

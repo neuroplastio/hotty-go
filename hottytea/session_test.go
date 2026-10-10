@@ -8,6 +8,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/hotty-go/hottytest"
 )
 
 // native is a Session that has found a HOTTY terminal.
@@ -110,7 +111,7 @@ func TestAMissingDocumentIsSentAgain(t *testing.T) {
 	h.Layout(want)
 	flushed(h)
 	reply := hotty.Encode(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "x"}, {K: "re", V: "place"}},
-		[]byte(`{"code":"ENOENT","detail":"no surface x"}`))
+		hottytest.Body(`{"code":"ENOENT","detail":"no surface x"}`))
 	msg, _ := h.Update(uv.UnknownOscEvent(reply))
 	if _, ok := msg.(RelayoutMsg); !ok {
 		t.Fatalf("ENOENT on place gave %T", msg)
@@ -195,7 +196,7 @@ func TestKeptSurfacesStayWithinTheLimitOldestFirst(t *testing.T) {
 	}
 	// A refused document teaches a lower limit, and is sent again later.
 	reply := hotty.Encode(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "c4"}, {K: "re", V: "doc"}},
-		[]byte(`{"code":"EQUOTA","detail":"at most 2 surfaces"}`))
+		hottytest.Body(`{"code":"EQUOTA","detail":"at most 2 surfaces"}`))
 	if msg, _ := h.Update(uv.UnknownOscEvent(reply)); msg != (RelayoutMsg{}) {
 		t.Fatalf("EQUOTA gave %T", msg)
 	}

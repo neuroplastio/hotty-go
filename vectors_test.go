@@ -27,7 +27,6 @@ var features = map[string]bool{
 	"caps.scroll":         true,
 	"caps.passthrough":    true,
 	"caps.version":        true,
-	"caps.lenient":        true,
 	"caps.drag-kinds":     true,
 	"options.unordered":   true,
 	"decode.abort-count":  true,
@@ -335,7 +334,7 @@ type decodeVector struct {
 		Control map[string]string `json:"control"`
 		Reply   map[string]any    `json:"reply"`
 		Event   map[string]any    `json:"event"`
-		Caps    map[string]any    `json:"caps"`
+		Caps    *map[string]any   `json:"caps"`
 	} `json:"messages"`
 }
 
@@ -368,26 +367,29 @@ func TestDecodeVectors(t *testing.T) {
 					t.Errorf("message %d: control %v, want %v", i, m.Control, want.Control)
 				}
 				if want.Reply != nil {
-					r, ok := m.Reply()
+					r, ok := ReplyOf(m)
 					if !ok {
 						t.Fatalf("message %d is not a reply", i)
 					}
 					check(t, fmt.Sprintf("message %d: reply", i), replyView(r), want.Reply)
 				}
 				if want.Event != nil {
-					e, ok := m.Event()
+					e, ok := EventOf(m)
 					if !ok {
 						t.Fatalf("message %d is not an event", i)
 					}
 					check(t, fmt.Sprintf("message %d: event", i), eventView(e), want.Event)
 				}
-				if want.Caps != nil {
-					r, _ := m.Reply()
-					c, ok := r.Caps()
-					if !ok {
-						t.Fatalf("message %d carries no capabilities", i)
+				switch r, _ := ReplyOf(m); {
+				case want.Caps == nil:
+				case *want.Caps == nil: // null: none
+					if r.Caps != nil {
+						t.Errorf("message %d: caps %+v, want none", i, r.Caps)
 					}
-					check(t, fmt.Sprintf("message %d: caps", i), capsView(c, want.Caps), want.Caps)
+				case r.Caps == nil:
+					t.Fatalf("message %d carries no capabilities", i)
+				default:
+					check(t, fmt.Sprintf("message %d: caps", i), capsView(*r.Caps, *want.Caps), *want.Caps)
 				}
 			}
 		})
@@ -404,21 +406,21 @@ func replyView(r Reply) map[string]any {
 func eventView(e Event) map[string]any {
 	view := map[string]any{
 		"surface": e.Surface, "kind": e.Kind, "target": e.Target,
-		"value": e.Value(), "fields": e.Fields(),
+		"value": e.Value, "fields": e.Fields,
 	}
-	if c, ok := e.Checked(); ok {
-		view["checked"] = c
+	if e.Checked != nil {
+		view["checked"] = *e.Checked
 	}
-	if href, url, ok := e.Link(); ok {
-		view["link"] = map[string]any{"href": href, "url": url}
+	if l := e.Link; l != nil {
+		view["link"] = map[string]any{"href": l.Href, "url": l.URL}
 	}
-	if w, h, ok := e.Size(); ok {
-		view["size"] = map[string]any{"w": w, "h": h}
+	if s := e.Size; s != nil {
+		view["size"] = map[string]any{"w": s.W, "h": s.H}
 	}
-	if r, ok := e.FitRows(); ok {
-		view["fit_rows"] = r
+	if e.FitRows > 0 {
+		view["fit_rows"] = e.FitRows
 	}
-	if d, ok := e.Drag(); ok {
+	if d := e.Drag; d != nil {
 		drag := map[string]any{"c": d.Col, "r": d.Row, "keys": d.Keys}
 		if d.HasX {
 			drag["x"] = d.X
@@ -428,30 +430,33 @@ func eventView(e Event) map[string]any {
 		}
 		view["drag"] = drag
 	}
-	if h, ok := e.Hover(); ok {
+	if h := e.Hover; h != nil {
 		view["hover"] = map[string]any{"c": h.Col, "r": h.Row, "out": h.Out}
 	}
-	if a, ok := e.Area(); ok {
+	if a := e.Area; a != nil {
 		view["area"] = map[string]any{"c": a.Col, "r": a.Row, "w": a.W, "h": a.H}
 	}
 	return view
 }
 
 func capsView(c Caps, want map[string]any) map[string]any {
-	w, h := c.CellCSS()
+	w, h := CellCSS(c)
 	view := map[string]any{
 		"v": c.V, "ops": c.Ops, "events": c.Events,
-		"cell":  map[string]any{"w": c.Cell.W, "h": c.Cell.H},
+		"cell":  nil,
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": c.Drags(), "hovers": c.Hovers(), "light": c.Light(),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "light": Light(c),
 		"cell_css": map[string]any{"w": w, "h": h},
+	}
+	if c.Cell != nil {
+		view["cell"] = map[string]any{"w": c.Cell.W, "h": c.Cell.H}
 	}
 	supports, sends := map[string]any{}, map[string]any{}
 	for op := range asMap(want["supports"]) {
-		supports[op] = c.Supports(Op(op))
+		supports[op] = Supports(c, Op(op))
 	}
 	for kind := range asMap(want["sends"]) {
-		sends[kind] = c.Sends(kind)
+		sends[kind] = Sends(c, kind)
 	}
 	view["supports"], view["sends"] = supports, sends
 	return view
@@ -706,7 +711,7 @@ func TestDetectVectors(t *testing.T) {
 					took = d.DA1(now)
 				case st.OSC != nil:
 					m, res := dec.Feed(*st.OSC)
-					if r, ok := m.Reply(); res == Complete && ok {
+					if r, ok := ReplyOf(m); res == Complete && ok {
 						took = d.Reply(r, now)
 					}
 				case st.Tick:
