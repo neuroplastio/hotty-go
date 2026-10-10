@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/tinylib/msgp/msgp"
 )
@@ -15,7 +16,8 @@ const MaxDepth = 32
 
 // decodeBody reads a body into v, each field as its type (SDK.md §3.9),
 // and reports whether it decoded: one msgpack map, nested at most MaxDepth
-// deep, with nothing after it, and no field v knows of another type.
+// deep, with nothing after it and nothing a host does not send in it
+// (wellFormed), and no field v knows of another type.
 func decodeBody(b []byte, v msgp.Decodable) bool {
 	if !wellFormed(b) {
 		return false
@@ -62,25 +64,39 @@ var writers = sync.Pool{New: func() any {
 	return w
 }}
 
+// maxInt is the furthest from zero an int in a body may be (SPEC §3.3), so
+// that a reader whose numbers are doubles holds it exactly.
+const maxInt = 1<<53 - 1
+
 // wellFormed reports whether b is one msgpack map, nested at most MaxDepth
-// deep, with nothing after it. The generated codecs check the rest: they
-// stop at the first field of another type, but count depth their own way
-// and leave what follows the value unread.
+// deep, with nothing after it, that holds nothing SPEC §3.3 has no host
+// send, anywhere in it: a nil, a map key that is not a str, a str that is
+// not UTF-8, an int further than maxInt from zero, or a timestamp msgpack
+// does not define (SDK.md §3.9). The generated codecs check the rest: they
+// stop at the first field of another type, but count depth their own way,
+// skip what they do not know unread, and leave what follows the value.
 func wellFormed(b []byte) bool {
 	if len(b) == 0 || (b[0]&0xf0 != 0x80 && b[0] != 0xde && b[0] != 0xdf) {
 		return false
 	}
-	// The values still to read in each container open around the next
-	// one, the outermost first; the first counts the body itself.
-	left := make([]uint64, 1, MaxDepth+1)
-	left[0] = 1
+	// The containers open around the next value, the outermost first: the
+	// values each has still to give, and whether it is a map, whose values
+	// are keys and their values in turn. The first stands for the body.
+	type open struct {
+		left  uint64
+		isMap bool
+	}
+	stack := make([]open, 1, MaxDepth+1)
+	stack[0].left = 1
 	i, n := uint64(0), uint64(len(b))
-	for len(left) > 0 {
-		if left[len(left)-1] == 0 {
-			left = left[:len(left)-1]
+	for len(stack) > 0 {
+		top := &stack[len(stack)-1]
+		if top.left == 0 {
+			stack = stack[:len(stack)-1]
 			continue
 		}
-		left[len(left)-1]--
+		key := top.isMap && top.left%2 == 0
+		top.left--
 		if i >= n {
 			return false
 		}
@@ -88,15 +104,70 @@ func wellFormed(b []byte) bool {
 		if !ok || size > n-i {
 			return false
 		}
-		i += size
+		if !allowed(b[i:i+size], key) {
+			return false
+		}
 		if container {
-			if len(left) > MaxDepth {
+			if len(stack) > MaxDepth {
 				return false
 			}
-			left = append(left, values)
+			c := b[i]
+			stack = append(stack, open{values, c&0xf0 == 0x80 || c == 0xde || c == 0xdf})
 		}
+		i += size
 	}
 	return i == n
+}
+
+// allowed reports whether a value a body may hold starts v, which is its
+// head, and for a str, bin, number or extension the whole of it: no nil, a
+// key only a str, a str UTF-8, an int within maxInt of zero, and a
+// timestamp of 4, 8 or 12 bytes, its nanoseconds under a second and its
+// seconds within maxInt of 1970.
+func allowed(v []byte, key bool) bool {
+	c := v[0]
+	// Where a str's bytes start, or an extension's type: past its length.
+	at := 1
+	switch c {
+	case 0xd9, 0xc7:
+		at = 2
+	case 0xda, 0xc8:
+		at = 3
+	case 0xdb, 0xc9:
+		at = 5
+	}
+	str := c >= 0xa0 && c <= 0xbf || c >= 0xd9 && c <= 0xdb
+	switch {
+	case key && !str, c == 0xc0:
+		return false
+	case str:
+		return utf8.Valid(v[at:])
+	case c == 0xcf:
+		return binary.BigEndian.Uint64(v[1:]) <= maxInt
+	case c == 0xd3:
+		x := int64(binary.BigEndian.Uint64(v[1:]))
+		return x >= -maxInt && x <= maxInt
+	case c >= 0xd4 && c <= 0xd8, c >= 0xc7 && c <= 0xc9:
+		if int8(v[at]) != -1 {
+			return true // an extension no one defines: skipped
+		}
+		return timestamp(v[at+1:])
+	}
+	return true
+}
+
+// timestamp reports whether d is the data of a timestamp msgpack defines.
+func timestamp(d []byte) bool {
+	switch len(d) {
+	case 4:
+		return true
+	case 8: // 30 bits of nanoseconds, then 34 of seconds
+		return binary.BigEndian.Uint32(d)>>2 < 1e9
+	case 12: // 32 bits of nanoseconds, then 64 of seconds
+		sec := int64(binary.BigEndian.Uint64(d[4:]))
+		return binary.BigEndian.Uint32(d) < 1e9 && sec >= -maxInt && sec <= maxInt
+	}
+	return false
 }
 
 // head reads the start of the msgpack value at the start of b: the bytes

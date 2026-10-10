@@ -4,10 +4,12 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+
+	"github.com/tinylib/msgp/msgp"
 )
 
-// wellFormed takes one map of every form, nested up to MaxDepth, and
-// nothing after it.
+// wellFormed takes one map of every form, nested up to MaxDepth, with
+// nothing after it and nothing a host does not send in it (SPEC §3.3).
 func TestWellFormed(t *testing.T) {
 	nest := func(n int) string { // the map, then n-1 arrays of one inside it
 		return "81a178" + strings.Repeat("91", n-2) + "90"
@@ -21,7 +23,7 @@ func TestWellFormed(t *testing.T) {
 		{"df00000000", true},
 		{"81a1617f", true},
 		{"81a161e0", true},
-		{"81a161c0", true},
+		{"81a161c0", false}, // nil
 		{"82a161c2a162c3", true},
 		{"81a161cc01", true},
 		{"81a161d0ff", true},
@@ -29,20 +31,46 @@ func TestWellFormed(t *testing.T) {
 		{"81a161ca3f800000", true},
 		{"81a161cb3ff0000000000000", true},
 		{"81a161cf0000000000000001", true},
+		{"81a161cf001fffffffffffff", true},  // 2^53 - 1
+		{"81a161cf0020000000000000", false}, // 2^53
+		{"81a161d3ffe0000000000001", true},  // -(2^53 - 1)
+		{"81a161d3ffe0000000000000", false}, // -2^53
+		{"81a161ce ffffffff", true},
 		{"81a161d90161", true},
 		{"81a161da000161", true},
 		{"81a161db0000000161", true},
 		{"81a161c40100", true},
 		{"81a161c5000100", true},
 		{"81a161c600000001" + "00", true},
-		{"81a161d4ff00", true},
-		{"81a161d5ff0000", true},
-		{"81a161d6ff00000000", true},
-		{"81a161d7ff0000000000000000", true},
-		{"81a161d8ff" + strings.Repeat("00", 16), true},
-		{"81a161c701ff00", true},
-		{"81a161c80001ff00", true},
-		{"81a161c900000001ff00", true},
+		{"81a161d40500", true}, // extensions no one defines, of every form
+		{"81a161d5050000", true},
+		{"81a161d60500000000", true},
+		{"81a161d7050000000000000000", true},
+		{"81a161d805" + strings.Repeat("00", 16), true},
+		{"81a161c7010500", true},
+		{"81a161c8000105ff", true},
+		{"81a161c90000000105ff", true},
+		{"81a161d6ffffffffff", true},                         // a timestamp of 4 bytes
+		{"81a161d7ffee6b27fc00000000", true},                 // of 8, 999 999 999 ns
+		{"81a161d7ffee6b280000000000", false},                // of 8, a whole second's ns
+		{"81a161c70cff3b9ac9ff001fffffffffffff", true},       // of 12
+		{"81a161c70cff3b9aca00" + "0000000000000000", false}, // of 12, a second's ns
+		{"81a161c70cff00000000" + "0020000000000000", false}, // of 12, 2^53 s
+		{"81a161d4ff00", false},                              // of 1
+		{"81a161d5ff0000", false},                            // of 2
+		{"81a161d8ff" + strings.Repeat("00", 16), false},     // of 16
+		{"81a161c701ff00", false},
+		{"81a161a3e282ac", true},  // "€"
+		{"81a161a2c328", false},   // not UTF-8
+		{"81a161a3eda080", false}, // a surrogate
+		{"81a161a2c080", false},   // an overlong NUL
+		{"81a2c328a161", false},   // a key not UTF-8
+		{"8101a161", false},       // an int key
+		{"81c401 61a161", false},  // a bin key
+		{"81c3a161", false},       // a bool key
+		{"81a1618101a162", false}, // an int key, deeper
+		{"81a16191c0", false},     // a nil, deeper
+		{"81a16181a162c0", false}, // a nil as a map's value, deeper
 		{"81a161dc000101", true},
 		{"81a161dd0000000101", true},
 		{"81a161de0001a162", false}, // a map of one that has only its key
@@ -61,12 +89,38 @@ func TestWellFormed(t *testing.T) {
 		{"81a161dcffff", false},     // more elements than bytes
 		{"81a161dfffffffff", false}, // more pairs than bytes
 	} {
-		b, err := hex.DecodeString(c.hex)
+		b, err := hex.DecodeString(strings.ReplaceAll(c.hex, " ", ""))
 		if err != nil {
 			t.Fatal(c.hex, err)
 		}
 		if got := wellFormed(b); got != c.want {
 			t.Errorf("%s: %v, want %v", c.hex, got, c.want)
+		}
+	}
+}
+
+// What this package writes is a body a host may send: empty or full, no
+// field is nil.
+func TestEncodedBodiesWellFormed(t *testing.T) {
+	href, yes, one := "#a", true, 1
+	area := &Area{Col: -1, Row: 2, W: 3, H: 4}
+	for _, v := range []interface {
+		EncodeMsg(*msgp.Writer) error
+	}{
+		&Caps{}, &Caps{V: Version, Ops: []string{"text"}, Cell: &Cell{W: 9, H: 18}, Scale: 2,
+			Limits: map[string]int{"surfaces": 8}, Net: map[string][]string{"img-src": nil}, Scroll: true},
+		&errorBody{}, &errorBody{Code: EINVAL, Detail: "x"},
+		&clickDetail{}, &clickDetail{Value: "v", Href: &href, URL: "u", Area: area},
+		&pressDetail{}, &pressDetail{Area: area},
+		&changeDetail{}, &changeDetail{Checked: &yes, Value: "on"},
+		&inputDetail{}, &fitDetail{R: 3},
+		&dragDetail{}, &dragDetail{C: 1, R: 2, Keys: []string{"shift"}, X: &one, Y: &one},
+		&hoverDetail{}, &hoverDetail{C: &one, R: &one}, &hoverDetail{Out: true},
+		&submitDetail{}, &submitDetail{"name": "Ada"},
+		&Size{}, &Size{W: 720, H: 36},
+	} {
+		if b := encodeBody(v); !wellFormed(b) {
+			t.Errorf("%T: % x is not a body a host sends", v, b)
 		}
 	}
 }

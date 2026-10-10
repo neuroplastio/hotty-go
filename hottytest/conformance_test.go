@@ -190,6 +190,56 @@ func normal(v any) any {
 	return v
 }
 
+// ofType says why v is not of type t (conformance/README.md, Send: types),
+// or nothing when it is: a field t names that v lacks is not checked.
+func ofType(v, t any, at string) string {
+	switch t := t.(type) {
+	case string:
+		ok := false
+		switch t {
+		case "int":
+			_, ok = v.(int64)
+		case "float":
+			_, ok = v.(float64)
+		case "str":
+			_, ok = v.(string)
+		case "bool":
+			_, ok = v.(bool)
+		}
+		if !ok {
+			return fmt.Sprintf("%s: %T %v, want %s", at, v, v, t)
+		}
+	case []any:
+		a, ok := v.([]any)
+		if !ok {
+			return fmt.Sprintf("%s: %T, want an array", at, v)
+		}
+		for i, x := range a {
+			if why := ofType(x, t[0], fmt.Sprintf("%s[%d]", at, i)); why != "" {
+				return why
+			}
+		}
+	case map[string]any:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return fmt.Sprintf("%s: %T, want a map", at, v)
+		}
+		for k, x := range m {
+			f, ok := t["*"]
+			if !ok {
+				f, ok = t[k]
+			}
+			if !ok {
+				continue
+			}
+			if why := ofType(x, f, at+"."+k); why != "" {
+				return why
+			}
+		}
+	}
+	return ""
+}
+
 // fromJSON is a vector's value: a number with a fraction or an exponent a
 // float64, any other an int64.
 func fromJSON(raw []byte) any {
@@ -311,7 +361,20 @@ func TestConformanceVectors(t *testing.T) {
 					}
 				default:
 					var want map[string]string
-					if err := json.Unmarshal(st.Reply, &want); err != nil {
+					var types struct {
+						Types json.RawMessage `json:"types"`
+					}
+					if err := json.Unmarshal(st.Reply, &types); err != nil {
+						t.Fatal(err)
+					}
+					reply := st.Reply
+					if types.Types != nil {
+						var all map[string]json.RawMessage
+						_ = json.Unmarshal(st.Reply, &all)
+						delete(all, "types")
+						reply, _ = json.Marshal(all)
+					}
+					if err := json.Unmarshal(reply, &want); err != nil {
 						t.Fatal(err)
 					}
 					if len(replies) == 0 {
@@ -336,6 +399,16 @@ func TestConformanceVectors(t *testing.T) {
 						}
 						if got != val {
 							t.Errorf("step %d: %s=%q, want %q (%v)", i, k, got, val, r.Message.Control)
+						}
+					}
+					if types.Types != nil {
+						if r.Re == "q" && r.Caps == nil {
+							t.Errorf("step %d: the capabilities do not decode: %x", i, r.Message.Payload)
+						}
+						var tt any
+						_ = json.Unmarshal(types.Types, &tt)
+						if why := ofType(fromMsgpack(r.Message.Payload), tt, "body"); why != "" {
+							t.Errorf("step %d: %s", i, why)
 						}
 					}
 				}
