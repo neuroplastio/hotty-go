@@ -7,17 +7,17 @@ go 1.25.0
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
-	github.com/neuroplastio/hotty-go v0.0.0-20261010144454-90175e0030e1
-	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010144454-90175e0030e1
-	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-20261010144454-90175e0030e1
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010144454-90175e0030e1
+	github.com/neuroplastio/hotty-go v0.0.0-20261010155830-c8e0cc1d3198
+	github.com/neuroplastio/hotty-go/hottytea v0.0.0-20261010155830-c8e0cc1d3198
+	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-20261010155830-c8e0cc1d3198
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010155830-c8e0cc1d3198
 	github.com/yuin/goldmark v1.8.6
 )
 
 require (
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285 // indirect
-	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010144454-90175e0030e1 // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010155830-c8e0cc1d3198 // indirect
 )
 
 require (
@@ -31,7 +31,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/neuroplastio/hotty-go/hottyvt v0.0.0-20261010144454-90175e0030e1
+	github.com/neuroplastio/hotty-go/hottyvt v0.0.0-20261010155830-c8e0cc1d3198
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/net v0.39.0 // indirect
