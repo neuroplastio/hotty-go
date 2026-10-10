@@ -4,12 +4,12 @@ module github.com/neuroplastio/hotty-go/hottyterm
 
 go 1.25.0
 
-require github.com/neuroplastio/hotty-go v0.0.0-20261010155830-c8e0cc1d3198
+require github.com/neuroplastio/hotty-go v0.0.0-20261010205551-4d256c3d4207
 
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010155830-c8e0cc1d3198
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010205551-4d256c3d4207
 	golang.org/x/sys v0.47.0
 )
 
@@ -23,7 +23,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010155830-c8e0cc1d3198 // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010205551-4d256c3d4207 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/net v0.39.0 // indirect
