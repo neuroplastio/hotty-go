@@ -46,7 +46,8 @@ func TestKeys(t *testing.T) {
 	if want := []string{"notes", "ok", "size", "go"}; !equalStrings(order, want) {
 		t.Errorf("Tab order %v, want %v", order, want)
 	}
-	expect(t, sent(h), `ev change t=name {"value":"Ad A"}`)
+	expect(t, sent(h), `ev change t=name {"value":"Ad A"}`,
+		"ev focus t=notes", "ev focus t=ok", "ev focus t=size", "ev focus t=go")
 
 	// Shift+Tab goes back; a key with Control is the program's.
 	h.Key("Shift+Tab")
@@ -56,7 +57,7 @@ func TestKeys(t *testing.T) {
 	if h.Key("Control+s") {
 		t.Error("Control+s was used")
 	}
-	expect(t, sent(h), `"\x13"`)
+	expect(t, sent(h), "ev focus t=size", `"\x13"`)
 
 	// A select picks by the arrows and by the first letter.
 	h.Key("ArrowDown")
@@ -71,7 +72,8 @@ func TestKeys(t *testing.T) {
 	h.Key("Tab")
 	h.Key("Tab")
 	h.Key("Enter")
-	expect(t, sent(h), `ev change t=ok {"checked":true,"value":"yes"}`, "ev click t=go")
+	expect(t, sent(h), "ev focus t=ok", `ev change t=ok {"checked":true,"value":"yes"}`,
+		"ev focus t=size", "ev focus t=go", "ev click t=go")
 
 	// Past the last element the surface loses the keyboard.
 	h.Key("Tab")

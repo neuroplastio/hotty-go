@@ -756,7 +756,9 @@ func (h *Host) event(s *Surface, kind, target string, detail any) {
 }
 
 // takeKeyboard gives a surface the keyboard at el, taking it from another
-// (which sends blur), and committing the control that loses focus.
+// (which sends blur), and committing the control that loses focus. Focus
+// the user moves (report) is reported each time it lands on another element,
+// named by the nearest id from el outward (SPEC §10.1); the program's is not.
 func (h *Host) takeKeyboard(s *Surface, el *html.Node, report bool) {
 	if h.keyboard != nil && h.keyboard != s {
 		h.blur(h.keyboard)
@@ -764,11 +766,15 @@ func (h *Host) takeKeyboard(s *Surface, el *html.Node, report bool) {
 	if s.keyb && s.focused != el {
 		h.commit(s)
 	}
-	had := s.keyb
+	had, was := s.keyb, s.focused
 	s.focused, s.keyb = el, true
 	h.keyboard = s
-	if report && !had {
-		h.event(s, hotty.EventFocus, "", nil)
+	if report && (!had || was != el) {
+		target := ""
+		if n := closest(el, func(n *html.Node) bool { id, _ := attr(n, "id"); return id != "" }); n != nil {
+			target, _ = attr(n, "id")
+		}
+		h.event(s, hotty.EventFocus, target, nil)
 	}
 }
 

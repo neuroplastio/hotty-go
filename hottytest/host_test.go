@@ -577,7 +577,7 @@ func TestClick(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The button takes the keyboard, then reports with its value.
-	expect(t, sent(h), "ev focus t=", `ev click t=go {"value":"7"}`)
+	expect(t, sent(h), "ev focus t=go", `ev click t=go {"value":"7"}`)
 	// A click on what takes no focus gives the keyboard back (SPEC
 	// §10.1): blur, and then the click it reports.
 	_ = h.Click("c", "text")
@@ -587,7 +587,7 @@ func TestClick(t *testing.T) {
 	}
 	// A link reports its href, and its id when it has one, as hosts do.
 	_ = h.Click("c", "rel")
-	expect(t, sent(h), "ev focus t=", `ev click t=rel {"href":"guide","url":"https://example.com/docs/guide"}`)
+	expect(t, sent(h), "ev focus t=rel", `ev click t=rel {"href":"guide","url":"https://example.com/docs/guide"}`)
 	_ = h.Click("c", "web")
 	expect(t, sent(h))
 	if o := h.Opened(); len(o) != 1 || o[0] != "https://neuroplast.io" {
@@ -602,7 +602,7 @@ func TestClick(t *testing.T) {
 
 	local := shown(t, "l", `<a id=top href="#top">top</a>`)
 	_ = local.Click("l", "top")
-	expect(t, sent(local), "ev focus t=", `ev click t=top {"href":"#top"}`)
+	expect(t, sent(local), "ev focus t=top", `ev click t=top {"href":"#top"}`)
 
 	// So does a click on another surface, on what takes no focus: the
 	// surface that had the keyboard hears blur.
@@ -664,27 +664,33 @@ func TestFormAndKeyboard(t *testing.T) {
 	_ = h.Check("f", "r2", true)
 	_ = h.Choose("f", "size", "m")
 	_ = h.Submit("f", "f")
+	// Each control the user goes to is named as focus lands on it (SPEC
+	// §10.1), after the change that focus leaving the last one commits.
 	expect(t, sent(h),
-		"ev focus t=",
+		"ev focus t=name",
 		`ev change t=name {"value":"Ada"}`,
+		"ev focus t=notes",
 		`ev input t=notes {"value":"hi"}`,
 		`ev change t=notes {"value":"hi"}`,
+		"ev focus t=ok",
 		`ev change t=ok {"checked":true,"value":"yes"}`,
+		"ev focus t=r2",
 		`ev change t=r2 {"checked":true,"value":"prod"}`,
+		"ev focus t=size",
 		`ev change t=size {"value":"m"}`,
 		`ev submit t=f {"env":"prod","hidden":"h","name":"Ada","notes":"hi","ok":"yes","size":"m"}`)
 
 	// A submit button reports its click, then submits with its own value.
 	_ = h.Click("f", "save")
-	expect(t, sent(h), `ev click t=save {"value":"save"}`,
+	expect(t, sent(h), "ev focus t=save", `ev click t=save {"value":"save"}`,
 		`ev submit t=f {"action":"save","env":"prod","hidden":"h","name":"Ada","notes":"hi","ok":"yes","size":"m"}`)
 	_ = h.Click("f", "reset")
-	expect(t, sent(h), "ev click t=reset")
+	expect(t, sent(h), "ev focus t=reset", "ev click t=reset")
 
 	// Typing commits when focus leaves: here, the user's Blur.
 	_ = h.Fill("f", "name", "Grace")
 	_ = h.Blur("f")
-	expect(t, sent(h), `ev change t=name {"value":"Grace"}`, "ev blur t=")
+	expect(t, sent(h), "ev focus t=name", `ev change t=name {"value":"Grace"}`, "ev blur t=")
 	_ = h.Blur("f")
 	expect(t, sent(h))
 
@@ -699,7 +705,7 @@ func TestFormAndKeyboard(t *testing.T) {
 	if err := h.Check("f", "ok", true); err != nil {
 		t.Errorf("checking a checked box does nothing: %v", err)
 	}
-	expect(t, sent(h), "ev focus t=")
+	expect(t, sent(h), "ev focus t=ok")
 
 	outside := shown(t, "o", `<input id=i><form><input id=j></form>`)
 	if err := outside.Submit("o", "i"); !errors.Is(err, ErrNotControl) {
@@ -752,7 +758,7 @@ func TestDetached(t *testing.T) {
 	_ = h.Fill("d", "i", "typed")
 	send(h, hotty.Detach("d"))
 	// The keyboard goes back with no change and no blur.
-	expect(t, sent(h), "ev focus t=")
+	expect(t, sent(h), "ev focus t=i")
 	for _, err := range []error{h.Click("d", "b"), h.Fill("d", "i", "x"), h.Check("d", "i", true), h.Choose("d", "i", "x"),
 		h.Submit("d", "i"), h.Press("d", ""), h.Blur("d"), h.Emit("d", "resize", "", nil)} {
 		if !errors.Is(err, ErrDetached) {
@@ -794,7 +800,7 @@ func TestPressAndEmit(t *testing.T) {
 	send(h, hotty.Doc("q", `<button id=b>b</button>`), hotty.Place("q", hotty.Placement{Cols: 10, Rows: 1, Press: true}))
 	sent(h)
 	_ = h.Click("q", "b")
-	expect(t, sent(h), "ev press t=b", "ev focus t=", "ev click t=b")
+	expect(t, sent(h), "ev press t=b", "ev focus t=b", "ev click t=b")
 }
 
 // fit (SPEC §5.2): after whatever changed the rows the document needs, on

@@ -190,7 +190,7 @@ const (
 	EventInput  = "input"  // an edit of a control with data-on~=input
 	EventSubmit = "submit" // a form was submitted; the detail is its fields
 	EventPress  = "press"  // a press anywhere in a placement made with Press
-	EventFocus  = "focus"  // the surface took the keyboard
+	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
 	EventBlur   = "blur"   // the surface gave the keyboard back
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit

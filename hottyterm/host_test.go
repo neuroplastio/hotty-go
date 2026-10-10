@@ -162,7 +162,7 @@ func TestEventsWhileRequesting(t *testing.T) {
 			t.Fatalf("events so far: %v", got)
 		}
 	}
-	if strings.Join(got, ", ") != "key a, focus , click go, blur " {
+	if strings.Join(got, ", ") != "key a, focus go, click go, blur " {
 		t.Errorf("events: %v", got)
 	}
 }
