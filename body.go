@@ -70,28 +70,27 @@ const maxInt = 1<<53 - 1
 
 // wellFormed reports whether b is one msgpack map, nested at most MaxDepth
 // deep, with nothing after it, that holds nothing SPEC §3.3 has no host
-// send, anywhere in it: a nil, a map key that is not a str, a str that is
-// not UTF-8, an int further than maxInt from zero, or a timestamp msgpack
-// does not define (SDK.md §3.9). The generated codecs check the rest: they
-// stop at the first field of another type, but count depth their own way,
-// skip what they do not know unread, and leave what follows the value.
+// send, anywhere in it: a nil, a map key that is not a str or is given
+// twice in one map, a str that is not UTF-8, an int further than maxInt
+// from zero, or a timestamp msgpack does not define (SDK.md §3.9). The
+// generated codecs check the rest: they stop at the first field of another
+// type, but count depth their own way, skip what they do not know unread,
+// take a key given twice twice, and leave what follows the value.
 func wellFormed(b []byte) bool {
 	if len(b) == 0 || (b[0]&0xf0 != 0x80 && b[0] != 0xde && b[0] != 0xdf) {
 		return false
 	}
-	// The containers open around the next value, the outermost first: the
-	// values each has still to give, and whether it is a map, whose values
-	// are keys and their values in turn. The first stands for the body.
-	type open struct {
-		left  uint64
-		isMap bool
-	}
-	stack := make([]open, 1, MaxDepth+1)
+	// The containers open around the next value, the outermost first; the
+	// first stands for the body. keys holds the keys of the maps open,
+	// each map's after those of the maps around it.
+	stack := make([]container, 1, MaxDepth+1)
 	stack[0].left = 1
+	var keys [][]byte
 	i, n := uint64(0), uint64(len(b))
 	for len(stack) > 0 {
 		top := &stack[len(stack)-1]
 		if top.left == 0 {
+			keys = keys[:top.keys]
 			stack = stack[:len(stack)-1]
 			continue
 		}
@@ -100,23 +99,82 @@ func wellFormed(b []byte) bool {
 		if i >= n {
 			return false
 		}
-		size, values, container, ok := head(b[i:])
+		size, values, opens, ok := head(b[i:])
 		if !ok || size > n-i {
 			return false
 		}
-		if !allowed(b[i:i+size], key) {
+		v := b[i : i+size]
+		if !allowed(v, key) || key && !newKey(top, &keys, v[strStart(v[0]):]) {
 			return false
 		}
-		if container {
+		if opens {
 			if len(stack) > MaxDepth {
 				return false
 			}
 			c := b[i]
-			stack = append(stack, open{values, c&0xf0 == 0x80 || c == 0xde || c == 0xdf})
+			stack = append(stack, container{left: values, isMap: c&0xf0 == 0x80 || c == 0xde || c == 0xdf, keys: len(keys)})
 		}
 		i += size
 	}
 	return i == n
+}
+
+// A container is an array or a map wellFormed is reading: the values it
+// has still to give (a map's keys and their values in turn), and, for a
+// map, where its keys start in the keys of the maps open, or the set of
+// them once it has more than fewKeys.
+type container struct {
+	left  uint64
+	isMap bool
+	keys  int
+	set   map[string]struct{}
+}
+
+// fewKeys is as many keys as a map's next key is compared with one by one,
+// as a body's maps have; past them, a set holds a map's keys.
+const fewKeys = 16
+
+// newKey reports whether k is a key the map m has not given yet, and adds
+// it to m's keys (SPEC §3.3: each key once).
+func newKey(m *container, keys *[][]byte, k []byte) bool {
+	if m.set != nil {
+		if _, given := m.set[string(k)]; given {
+			return false
+		}
+		m.set[string(k)] = struct{}{}
+		return true
+	}
+	mine := (*keys)[m.keys:]
+	for _, given := range mine {
+		if bytes.Equal(given, k) {
+			return false
+		}
+	}
+	if len(mine) < fewKeys {
+		*keys = append(*keys, k)
+		return true
+	}
+	m.set = make(map[string]struct{}, 2*fewKeys)
+	for _, given := range mine {
+		m.set[string(given)] = struct{}{}
+	}
+	m.set[string(k)] = struct{}{}
+	*keys = (*keys)[:m.keys]
+	return true
+}
+
+// strStart is where a str's bytes start, past its length, for the first
+// byte c of a str, and where an extension's type is, for that of one.
+func strStart(c byte) int {
+	switch c {
+	case 0xd9, 0xc7:
+		return 2
+	case 0xda, 0xc8:
+		return 3
+	case 0xdb, 0xc9:
+		return 5
+	}
+	return 1
 }
 
 // allowed reports whether a value a body may hold starts v, which is its
@@ -126,16 +184,7 @@ func wellFormed(b []byte) bool {
 // seconds within maxInt of 1970.
 func allowed(v []byte, key bool) bool {
 	c := v[0]
-	// Where a str's bytes start, or an extension's type: past its length.
-	at := 1
-	switch c {
-	case 0xd9, 0xc7:
-		at = 2
-	case 0xda, 0xc8:
-		at = 3
-	case 0xdb, 0xc9:
-		at = 5
-	}
+	at := strStart(c)
 	str := c >= 0xa0 && c <= 0xbf || c >= 0xd9 && c <= 0xdb
 	switch {
 	case key && !str, c == 0xc0:

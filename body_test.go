@@ -60,17 +60,23 @@ func TestWellFormed(t *testing.T) {
 		{"81a161d5ff0000", false},                            // of 2
 		{"81a161d8ff" + strings.Repeat("00", 16), false},     // of 16
 		{"81a161c701ff00", false},
-		{"81a161a3e282ac", true},  // "€"
-		{"81a161a2c328", false},   // not UTF-8
-		{"81a161a3eda080", false}, // a surrogate
-		{"81a161a2c080", false},   // an overlong NUL
-		{"81a2c328a161", false},   // a key not UTF-8
-		{"8101a161", false},       // an int key
-		{"81c401 61a161", false},  // a bin key
-		{"81c3a161", false},       // a bool key
-		{"81a1618101a162", false}, // an int key, deeper
-		{"81a16191c0", false},     // a nil, deeper
-		{"81a16181a162c0", false}, // a nil as a map's value, deeper
+		{"81a161a3e282ac", true},              // "€"
+		{"81a161a2c328", false},               // not UTF-8
+		{"81a161a3eda080", false},             // a surrogate
+		{"81a161a2c080", false},               // an overlong NUL
+		{"81a2c328a161", false},               // a key not UTF-8
+		{"8101a161", false},                   // an int key
+		{"81c401 61a161", false},              // a bin key
+		{"81c3a161", false},                   // a bool key
+		{"81a1618101a162", false},             // an int key, deeper
+		{"81a16191c0", false},                 // a nil, deeper
+		{"81a16181a162c0", false},             // a nil as a map's value, deeper
+		{"82a16101a16102", false},             // a key given twice
+		{"82a16101d9016102", false},           // as a fixstr, then a str8
+		{"82a16181a16101a16201", true},        // one name in two maps
+		{"83a16101a16281a16101a16102", false}, // twice, a map between
+		{"de0028a36b303001a36b303101a36b303201a36b303301a36b303401a36b303501a36b303601a36b303701a36b303801a36b303901a36b313001a36b313101a36b313201a36b313301a36b313401a36b313501a36b313601a36b313701a36b313801a36b313901a36b323001a36b323101a36b323201a36b323301a36b323401a36b323501a36b323601a36b323701a36b323801a36b323901a36b333001a36b333101a36b333201a36b333301a36b333401a36b333501a36b333601a36b333701a36b333801a36b333901", true},  // 40 keys, each once
+		{"de0028a36b303001a36b303101a36b303201a36b303301a36b303401a36b303501a36b303601a36b303701a36b303801a36b303901a36b313001a36b313101a36b313201a36b313301a36b313401a36b313501a36b313601a36b313701a36b313801a36b313901a36b323001a36b323101a36b323201a36b323301a36b323401a36b323501a36b323601a36b323701a36b323801a36b323901a36b333001a36b333101a36b333201a36b333301a36b333401a36b333501a36b333601a36b333701a36b333801a36b303101", false}, // the 40th given before
 		{"81a161dc000101", true},
 		{"81a161dd0000000101", true},
 		{"81a161de0001a162", false}, // a map of one that has only its key
