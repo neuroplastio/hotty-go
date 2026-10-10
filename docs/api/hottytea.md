@@ -22,7 +22,7 @@ A Session is the program's side. Its life in a program:
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
   - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that HOTTY commands stay in order with Bubble Tea's frames.
 
-Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit.
+Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit. So a program never returns an empty View under its surfaces (Layout).
 
 In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells. A Session with Late asks for a late answer, and moves to Native if one comes.
 
@@ -220,7 +220,7 @@ DefaultLimit is how many surfaces a Session keeps at most, shown and hidden, unl
 func KeyName(k tea.Key) string
 ```
 
-KeyName is a Bubble Tea key as SPEC §10.4 names it, so that a program that edits a field in cells looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "A", "Space", "Control+a", "Alt+ArrowLeft", "Shift+Enter". Bubble Tea reads the bytes as SPEC §10.4 does, so a key has the name a host gives it. "" for a key with no name there.
+KeyName is a Bubble Tea key as SPEC §10.4 names it, so that a program that edits a field in cells looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "A", "Space", "Control+a", "Alt+ArrowLeft", "Shift+Enter". Bubble Tea's key is ultraviolet's, and this is hottyterm.KeyName's name for it. "" for a key with no name there.
 
 ## <a id="AckMsg"></a>type AckMsg
 
@@ -486,6 +486,8 @@ func (h *Session) Layout(want []Surface)
 ```
 
 Layout makes the surfaces on screen match want: a new surface gets its document and a placement, a moved or scrolled one is placed again (only the window inside its Clip), and one no longer wanted is hidden if it is kept, or else deleted. What it sends leaves with the next Flush. It does nothing until Mode is Native, and after Close.
+
+The View under the surfaces must not be empty, even where they cover the whole screen: a single space will do. Bubble Tea erases the screen for an empty view on every render, a host drops the placements an erase covers, and the relayout that follows renders again, so the surfaces never stay up.
 
 ### <a id="Session.Ping"></a>func (*Session) Ping
 

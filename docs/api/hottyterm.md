@@ -39,6 +39,7 @@ A command that exits hands the terminal to whatever runs next, usually a shell, 
 - [Constants](#pkg-constants)
 - [Variables](#pkg-variables)
 - [`func IsTerminal(f *os.File) bool`](#IsTerminal)
+- [`func KeyName(k uv.Key) string`](#KeyName)
 - [`type Event`](#Event)
 - [`type Known`](#Known)
 - [`type Message`](#Message)
@@ -107,6 +108,14 @@ func IsTerminal(f *os.File) bool
 ```
 
 IsTerminal reports whether f is a terminal: whether output written to it is seen, so surfaces and cells make sense, or goes to a pipe or a file, which wants plain data.
+
+## <a id="KeyName"></a>func KeyName
+
+```go
+func KeyName(k uv.Key) string
+```
+
+KeyName is a key as SPEC §10.4 names it, so that a program that reads keys from Events (uv.KeyPressEvent) looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "A", "Space", "Control+a", "Alt+ArrowLeft", "Shift+Enter". ultraviolet reads the bytes as SPEC §10.4 does, so a key has the name a host gives it. "" for a key with no name there.
 
 ## <a id="Event"></a>type Event
 
