@@ -207,7 +207,7 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.2\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }

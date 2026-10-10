@@ -5,12 +5,13 @@ import (
 	"strings"
 )
 
-// Query asks whether the terminal is a HOTTY host, fenced by Primary Device
-// Attributes (SPEC §4): a host replies to the query, numbered n, before the
-// DA1 answer every terminal sends. A DA1 answer with no reply before it
-// means there is no host. Late asks for a late answer as well.
+// Query asks whether the terminal is a HOTTY host that speaks Version,
+// fenced by Primary Device Attributes (SPEC §4): a host replies to the
+// query, numbered n, before the DA1 answer every terminal sends, in Version
+// or with EVERSION. A DA1 answer with no reply before it means there is no
+// host. Late asks for a late answer as well.
 func Query(n int, opts ...QueryOption) string {
-	ctl := Control{{"a", "q"}, {"n", strconv.Itoa(n)}}
+	ctl := Control{{"a", "q"}, {"n", strconv.Itoa(n)}, {"v", Version}}
 	for _, o := range opts {
 		o.query(&ctl)
 	}

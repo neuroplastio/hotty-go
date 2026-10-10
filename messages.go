@@ -3,6 +3,7 @@ package hotty
 import (
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/tinylib/msgp/msgp"
 )
@@ -270,6 +271,7 @@ const (
 	EDETACHED = "EDETACHED" // the surface is detached (SPEC §5.5)
 	EQUOTA    = "EQUOTA"    // over one of the host's limits (SPEC §13)
 	EBUDGET   = "EBUDGET"   // the host gave up on work over its time budget
+	EVERSION  = "EVERSION"  // a query lists no version the host speaks; the detail is those it speaks (SPEC §4)
 )
 
 // Reply is the host's answer to a command (SPEC §3.6).
@@ -311,13 +313,47 @@ func ReplyOf(m Message) (Reply, bool) {
 			r.Code, r.Detail = e.Code, e.Detail
 		}
 	case r.Re == "q" && len(m.Payload) > 0:
-		var caps Caps
-		if decodeBody(m.Payload, &caps) {
-			caps.Raw = slices.Clone(m.Payload)
+		if caps, ok := CapsOf(m.Payload); ok {
 			r.Caps = &caps
 		}
 	}
 	return r, true
+}
+
+// CapsOf reads capabilities from the body of a reply to a query (SPEC §4),
+// and reports whether it decoded: what a relay that stored or was handed
+// them reads them with. Raw is a copy of body.
+func CapsOf(body []byte) (Caps, bool) {
+	var caps Caps
+	if !decodeBody(body, &caps) {
+		return Caps{}, false
+	}
+	caps.Raw = slices.Clone(body)
+	return caps, true
+}
+
+// Speaks reports whether a query lists Version among the versions the
+// program speaks (v, SPEC §4). A host that speaks only Version answers it
+// with its capabilities, and any other query with EVERSION: ReplyQuery.
+func Speaks(query Control) bool {
+	for v := range strings.SplitSeq(Get(query, "v"), ",") {
+		if v == Version {
+			return true
+		}
+	}
+	return false
+}
+
+// ReplyQuery is a host's answer to a query (SPEC §4), for a host that
+// speaks only Version: caps, as ReplyCaps writes them, when the query lists
+// Version, and an EVERSION error naming Version when it does not. caps.V
+// is Version.
+func ReplyQuery(query Control, caps Caps) string {
+	n := Get(query, "n")
+	if !Speaks(query) {
+		return ReplyErr(n, "", "q", EVERSION, Version)
+	}
+	return ReplyCaps(n, caps)
 }
 
 // ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay

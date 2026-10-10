@@ -363,15 +363,17 @@ func TestConformanceVectors(t *testing.T) {
 					var want map[string]string
 					var types struct {
 						Types json.RawMessage `json:"types"`
+						Body  json.RawMessage `json:"body"`
 					}
 					if err := json.Unmarshal(st.Reply, &types); err != nil {
 						t.Fatal(err)
 					}
 					reply := st.Reply
-					if types.Types != nil {
+					if types.Types != nil || types.Body != nil {
 						var all map[string]json.RawMessage
 						_ = json.Unmarshal(st.Reply, &all)
 						delete(all, "types")
+						delete(all, "body")
 						reply, _ = json.Marshal(all)
 					}
 					if err := json.Unmarshal(reply, &want); err != nil {
@@ -399,6 +401,17 @@ func TestConformanceVectors(t *testing.T) {
 						}
 						if got != val {
 							t.Errorf("step %d: %s=%q, want %q (%v)", i, k, got, val, r.Message.Control)
+						}
+					}
+					// The fields body names, equal as values, each of its
+					// type (conformance/README.md, Send: body).
+					if types.Body != nil {
+						got, _ := fromMsgpack(r.Message.Payload).(map[string]any)
+						want, _ := fromJSON(types.Body).(map[string]any)
+						for k, w := range want {
+							if g, ok := got[k]; !ok || !reflect.DeepEqual(g, w) {
+								t.Errorf("step %d: body %s = %#v, want %#v", i, k, got[k], w)
+							}
 						}
 					}
 					if types.Types != nil {

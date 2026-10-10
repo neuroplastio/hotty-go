@@ -56,8 +56,8 @@ const (
 	MaxSize = 1000
 	// MaxName is the longest a surface name is (SPEC §3.5).
 	MaxName = 64
-	// Version is the protocol version this package implements, as the
-	// capabilities report it (SPEC §4).
+	// Version is the protocol version this package speaks: what its query
+	// lists, and what a host's capabilities must name (SPEC §4).
 	Version = "0.2"
 
 	prefix = "\x1b]" + Number + ";"
@@ -112,12 +112,12 @@ func With(c Control, k, v string) Control {
 	return out
 }
 
-// Without returns a copy of a control without a key: what a relay
-// forwards with the keys it owns taken off.
-func Without(c Control, k string) Control {
+// Without returns a copy of a control without the keys given: what a
+// relay forwards with the keys it owns taken off.
+func Without(c Control, keys ...string) Control {
 	out := make(Control, 0, len(c))
 	for _, kv := range c {
-		if kv.K != k {
+		if !slices.Contains(keys, kv.K) {
 			out = append(out, kv)
 		}
 	}

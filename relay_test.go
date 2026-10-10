@@ -27,6 +27,9 @@ func TestControlWith(t *testing.T) {
 	if got := Without(base, "s"); !reflect.DeepEqual(got, Control{{"a", "doc"}, {"q", "1"}}) || !Has(base, "s") {
 		t.Errorf("Without: %v, base %v", got, base)
 	}
+	if got := Without(base, "s", "q"); !reflect.DeepEqual(got, Control{{"a", "doc"}}) {
+		t.Errorf("Without two keys: %v", got)
+	}
 }
 
 // o and m are Encode's: a control given with them does not send them
@@ -102,6 +105,37 @@ func TestHostReplies(t *testing.T) {
 	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.2", Host: "h"})))
 	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e32a4686f7374a168" { // {"v":"0.2","host":"h"}
 		t.Errorf("written: %x", r.Message.Payload)
+	}
+	if caps, ok := CapsOf(raw); !ok || caps.V != "0.2" || !bytes.Equal(caps.Raw, raw) {
+		t.Errorf("CapsOf: %+v", caps)
+	}
+	if _, ok := CapsOf(body(`{"v":2}`)); ok {
+		t.Error("CapsOf: a v of another type decoded")
+	}
+}
+
+func TestReplyQuery(t *testing.T) {
+	caps := Caps{V: Version, Host: "h"}
+	for v, speaks := range map[string]bool{
+		"0.2": true, "0.1,0.2": true, "99.0,0.2": true,
+		"": false, "0.1": false, "0.20": false, "00.2": false, "0.2.0": false,
+	} {
+		q := Control{{"a", "q"}, {"n", "4"}}
+		if v != "" {
+			q = append(q, KV{"v", v})
+		}
+		if Speaks(q) != speaks {
+			t.Errorf("Speaks(v=%q) = %v", v, !speaks)
+		}
+		r, _ := ReplyOf(decodeOne(t, ReplyQuery(q, caps)))
+		switch {
+		case r.N != 4 || r.Re != "q":
+			t.Errorf("v=%q: %+v", v, r)
+		case speaks && (!r.OK || r.Caps == nil || r.Caps.V != Version):
+			t.Errorf("v=%q: %+v", v, r)
+		case !speaks && (r.OK || r.Code != EVERSION || r.Detail != Version):
+			t.Errorf("v=%q: %+v", v, r)
+		}
 	}
 }
 

@@ -685,7 +685,8 @@ type detectVector struct {
 		Done     *bool            `json:"done"`
 		Deadline *json.RawMessage `json:"deadline"`
 	} `json:"steps"`
-	Caps map[string]any `json:"caps"`
+	// Caps are checked when present; null means none.
+	Caps json.RawMessage `json:"caps"`
 }
 
 // TestDetectVectors runs each vector's steps through one Detector, with
@@ -743,8 +744,17 @@ func TestDetectVectors(t *testing.T) {
 					}
 				}
 			}
-			if v.Caps != nil {
-				check(t, "caps", capsView(d.Caps, v.Caps), v.Caps)
+			switch {
+			case string(v.Caps) == "null":
+				if d.Caps.V != "" || d.Caps.Raw != nil {
+					t.Errorf("caps %+v, want none", d.Caps)
+				}
+			case v.Caps != nil:
+				var want map[string]any
+				if err := json.Unmarshal(v.Caps, &want); err != nil {
+					t.Fatal(err)
+				}
+				check(t, "caps", capsView(d.Caps, want), want)
 			}
 		})
 	}

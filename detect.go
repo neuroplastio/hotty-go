@@ -48,20 +48,26 @@ const (
 // returns, gives it each DA1 answer and each reply it reads, calls Tick at
 // Deadline, and End when the input ends or it gives up.
 //
+// The terminal is a host when it answers the query with capabilities that
+// decode and name Version. Any other answer, an error (EVERSION, from a
+// host that speaks other versions) or capabilities this package cannot
+// read (a 0.1 host's JSON), makes the State Text at once: a host, but not
+// one this program can use (SPEC §4).
+//
 // Every DA1 answer from the start until Done is detection's, and the
 // program swallows it: it answers the query's fence, or a question asked
-// before, and is no key. A reply that answers the query is detection's
-// whenever it comes.
+// before, and is no key. A reply that answers the query, ok or an error,
+// is detection's whenever it comes.
 //
 // With Late, the query asks for a late answer (SPEC §4): the first reply
-// that answers it once the State is Text makes the State Native, with the
-// host's capabilities, Decided and Done as it was. The program then starts
-// using HOTTY.
+// that answers it once the State is Text, and makes the terminal a host,
+// makes the State Native, with the host's capabilities, Decided and Done
+// as it was. The program then starts using HOTTY.
 //
-// Decided and Done differ only for a host: it is known to be one when its
-// reply arrives, and detection is over when the DA1 answer behind it does.
-// A program that must not wait acts when Decided; one that hands the
-// terminal on, when Done.
+// Decided and Done differ only when the terminal answers the query: what
+// it is is known when its reply arrives, and detection is over when the DA1
+// answer behind it does. A program that must not wait acts when Decided;
+// one that hands the terminal on, when Done.
 //
 // Its zero value is ready to use. It is not safe for concurrent use.
 type Detector struct {
@@ -109,7 +115,7 @@ func (d *Detector) DA1(now time.Time) bool {
 		return false
 	}
 	if d.State != Detecting {
-		d.Done = true // the DA1 behind the host's reply
+		d.Done = true // the DA1 behind the reply
 	} else if d.grace.IsZero() {
 		d.grace = now.Add(DetectAfterDA1)
 	}
@@ -117,26 +123,28 @@ func (d *Detector) DA1(now time.Time) bool {
 }
 
 // Reply takes a reply that arrived at now, and reports whether it answers
-// the query: a=ok, re=q, and the query's n. One that comes after the
-// Detector decided changes nothing, unless the query asked for a late
-// answer (Late): then the first one that comes once the State is Text
-// makes it Native.
+// the query: re=q and the query's n, ok or an error. One that comes after
+// the Detector decided changes nothing, unless the query asked for a late
+// answer (Late): then the first one that comes once the State is Text and
+// makes the terminal a host makes it Native.
 func (d *Detector) Reply(r Reply, now time.Time) bool {
 	d.fire(now)
 	defer d.update()
-	if !r.OK || r.Re != "q" || r.N != d.n() {
+	if r.Re != "q" || r.N != d.n() {
 		return false
 	}
+	host := r.OK && r.Caps != nil && r.Caps.V == Version
 	if d.State == Detecting {
-		d.State, d.Decided = Native, true
-		d.Caps = capsOf(r)
+		d.State, d.Decided = Text, true
+		if host {
+			d.State, d.Caps = Native, *r.Caps
+		}
 		d.after = now.Add(DetectAfterReply)
 		if !d.timeout.IsZero() && d.timeout.Before(d.after) {
 			d.after = d.timeout
 		}
-	} else if d.State == Text && d.Late {
-		d.State = Native
-		d.Caps = capsOf(r)
+	} else if d.State == Text && d.Late && host {
+		d.State, d.Caps = Native, *r.Caps
 	}
 	return true
 }
@@ -183,12 +191,4 @@ func (d *Detector) update() {
 	default:
 		d.Deadline = d.timeout
 	}
-}
-
-// capsOf is the capabilities a reply carries, zero when none.
-func capsOf(r Reply) Caps {
-	if r.Caps == nil {
-		return Caps{}
-	}
-	return *r.Caps
 }

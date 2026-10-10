@@ -64,12 +64,14 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func ReplyCaps(n string, caps Caps) string`](#ReplyCaps)
 - [`func ReplyErr(n, surface, re, code, detail string) string`](#ReplyErr)
 - [`func ReplyOK(n, surface, re string, extra Control, body []byte) string`](#ReplyOK)
+- [`func ReplyQuery(query Control, caps Caps) string`](#ReplyQuery)
 - [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
 - [`func Sanitize(v string) string`](#Sanitize)
 - [`func Sends(c Caps, kind string) bool`](#Sends)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
 - [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
+- [`func Speaks(query Control) bool`](#Speaks)
 - [`func Supports(c Caps, op Op) bool`](#Supports)
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
@@ -85,6 +87,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z *Area) Msgsize() (s int)`](#Area.Msgsize)
 - [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
+  - [`func CapsOf(body []byte) (Caps, bool)`](#CapsOf)
   - [`func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error)`](#Caps.DecodeMsg)
   - [`func (z *Caps) EncodeMsg(en *msgp.Writer) (err error)`](#Caps.EncodeMsg)
   - [`func (z *Caps) Msgsize() (s int)`](#Caps.Msgsize)
@@ -94,7 +97,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z Cell) Msgsize() (s int)`](#Cell.Msgsize)
 - [`type Control`](#Control)
   - [`func With(c Control, k, v string) Control`](#With)
-  - [`func Without(c Control, k string) Control`](#Without)
+  - [`func Without(c Control, keys ...string) Control`](#Without)
 - [`type Decoder`](#Decoder)
   - [`func (d *Decoder) Feed(seq string) (m Message, r Result)`](#Decoder.Feed)
 - [`type DetectState`](#DetectState)
@@ -179,8 +182,8 @@ const (
 	MaxSize = 1000
 	// MaxName is the longest a surface name is (SPEC §3.5).
 	MaxName = 64
-	// Version is the protocol version this package implements, as the
-	// capabilities report it (SPEC §4).
+	// Version is the protocol version this package speaks: what its query
+	// lists, and what a host's capabilities must name (SPEC §4).
 	Version = "0.2"
 )
 ```
@@ -210,7 +213,7 @@ const (
 
 Event kinds (SPEC §9). A program ignores kinds it does not know: later versions add some.
 
-<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a>
+<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="EVERSION"></a>
 
 ```go
 const (
@@ -220,6 +223,7 @@ const (
 	EDETACHED = "EDETACHED" // the surface is detached (SPEC §5.5)
 	EQUOTA    = "EQUOTA"    // over one of the host's limits (SPEC §13)
 	EBUDGET   = "EBUDGET"   // the host gave up on work over its time budget
+	EVERSION  = "EVERSION"  // a query lists no version the host speaks; the detail is those it speaks (SPEC §4)
 )
 ```
 
@@ -470,7 +474,7 @@ PlaceAt places a surface with its window's top-left corner at cell (x, y), count
 func Query(n int, opts ...QueryOption) string
 ```
 
-Query asks whether the terminal is a HOTTY host, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
+Query asks whether the terminal is a HOTTY host that speaks Version, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends, in Version or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
 
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
@@ -503,6 +507,14 @@ func ReplyOK(n, surface, re string, extra Control, body []byte) string
 ```
 
 ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering for one writes it to a program: n and surface echo the command's, each left out when "", re names the action answered, extra keys follow it (a placement's c and r), and body is its msgpack, if any. Never compressed (SPEC §3.3).
+
+## <a id="ReplyQuery"></a>func ReplyQuery
+
+```go
+func ReplyQuery(query Control, caps Caps) string
+```
+
+ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks only Version: caps, as ReplyCaps writes them, when the query lists Version, and an EVERSION error naming Version when it does not. caps.V is Version.
 
 ## <a id="Res"></a>func Res
 
@@ -551,6 +563,14 @@ func SetVar(surface, target, name, value string, opts ...ReplyOption) string
 ```
 
 SetVar sets the custom property --name on an element: the cheap way to move a bar or a needle every frame, with CSS that reads it.
+
+## <a id="Speaks"></a>func Speaks
+
+```go
+func Speaks(query Control) bool
+```
+
+Speaks reports whether a query lists Version among the versions the program speaks (v, SPEC §4). A host that speaks only Version answers it with its capabilities, and any other query with EVERSION: ReplyQuery.
 
 ## <a id="Supports"></a>func Supports
 
@@ -778,6 +798,14 @@ type Caps struct {
 
 Caps is what a host says about itself in its reply to a query (SPEC §4).
 
+### <a id="CapsOf"></a>func CapsOf
+
+```go
+func CapsOf(body []byte) (Caps, bool)
+```
+
+CapsOf reads capabilities from the body of a reply to a query (SPEC §4), and reports whether it decoded: what a relay that stored or was handed them reads them with. Raw is a copy of body.
+
 ### <a id="Caps.DecodeMsg"></a>func (*Caps) DecodeMsg
 
 ```go
@@ -856,10 +884,10 @@ With returns a copy of a control with a key set: in place if the control has it,
 ### <a id="Without"></a>func Without
 
 ```go
-func Without(c Control, k string) Control
+func Without(c Control, keys ...string) Control
 ```
 
-Without returns a copy of a control without a key: what a relay forwards with the keys it owns taken off.
+Without returns a copy of a control without the keys given: what a relay forwards with the keys it owns taken off.
 
 ## <a id="Decoder"></a>type Decoder
 
@@ -940,11 +968,13 @@ type Detector struct {
 
 Detector decides whether the terminal is a HOTTY host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
 
-Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query is detection's whenever it comes.
+The terminal is a host when it answers the query with capabilities that decode and name Version. Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
 
-With Late, the query asks for a late answer (SPEC §4): the first reply that answers it once the State is Text makes the State Native, with the host's capabilities, Decided and Done as it was. The program then starts using HOTTY.
+Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query, ok or an error, is detection's whenever it comes.
 
-Decided and Done differ only for a host: it is known to be one when its reply arrives, and detection is over when the DA1 answer behind it does. A program that must not wait acts when Decided; one that hands the terminal on, when Done.
+With Late, the query asks for a late answer (SPEC §4): the first reply that answers it once the State is Text, and makes the terminal a host, makes the State Native, with the host's capabilities, Decided and Done as it was. The program then starts using HOTTY.
+
+Decided and Done differ only when the terminal answers the query: what it is is known when its reply arrives, and detection is over when the DA1 answer behind it does. A program that must not wait acts when Decided; one that hands the terminal on, when Done.
 
 Its zero value is ready to use. It is not safe for concurrent use.
 
@@ -970,7 +1000,7 @@ End ends detection at now: the input ended, or the program gave up. A terminal t
 func (d *Detector) Reply(r Reply, now time.Time) bool
 ```
 
-Reply takes a reply that arrived at now, and reports whether it answers the query: a=ok, re=q, and the query's n. One that comes after the Detector decided changes nothing, unless the query asked for a late answer (Late): then the first one that comes once the State is Text makes it Native.
+Reply takes a reply that arrived at now, and reports whether it answers the query: re=q and the query's n, ok or an error. One that comes after the Detector decided changes nothing, unless the query asked for a late answer (Late): then the first one that comes once the State is Text and makes the terminal a host makes it Native.
 
 ### <a id="Detector.Start"></a>func (*Detector) Start
 

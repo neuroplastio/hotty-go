@@ -525,6 +525,10 @@ func (h *Host) send(enc string) {
 
 func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.Control) {
 	if a == "q" {
+		// This host speaks hotty.Version only (SPEC §4).
+		if !hotty.Speaks(m.Control) {
+			return hotty.EVERSION, hotty.Version, nil
+		}
 		return "", "", nil
 	}
 	if a == "res" {

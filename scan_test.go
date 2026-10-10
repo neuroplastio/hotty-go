@@ -137,7 +137,7 @@ func TestDetector(t *testing.T) {
 	if q := d.Start(at(0)); q != Query(1) || d.Deadline != at(1500) {
 		t.Fatalf("Start: %q, deadline %v", q, d.Deadline)
 	}
-	if !d.Reply(reply(`{"v":"0.1","host":"h","version":"0.0.10","passthrough":true}`), at(10)) ||
+	if !d.Reply(reply(`{"v":"0.2","host":"h","version":"0.0.10","passthrough":true}`), at(10)) ||
 		d.State != Native || !d.Decided || d.Done || d.Caps.Version != "0.0.10" || !d.Caps.Passthrough {
 		t.Fatalf("the host's reply: %+v", d)
 	}
@@ -152,7 +152,7 @@ func TestDetector(t *testing.T) {
 	var late Detector
 	late.Start(at(0))
 	late.Tick(at(1500))
-	if !late.Reply(reply(`{"v":"0.1"}`), at(1600)) || late.State != Text {
+	if !late.Reply(reply(`{"v":"0.2"}`), at(1600)) || late.State != Text {
 		t.Errorf("a late reply: %+v", late)
 	}
 	other, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`))
@@ -160,15 +160,32 @@ func TestDetector(t *testing.T) {
 		t.Error("a reply to another query")
 	}
 
-	// A reply whose capabilities do not parse still says it is a host.
-	var bare Detector
-	bare.Start(at(0))
-	if !bare.Reply(reply(`[`), at(5)) || bare.State != Native || bare.Caps.V != "" {
-		t.Errorf("a reply without capabilities: %+v", bare)
+	// A reply whose capabilities do not decode, or name another version,
+	// and an error, answer the query: a host this program cannot use.
+	for name, r := range map[string]Reply{
+		"caps that do not decode": reply(`[`),
+		"another version":         reply(`{"v":"0.3"}`),
+		"no capabilities":         reply(``),
+		"EVERSION": func() Reply {
+			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.3"}`))
+			return r
+		}(),
+	} {
+		var bare Detector
+		bare.Start(at(0))
+		if !bare.Reply(r, at(5)) || bare.State != Text || !bare.Decided || bare.Done || bare.Caps.Raw != nil {
+			t.Errorf("%s: %+v", name, bare)
+		}
+		if !bare.DA1(at(6)) || !bare.Done {
+			t.Errorf("%s, the DA1 behind it: %+v", name, bare)
+		}
 	}
-	bare.End(at(6))
-	if !bare.Done || bare.State != Native {
-		t.Errorf("End after native: %+v", bare)
+	var native Detector
+	native.Start(at(0))
+	native.Reply(reply(`{"v":"0.2"}`), at(5))
+	native.End(at(6))
+	if !native.Done || native.State != Native {
+		t.Errorf("End after native: %+v", native)
 	}
 	if Detecting.String() != "detecting" || Text.String() != "text" || DetectState(9).String() != "DetectState(9)" {
 		t.Error("DetectState.String")
