@@ -4,13 +4,13 @@ module github.com/neuroplastio/hotty-go/hottytea
 
 go 1.25.0
 
-require github.com/neuroplastio/hotty-go v0.0.0-20261010222028-ea80c4c35faf
+require github.com/neuroplastio/hotty-go v0.0.0-20261010225900-4e7ee19a3b9d
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
-	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-20261010222028-ea80c4c35faf
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010222028-ea80c4c35faf
+	github.com/neuroplastio/hotty-go/hottyterm v0.0.0-20261010225900-4e7ee19a3b9d
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261010225900-4e7ee19a3b9d
 )
 
 require (
@@ -24,7 +24,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010222028-ea80c4c35faf // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261010225900-4e7ee19a3b9d // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
