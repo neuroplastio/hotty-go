@@ -29,7 +29,8 @@
 // and a host may drop placements with them. The Session reads the output
 // on its way out, and asks for a new layout when that happens
 // (RelayoutMsg); it sends a document again when a placement reports it
-// gone, and keeps the number of surfaces within the host's limit.
+// gone, and keeps the number of surfaces within the host's limit. So a
+// program never returns an empty View under its surfaces (Layout).
 //
 // In a terminal that is not a host, Mode is Text and the Session sends
 // nothing: the program draws everything in cells. A Session with Late
@@ -422,6 +423,12 @@ func (h *Session) Ping() tea.Cmd {
 // the window inside its Clip), and one no longer wanted is hidden if it is
 // kept, or else deleted. What it sends leaves with the next Flush. It does
 // nothing until Mode is Native, and after Close.
+//
+// The View under the surfaces must not be empty, even where they cover the
+// whole screen: a single space will do. Bubble Tea erases the screen for
+// an empty view on every render, a host drops the placements an erase
+// covers, and the relayout that follows renders again, so the surfaces
+// never stay up.
 func (h *Session) Layout(want []Surface) {
 	if h.Mode != Native || h.closed {
 		return
