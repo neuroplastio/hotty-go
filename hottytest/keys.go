@@ -19,10 +19,11 @@ import (
 // "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown",
 // "Escape", "Control+s".
 //
-// Tab and Shift+Tab move focus among the surface's focusable elements in
-// tree order, those with a negative tabindex and those in an inert subtree
-// left out; past the last, or before the first, the surface loses the
-// keyboard (blur). A text field (a text-like input, a textarea) does what
+// Tab and Shift+Tab move focus from the focused element to the next or the
+// previous of the surface's focusable elements in tree order, those with a
+// negative tabindex and those in an inert subtree left out (an element
+// focused with a negative tabindex is where they start from); past the
+// last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what
 // its keymap says (hotty.Resolve, with the data-keys of the elements from
 // the root to it): it edits its value at a caret and a selection this host
 // keeps, as hottyedit.Field does, with an input event for each edit
@@ -37,7 +38,8 @@ import (
 // scroll, so a key bound to a scroll action goes on as if the keymap did
 // not bind it (SPEC §10.2). The element takes the other keys of its row of
 // the table, unmodified or with Shift only:
-//   - a button, a link, a summary: Space and Enter click it;
+//   - a button, a link, a summary: Space and Enter click it (another
+//     element that reports clicks, data-on~=click, uses no keys);
 //   - a checkbox or a radio button: Space checks it, Enter submits its
 //     form;
 //   - a date or time input: the keys a text input's default keymap binds,
@@ -114,7 +116,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 			return false
 		}
 		return true
-	case reportsClick(el) && (el.DataAtom != atom.A || !hyperlink(el)):
+	case button(el) && (el.DataAtom != atom.A || !hyperlink(el)):
 		if name != " " && name != "Enter" {
 			return false
 		}
@@ -191,10 +193,18 @@ func editingHost(n *html.Node) bool {
 	return ok && !strings.EqualFold(v, "false")
 }
 
-// tab moves focus to the next focusable element, or the previous one.
+// tab moves focus to the next focusable element, or the previous one,
+// from the focused element, as a browser does: one Tab skips (tabindex=-1)
+// is a place to start from, between the ones before it and after it.
 func (h *Host) tab(s *Surface, back bool) {
 	var order []*html.Node
+	// at is where the focused element is in order, or would be; -1 when
+	// nothing is focused.
+	at := -1
 	walk(s.doc, func(n *html.Node) {
+		if n == s.focused {
+			at = len(order)
+		}
 		if !focusable(n) || closest(n, func(p *html.Node) bool { _, ok := attr(p, "inert"); return ok }) != nil {
 			return
 		}
@@ -205,15 +215,16 @@ func (h *Host) tab(s *Surface, back bool) {
 		}
 		order = append(order, n)
 	})
-	i := slices.Index(order, s.focused)
+	in := at >= 0 && at < len(order) && order[at] == s.focused
+	i := at
 	switch {
-	case i < 0 && back:
+	case at < 0 && back:
 		i = len(order) - 1
-	case i < 0:
+	case at < 0:
 		i = 0
 	case back:
 		i--
-	default:
+	case in:
 		i++
 	}
 	if i < 0 || i >= len(order) {

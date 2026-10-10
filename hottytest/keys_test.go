@@ -227,6 +227,31 @@ func TestKeysWithNothingFocused(t *testing.T) {
 	expect(t, sent(h), "ev blur t=")
 }
 
+// An element that only reports clicks uses no keys: Space and Enter on a
+// span with data-on=click are the program's (SPEC §10.2). Tab from an
+// element focused out of the Tab order goes on from where it is, as a
+// browser's does.
+func TestKeysClickSpanAndTabFromHeading(t *testing.T) {
+	h := shown(t, "k", `<button id=a>A</button><h2 id=h tabindex=-1>Head</h2>`+
+		`<span id=link role=link tabindex=0 data-on=click>Link</span><button id=b>B</button>`)
+	send(h, hotty.Focus("k", "h"))
+	h.drain()
+	h.Key("Tab")
+	if got := h.Surface("k").Focused(); got != "link" {
+		t.Errorf("Tab from the heading: %q", got)
+	}
+	for _, k := range []string{"Space", "Enter"} {
+		if h.Key(k) {
+			t.Errorf("%s was used on a span", k)
+		}
+	}
+	expect(t, sent(h), "ev focus t=link", `" \r"`)
+	send(h, hotty.Focus("k", "h"))
+	h.drain()
+	h.Key("Shift+Tab")
+	expect(t, sent(h), "ev focus t=a")
+}
+
 // A select picks with its keys, past disabled options, by the first letter
 // of an option's label; each pick sends input, with data-on~=input, and
 // change at once (SPEC §10.2, selects). Space and Enter do nothing: this

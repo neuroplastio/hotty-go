@@ -1217,6 +1217,17 @@ func reportsClick(n *html.Node) bool {
 	if n.Type != html.ElementNode {
 		return false
 	}
+	if button(n) {
+		return true
+	}
+	on, _ := attr(n, "data-on")
+	return slices.Contains(strings.Fields(on), "click")
+}
+
+// button reports whether Space and Enter click n (SPEC §10.2): a button, a
+// link, a summary. Any other element that reports clicks (data-on~=click)
+// uses no keys.
+func button(n *html.Node) bool {
 	switch n.DataAtom {
 	case atom.Button, atom.A, atom.Summary:
 		return true
@@ -1227,8 +1238,7 @@ func reportsClick(n *html.Node) bool {
 			return true
 		}
 	}
-	on, _ := attr(n, "data-on")
-	return slices.Contains(strings.Fields(on), "click")
+	return false
 }
 
 func submits(n *html.Node) bool {
