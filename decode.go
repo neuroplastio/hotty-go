@@ -55,9 +55,36 @@ func (r Result) String() string {
 type Decoder struct {
 	pending Control // the control of a chunked message
 	body    strings.Builder
+	over    bool // the pending message passed Max: its chunks are dropped
+	// Max is the most bytes a message's payload may decode to, after
+	// base64 and zlib; one that would decode to more is Invalid, and its
+	// chunks are not kept (SPEC §3.4 lets a host limit a message). Zero is
+	// DefaultMax. A host sets it to what it accepts from a program, at
+	// least 1 MiB.
+	Max int
 	// Invalid counts the malformed messages dropped so far, aborted
 	// chunked messages included.
 	Invalid int
+}
+
+// DefaultMax is a Decoder's Max when it sets none: 16 MiB, enough for a
+// document with its images inline, and a bound on what a peer can make a
+// Decoder hold.
+const DefaultMax = 16 << 20
+
+// max is d's Max, or DefaultMax.
+func (d *Decoder) max() int {
+	if d.Max > 0 {
+		return d.Max
+	}
+	return DefaultMax
+}
+
+// encodedMax is the most base64 a payload of max bytes is sent as: zlib may
+// make it a little longer than it decodes to.
+func encodedMax(max int) int {
+	n := max + max/256 + 64
+	return (n + 2) / 3 * 4
 }
 
 // Feed takes one complete OSC sequence, as a terminal-input parser
@@ -91,17 +118,29 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 
 	if d.pending != nil {
 		if continuation(ctl) {
-			d.body.WriteString(payload)
+			if !d.over && d.body.Len()+len(payload) > encodedMax(d.max()) {
+				// Too long: counted once, and its chunks dropped as they come.
+				d.body, d.over = strings.Builder{}, true
+				d.Invalid++
+			}
+			if !d.over {
+				d.body.WriteString(payload)
+			}
 			if more == "1" {
 				return Message{}, Partial
 			}
-			ctl, payload := d.pending, d.body.String()
-			d.pending, d.body = nil, strings.Builder{}
+			ctl, payload, over := d.pending, d.body.String(), d.over
+			d.abort()
+			if over {
+				return Message{}, Invalid
+			}
 			return d.finish(ctl, payload)
 		}
 		// Another message before the last chunk aborts the pending one.
+		if !d.over {
+			d.Invalid++
+		}
 		d.abort()
-		d.Invalid++
 	} else if continuation(ctl) {
 		// A continuation with nothing to continue.
 		return Message{}, d.invalid()
@@ -110,7 +149,12 @@ func (d *Decoder) Feed(seq string) (m Message, r Result) {
 	ctl = Without(ctl, "m")
 	if hasMore && more == "1" {
 		d.pending = ctl
-		d.body.WriteString(payload)
+		if len(payload) > encodedMax(d.max()) {
+			d.over = true
+			d.Invalid++
+		} else {
+			d.body.WriteString(payload)
+		}
 		return Message{}, Partial
 	}
 	return d.finish(ctl, payload)
@@ -125,17 +169,22 @@ func (d *Decoder) invalid() Result {
 // malformed messages (SPEC §3.7).
 func (d *Decoder) bad() Result {
 	if d.pending != nil {
+		if !d.over {
+			d.Invalid++
+		}
 		d.abort()
-		d.Invalid++
 	}
 	return d.invalid()
 }
 
-func (d *Decoder) abort() { d.pending, d.body = nil, strings.Builder{} }
+func (d *Decoder) abort() { d.pending, d.body, d.over = nil, strings.Builder{}, false }
 
 func (d *Decoder) finish(ctl Control, payload string) (Message, Result) {
+	if len(payload) > encodedMax(d.max()) {
+		return Message{}, d.invalid()
+	}
 	o, _ := Lookup(ctl, "o")
-	p, ok := decodePayload(payload, o)
+	p, ok := decodePayload(payload, o, d.max())
 	if !ok {
 		return Message{}, d.invalid()
 	}
@@ -198,8 +247,9 @@ func validKey(k string) bool {
 }
 
 // decodePayload reads base64, with or without padding and with whitespace
-// in it, then zlib when o is "z" (SPEC §3.3).
-func decodePayload(b64, o string) ([]byte, bool) {
+// in it, then zlib when o is "z" (SPEC §3.3). A payload that decodes to
+// more than max bytes is refused, and inflating stops past it.
+func decodePayload(b64, o string, max int) ([]byte, bool) {
 	if strings.ContainsAny(b64, " \t\r\n") {
 		b64 = strings.Map(func(r rune) rune {
 			if r == ' ' || r == '\n' || r == '\r' || r == '\t' {
@@ -213,14 +263,14 @@ func decodePayload(b64, o string) ([]byte, bool) {
 		return nil, false
 	}
 	if o != "z" {
-		return b, true
+		return b, len(b) <= max
 	}
 	r, err := zlib.NewReader(bytes.NewReader(b))
 	if err != nil {
 		return nil, false
 	}
-	out, err := io.ReadAll(r)
-	if err != nil {
+	out, err := io.ReadAll(io.LimitReader(r, int64(max)+1))
+	if err != nil || len(out) > max {
 		return nil, false
 	}
 	return out, true

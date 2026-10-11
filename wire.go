@@ -6,6 +6,7 @@ package hotty
 
 //go:generate go run github.com/tinylib/msgp@v1.6.5 -file wire.go -o wire_gen.go -marshal=false -tests=false -unexported
 //msgp:newtime
+//msgp:limit arrays:65536 maps:65536
 
 // Caps is what a host says about itself in its reply to a query (SPEC §4).
 type Caps struct {

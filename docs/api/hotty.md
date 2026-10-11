@@ -245,6 +245,14 @@ const (
 
 Error codes, in a reply's Code (SPEC §3.6).
 
+<a id="DefaultMax"></a>
+
+```go
+const DefaultMax = 16 << 20
+```
+
+DefaultMax is a Decoder's Max when it sets none: 16 MiB, enough for a document with its images inline, and a bound on what a peer can make a Decoder hold.
+
 <a id="MaxDepth"></a>
 
 ```go
@@ -926,6 +934,12 @@ Without returns a copy of a control without the keys given: what a relay forward
 ```go
 type Decoder struct {
 
+	// Max is the most bytes a message's payload may decode to, after
+	// base64 and zlib; one that would decode to more is Invalid, and its
+	// chunks are not kept (SPEC §3.4 lets a host limit a message). Zero is
+	// DefaultMax. A host sets it to what it accepts from a program, at
+	// least 1 MiB.
+	Max int
 	// Invalid counts the malformed messages dropped so far, aborted
 	// chunked messages included.
 	Invalid int
