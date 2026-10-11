@@ -149,7 +149,7 @@ func DefaultCaps() hotty.Caps {
 	c := hotty.Caps{V: hotty.Version, Cell: &hotty.Cell{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
 		Limits: map[string]int{"surfaces": 64}}
 	for _, op := range []hotty.Op{hotty.OpMorph, hotty.OpInner, hotty.OpReplace, hotty.OpAppend, hotty.OpPrepend,
-		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar} {
+		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar, hotty.OpReveal} {
 		c.Ops = append(c.Ops, string(op))
 	}
 	c.Events = []string{hotty.EventClick, hotty.EventChange, hotty.EventInput, hotty.EventSubmit,

@@ -121,5 +121,10 @@ type hoverDetail struct {
 	Out bool `msg:"out,omitempty"`
 }
 
+type viewDetail struct {
+	In  map[string]Area `msg:"in"`
+	End bool            `msg:"end"`
+}
+
 // submitDetail is a form's fields by name.
 type submitDetail map[string]string

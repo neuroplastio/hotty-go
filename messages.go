@@ -21,6 +21,7 @@ const (
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
+	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
@@ -60,6 +61,8 @@ type Event struct {
 	Drag *Drag
 	// Hover is a hover's (SPEC §9.4).
 	Hover *Hover
+	// View is a view's (SPEC §9.5).
+	View *View
 	// Area is the cells of the element a click or a press reports, a
 	// keyboard click's too: what a program places something next to the
 	// element by, as a browser places a select's list or a menu by its
@@ -87,6 +90,17 @@ type Hover struct {
 	// Col and Row are the surface's cell under the pointer when the
 	// element changed, from 0 at its top left (not its window's).
 	Col, Row int
+}
+
+// View is what a view event reports (SPEC §9.5): every element with
+// data-on~=view and an id that is in view, not only what changed.
+type View struct {
+	// Areas are the elements in view by id, each with its whole area,
+	// however little of it is shown.
+	Areas map[string]Area
+	// AtEnd is true when the document's root is scrolled as far down as it
+	// goes, as a root that does not scroll down always is.
+	AtEnd bool
 }
 
 // Drag is where a drag's pointer is, and the modifier keys held
@@ -176,6 +190,14 @@ func readDetail(e *Event) {
 				e.Drag.Y, e.Drag.HasY = *d.Y, true
 			}
 		}
+	case EventView:
+		var d viewDetail
+		if decodeBody(b, &d) {
+			if d.In == nil {
+				d.In = map[string]Area{}
+			}
+			e.View = &View{Areas: d.In, AtEnd: d.End}
+		}
 	case EventHover:
 		var d hoverDetail
 		switch {
@@ -257,6 +279,15 @@ func detailOf(e Event) []byte {
 		default:
 			d = &hoverDetail{C: &h.Col, R: &h.Row}
 		}
+	case EventView:
+		if e.View == nil {
+			return nil
+		}
+		in := e.View.Areas
+		if in == nil {
+			in = map[string]Area{}
+		}
+		d = &viewDetail{In: in, End: e.View.AtEnd}
 	default:
 		return nil
 	}
@@ -489,6 +520,19 @@ func Drags(c Caps) bool {
 func Hovers(c Caps) bool {
 	for _, k := range c.Events {
 		if k == EventHover {
+			return true
+		}
+	}
+	return false
+}
+
+// Views reports whether the host sends view (SPEC §9.5). Like Drags, a
+// host that lists no kinds is taken not to: without it a program that
+// needs to know what is shown draws that part in cells, or takes the
+// element it last revealed as the one shown.
+func Views(c Caps) bool {
+	for _, k := range c.Events {
+		if k == EventView {
 			return true
 		}
 	}

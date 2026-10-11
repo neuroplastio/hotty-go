@@ -281,6 +281,7 @@ const (
 	OpUnattr  Op = "unattr"  // remove the target's attribute named by the key
 	OpText    Op = "text"    // replace the target's children with one text node
 	OpVar     Op = "var"     // set the custom property --key on the target
+	OpReveal  Op = "reveal"  // scroll the target into view; the payload says where (Reveal)
 )
 
 // Delta changes one surface's document (SPEC §6). target is an element id,
@@ -325,6 +326,23 @@ func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
 // open <details> (SPEC §6.2).
 func MorphTo(surface, target, html string, opts ...ReplyOption) string {
 	return Delta(surface, OpMorph, target, "", []byte(html), opts...)
+}
+
+// Where Reveal brings an element (SPEC §6.1).
+const (
+	RevealNearest = ""      // as little as brings it into view
+	RevealStart   = "start" // its top at the top of each box that holds it
+	RevealEnd     = "end"   // its bottom at the bottom
+)
+
+// Reveal scrolls an element into view (SPEC §6.1): each box that holds
+// it, the innermost first, along the axes the document scrolls (Scroll).
+// where is RevealStart, RevealEnd or RevealNearest. It moves no focus, so
+// a list beside the document keeps the keyboard: a table of contents that
+// jumps to a section. Elements that report whether they are in view
+// report it after (EventView).
+func Reveal(surface, target, where string, opts ...ReplyOption) string {
+	return Delta(surface, OpReveal, target, "", []byte(where), opts...)
 }
 
 // Res stores a resource that documents refer to as cid:<id> (SPEC §7.1): a

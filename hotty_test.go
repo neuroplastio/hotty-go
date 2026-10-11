@@ -97,6 +97,8 @@ func TestCommandsRoundTrip(t *testing.T) {
 		{"var", SetVar("dash", "cpu", "p", "42"), map[string]string{"a": "delta", "s": "dash", "op": "var", "t": "cpu", "k": "p", "q": "2"}, "42"},
 		{"attr", SetAttr("dash", "cpu", "class", "hot"), map[string]string{"a": "delta", "s": "dash", "op": "attr", "t": "cpu", "k": "class", "q": "2"}, "hot"},
 		{"unattr", RemoveAttr("dash", "cpu", "class"), map[string]string{"a": "delta", "s": "dash", "op": "unattr", "t": "cpu", "k": "class", "q": "2"}, ""},
+		{"reveal", Reveal("doc", "usage", RevealStart), map[string]string{"a": "delta", "s": "doc", "op": "reveal", "t": "usage", "q": "2"}, "start"},
+		{"reveal nearest", Reveal("doc", "usage", RevealNearest), map[string]string{"a": "delta", "s": "doc", "op": "reveal", "t": "usage", "q": "2"}, ""},
 		{"morph by ids", MorphTo("dash", "", "<b id=x>1</b>"), map[string]string{"a": "delta", "s": "dash", "op": "morph", "q": "2"}, "<b id=x>1</b>"},
 		{"append", Delta("log", OpAppend, "lines", "", []byte("<li>x</li>")), map[string]string{"a": "delta", "s": "log", "op": "append", "t": "lines", "q": "2"}, "<li>x</li>"},
 		{"res", Res("logo", "image/svg+xml", []byte("<svg/>")), map[string]string{"a": "res", "id": "logo", "type": "image/svg+xml", "q": "2"}, "<svg/>"},
@@ -525,6 +527,8 @@ func TestEncodeEvent(t *testing.T) {
 		{Surface: "g", Kind: EventDragEnd, Drag: &Drag{Col: 1, Row: 0}},
 		{Surface: "g", Kind: EventHover, Target: "c1", Hover: &Hover{Col: 0, Row: 4}},
 		{Surface: "g", Kind: EventHover, Hover: &Hover{Out: true}},
+		{Surface: "d", Kind: EventView, View: &View{Areas: map[string]Area{"intro": {Col: 0, Row: -3, W: 40, H: 5}, "usage": {Col: 0, Row: 2, W: 40, H: 9}}}},
+		{Surface: "d", Kind: EventView, View: &View{Areas: map[string]Area{}, AtEnd: true}},
 		{Surface: "g", Kind: EventFocus, Target: "name"},
 	} {
 		var d Decoder
@@ -610,6 +614,10 @@ func TestCaps(t *testing.T) {
 	// So is hover.
 	if Hovers(*caps) || Hovers(none) || !Hovers((Caps{Events: []string{EventHover}})) {
 		t.Error("Hovers")
+	}
+	// And view.
+	if Views(*caps) || Views(none) || !Views((Caps{Events: []string{EventView}})) || !Sends(none, EventView) {
+		t.Error("Views")
 	}
 	// Scroll only where a host says so.
 	scrolls, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":"0.2","scroll":true}`))

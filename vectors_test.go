@@ -24,6 +24,9 @@ var features = map[string]bool{
 	"event.hover":         true,
 	"doc.scroll":          true,
 	"event.area":          true,
+	"event.view":          true,
+	"caps.views":          true,
+	"reveal":              true,
 	"caps.scroll":         true,
 	"caps.passthrough":    true,
 	"caps.version":        true,
@@ -161,6 +164,8 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return RemoveAttr(str("surface"), str("target"), str("name"), opts...)
 	case "morph_to":
 		return MorphTo(str("surface"), str("target"), str("html"), opts...)
+	case "reveal":
+		return Reveal(str("surface"), str("target"), str("where"), opts...)
 	case "res":
 		return Res(str("id"), str("mime"), []byte(str("data")), opts...)
 	case "del_res":
@@ -436,6 +441,13 @@ func eventView(e Event) map[string]any {
 	if a := e.Area; a != nil {
 		view["area"] = map[string]any{"c": a.Col, "r": a.Row, "w": a.W, "h": a.H}
 	}
+	if v := e.View; v != nil {
+		areas := map[string]any{}
+		for id, a := range v.Areas {
+			areas[id] = map[string]any{"c": a.Col, "r": a.Row, "w": a.W, "h": a.H}
+		}
+		view["view"] = map[string]any{"areas": areas, "at_end": v.AtEnd}
+	}
 	return view
 }
 
@@ -445,7 +457,7 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  nil,
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "light": Light(c),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	if c.Cell != nil {

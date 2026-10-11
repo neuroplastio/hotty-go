@@ -83,6 +83,11 @@ func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, 
 	case hotty.OpVar:
 		style, _ := attr(t, "style")
 		setAttr(t, "style", setStyleProp(style, varName(key), payload))
+	case hotty.OpReveal:
+		// Nothing is laid out, so nothing scrolls (SPEC §6.1).
+		if payload != hotty.RevealNearest && payload != hotty.RevealStart && payload != hotty.RevealEnd {
+			return hotty.EINVAL, "reveal " + payload
+		}
 	default:
 		return hotty.EINVAL, "unknown op " + string(op)
 	}

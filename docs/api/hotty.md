@@ -66,6 +66,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func ReplyOK(n, surface, re string, extra Control, body []byte) string`](#ReplyOK)
 - [`func ReplyQuery(query Control, caps Caps) string`](#ReplyQuery)
 - [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
+- [`func Reveal(surface, target, where string, opts ...ReplyOption) string`](#Reveal)
 - [`func Sanitize(v string) string`](#Sanitize)
 - [`func Sends(c Caps, kind string) bool`](#Sends)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
@@ -76,6 +77,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func ValidName(s string) bool`](#ValidName)
+- [`func Views(c Caps) bool`](#Views)
 - [`func WithdrawLate() string`](#WithdrawLate)
 - [`type Action`](#Action)
   - [`func (a Action) Moves() bool`](#Action.Moves)
@@ -154,9 +156,22 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z *Size) DecodeMsg(dc *msgp.Reader) (err error)`](#Size.DecodeMsg)
   - [`func (z Size) EncodeMsg(en *msgp.Writer) (err error)`](#Size.EncodeMsg)
   - [`func (z Size) Msgsize() (s int)`](#Size.Msgsize)
+- [`type View`](#View)
 - [`type Window`](#Window)
 
 ## <a id="pkg-constants"></a>Constants
+
+<a id="RevealNearest"></a><a id="RevealStart"></a><a id="RevealEnd"></a>
+
+```go
+const (
+	RevealNearest = ""      // as little as brings it into view
+	RevealStart   = "start" // its top at the top of each box that holds it
+	RevealEnd     = "end"   // its bottom at the bottom
+)
+```
+
+Where Reveal brings an element (SPEC §6.1).
 
 <a id="DetectTimeout"></a><a id="DetectAfterDA1"></a><a id="DetectAfterReply"></a>
 
@@ -188,7 +203,7 @@ const (
 )
 ```
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
@@ -202,6 +217,7 @@ const (
 	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
+	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
@@ -524,6 +540,14 @@ func Res(id, mime string, data []byte, opts ...ReplyOption) string
 
 Res stores a resource that documents refer to as cid:\<id> (SPEC §7.1): a stylesheet shared by several surfaces, an image, a font. Sending it again replaces it, and redraws every surface that refers to it.
 
+## <a id="Reveal"></a>func Reveal
+
+```go
+func Reveal(surface, target, where string, opts ...ReplyOption) string
+```
+
+Reveal scrolls an element into view (SPEC §6.1): each box that holds it, the innermost first, along the axes the document scrolls (Scroll). where is RevealStart, RevealEnd or RevealNearest. It moves no focus, so a list beside the document keeps the keyboard: a table of contents that jumps to a section. Elements that report whether they are in view report it after (EventView).
+
 ## <a id="Sanitize"></a>func Sanitize
 
 ```go
@@ -603,6 +627,14 @@ func ValidName(s string) bool
 ```
 
 ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SPEC §3.5).
+
+## <a id="Views"></a>func Views
+
+```go
+func Views(c Caps) bool
+```
+
+Views reports whether the host sends view (SPEC §9.5). Like Drags, a host that lists no kinds is taken not to: without it a program that needs to know what is shown draws that part in cells, or takes the element it last revealed as the one shown.
 
 ## <a id="WithdrawLate"></a>func WithdrawLate
 
@@ -1123,6 +1155,8 @@ type Event struct {
 	Drag *Drag
 	// Hover is a hover's (SPEC §9.4).
 	Hover *Hover
+	// View is a view's (SPEC §9.5).
+	View *View
 	// Area is the cells of the element a click or a press reports, a
 	// keyboard click's too: what a program places something next to the
 	// element by, as a browser places a select's list or a menu by its
@@ -1275,7 +1309,7 @@ type Op string
 
 Op is a delta operation (SPEC §6.1).
 
-<a id="OpMorph"></a><a id="OpInner"></a><a id="OpReplace"></a><a id="OpAppend"></a><a id="OpPrepend"></a><a id="OpBefore"></a><a id="OpAfter"></a><a id="OpRemove"></a><a id="OpAttr"></a><a id="OpUnattr"></a><a id="OpText"></a><a id="OpVar"></a>
+<a id="OpMorph"></a><a id="OpInner"></a><a id="OpReplace"></a><a id="OpAppend"></a><a id="OpPrepend"></a><a id="OpBefore"></a><a id="OpAfter"></a><a id="OpRemove"></a><a id="OpAttr"></a><a id="OpUnattr"></a><a id="OpText"></a><a id="OpVar"></a><a id="OpReveal"></a>
 
 ```go
 const (
@@ -1291,6 +1325,7 @@ const (
 	OpUnattr  Op = "unattr"  // remove the target's attribute named by the key
 	OpText    Op = "text"    // replace the target's children with one text node
 	OpVar     Op = "var"     // set the custom property --key on the target
+	OpReveal  Op = "reveal"  // scroll the target into view; the payload says where (Reveal)
 )
 ```
 
@@ -1620,6 +1655,21 @@ func (z Size) Msgsize() (s int)
 ```
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
+## <a id="View"></a>type View
+
+```go
+type View struct {
+	// Areas are the elements in view by id, each with its whole area,
+	// however little of it is shown.
+	Areas map[string]Area
+	// AtEnd is true when the document's root is scrolled as far down as it
+	// goes, as a root that does not scroll down always is.
+	AtEnd bool
+}
+```
+
+View is what a view event reports (SPEC §9.5): every element with data-on~=view and an id that is in view, not only what changed.
 
 ## <a id="Window"></a>type Window
 

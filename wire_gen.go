@@ -1873,3 +1873,117 @@ func (z submitDetail) Msgsize() (s int) {
 	}
 	return
 }
+
+// DecodeMsg implements msgp.Decodable
+func (z *viewDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "in":
+			var zb0002 uint32
+			zb0002, err = dc.ReadMapHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "In")
+				return
+			}
+			if z.In == nil {
+				z.In = make(map[string]Area, zb0002)
+			} else if len(z.In) > 0 {
+				clear(z.In)
+			}
+			for zb0002 > 0 {
+				zb0002--
+				var za0001 string
+				za0001, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "In")
+					return
+				}
+				var za0002 Area
+				err = za0002.DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "In", za0001)
+					return
+				}
+				z.In[za0001] = za0002
+			}
+		case "end":
+			z.End, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "End")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *viewDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 2
+	// write "in"
+	err = en.Append(0x82, 0xa2, 0x69, 0x6e)
+	if err != nil {
+		return
+	}
+	err = en.WriteMapHeader(uint32(len(z.In)))
+	if err != nil {
+		err = msgp.WrapError(err, "In")
+		return
+	}
+	for za0001, za0002 := range z.In {
+		err = en.WriteString(za0001)
+		if err != nil {
+			err = msgp.WrapError(err, "In")
+			return
+		}
+		err = za0002.EncodeMsg(en)
+		if err != nil {
+			err = msgp.WrapError(err, "In", za0001)
+			return
+		}
+	}
+	// write "end"
+	err = en.Append(0xa3, 0x65, 0x6e, 0x64)
+	if err != nil {
+		return
+	}
+	err = en.WriteBool(z.End)
+	if err != nil {
+		err = msgp.WrapError(err, "End")
+		return
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *viewDetail) Msgsize() (s int) {
+	s = 1 + 3 + msgp.MapHeaderSize
+	if z.In != nil {
+		for za0001, za0002 := range z.In {
+			_ = za0002
+			s += msgp.StringPrefixSize + len(za0001) + za0002.Msgsize()
+		}
+	}
+	s += 4 + msgp.BoolSize
+	return
+}
