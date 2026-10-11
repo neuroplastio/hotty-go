@@ -1875,6 +1875,246 @@ func (z submitDetail) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *viewArea) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "c":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+				z.C = nil
+			} else {
+				if z.C == nil {
+					z.C = new(int)
+				}
+				*z.C, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		case "r":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+				z.R = nil
+			} else {
+				if z.R == nil {
+					z.R = new(int)
+				}
+				*z.R, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		case "w":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "W")
+					return
+				}
+				z.W = nil
+			} else {
+				if z.W == nil {
+					z.W = new(int)
+				}
+				*z.W, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "W")
+					return
+				}
+			}
+		case "h":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "H")
+					return
+				}
+				z.H = nil
+			} else {
+				if z.H == nil {
+					z.H = new(int)
+				}
+				*z.H, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "H")
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *viewArea) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(4)
+	var zb0001Mask uint8 /* 4 bits */
+	_ = zb0001Mask
+	if z.C == nil {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	if z.R == nil {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.W == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.H == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "c"
+			err = en.Append(0xa1, 0x63)
+			if err != nil {
+				return
+			}
+			if z.C == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.C)
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "r"
+			err = en.Append(0xa1, 0x72)
+			if err != nil {
+				return
+			}
+			if z.R == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.R)
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "w"
+			err = en.Append(0xa1, 0x77)
+			if err != nil {
+				return
+			}
+			if z.W == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.W)
+				if err != nil {
+					err = msgp.WrapError(err, "W")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "h"
+			err = en.Append(0xa1, 0x68)
+			if err != nil {
+				return
+			}
+			if z.H == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.H)
+				if err != nil {
+					err = msgp.WrapError(err, "H")
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *viewArea) Msgsize() (s int) {
+	s = 1 + 2
+	if z.C == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.R == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.W == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.H == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *viewDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -1900,7 +2140,7 @@ func (z *viewDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 				return
 			}
 			if z.In == nil {
-				z.In = make(map[string]Area, zb0002)
+				z.In = make(map[string]viewArea, zb0002)
 			} else if len(z.In) > 0 {
 				clear(z.In)
 			}
@@ -1912,7 +2152,7 @@ func (z *viewDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 					err = msgp.WrapError(err, "In")
 					return
 				}
-				var za0002 Area
+				var za0002 viewArea
 				err = za0002.DecodeMsg(dc)
 				if err != nil {
 					err = msgp.WrapError(err, "In", za0001)

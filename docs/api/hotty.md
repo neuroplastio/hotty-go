@@ -1661,7 +1661,8 @@ Msgsize returns an upper bound estimate of the number of bytes occupied by the s
 ```go
 type View struct {
 	// Areas are the elements in view by id, each with its whole area,
-	// however little of it is shown.
+	// however little of it is shown. One whose area lacks a field is left
+	// out.
 	Areas map[string]Area
 	// AtEnd is true when the document's root is scrolled as far down as it
 	// goes, as a root that does not scroll down always is.

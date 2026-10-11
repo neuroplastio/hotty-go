@@ -122,8 +122,17 @@ type hoverDetail struct {
 }
 
 type viewDetail struct {
-	In  map[string]Area `msg:"in"`
-	End bool            `msg:"end"`
+	In  map[string]viewArea `msg:"in"`
+	End bool                `msg:"end"`
+}
+
+// viewArea is an Area that may lack a field: a view leaves such an
+// element out (SDK.md §3.9).
+type viewArea struct {
+	C *int `msg:"c,omitempty"`
+	R *int `msg:"r,omitempty"`
+	W *int `msg:"w,omitempty"`
+	H *int `msg:"h,omitempty"`
 }
 
 // submitDetail is a form's fields by name.

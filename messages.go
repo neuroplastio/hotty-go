@@ -96,7 +96,8 @@ type Hover struct {
 // data-on~=view and an id that is in view, not only what changed.
 type View struct {
 	// Areas are the elements in view by id, each with its whole area,
-	// however little of it is shown.
+	// however little of it is shown. One whose area lacks a field is left
+	// out.
 	Areas map[string]Area
 	// AtEnd is true when the document's root is scrolled as far down as it
 	// goes, as a root that does not scroll down always is.
@@ -193,10 +194,12 @@ func readDetail(e *Event) {
 	case EventView:
 		var d viewDetail
 		if decodeBody(b, &d) {
-			if d.In == nil {
-				d.In = map[string]Area{}
+			e.View = &View{Areas: map[string]Area{}, AtEnd: d.End}
+			for id, a := range d.In {
+				if a.C != nil && a.R != nil && a.W != nil && a.H != nil {
+					e.View.Areas[id] = Area{Col: *a.C, Row: *a.R, W: *a.W, H: *a.H}
+				}
 			}
-			e.View = &View{Areas: d.In, AtEnd: d.End}
 		}
 	case EventHover:
 		var d hoverDetail
@@ -283,9 +286,9 @@ func detailOf(e Event) []byte {
 		if e.View == nil {
 			return nil
 		}
-		in := e.View.Areas
-		if in == nil {
-			in = map[string]Area{}
+		in := make(map[string]viewArea, len(e.View.Areas))
+		for id, a := range e.View.Areas {
+			in[id] = viewArea{C: &a.Col, R: &a.Row, W: &a.W, H: &a.H}
 		}
 		d = &viewDetail{In: in, End: e.View.AtEnd}
 	default:

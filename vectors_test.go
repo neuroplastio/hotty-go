@@ -507,6 +507,12 @@ func match(got, want any) error {
 			if err := match(g[k], wv); err != nil {
 				return fmt.Errorf(".%s%v", k, err)
 			}
+			// A view's areas are compared whole (conformance/README.md, Decode).
+			if wa, ok := wv.(map[string]any); ok && k == "areas" {
+				if ga, _ := g[k].(map[string]any); len(ga) != len(wa) {
+					return fmt.Errorf(".%s = %v, want %v", k, g[k], wv)
+				}
+			}
 		}
 	case []any:
 		if got == nil && len(w) == 0 {
