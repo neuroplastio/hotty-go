@@ -823,6 +823,12 @@ type Caps struct {
 	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
 	// that does not says nothing, and its drags carry cells only.
 	Steps bool `msg:"steps,omitempty"`
+	// Drop is true when an element with drop in its data-on can be a
+	// drag's t without being dragged, and a drag says where in it the
+	// pointer is when it has data-steps (Drag.TX and Drag.TY, SPEC §9.1); a host
+	// that does not says nothing, and only an element that opts in to
+	// drags is ever t.
+	Drop bool `msg:"drop,omitempty"`
 	// Count is true when a repeated click says its place in its run of
 	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
 	// every click reads as a single one.
@@ -1118,6 +1124,11 @@ type Drag struct {
 	// has none, and 0 is a step like any other.
 	X, Y       int
 	HasX, HasY bool
+	// TX and TY are where in t the pointer is, for a t with drop in its
+	// data-on and data-steps (SPEC §9.1), in drag and dragend: measured as X and Y are, against
+	// t's box. HasTX and HasTY say whether the detail has them.
+	TX, TY       int
+	HasTX, HasTY bool
 }
 ```
 

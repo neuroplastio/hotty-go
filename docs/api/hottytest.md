@@ -53,9 +53,11 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
   - [`func (h *Host) DoubleClick(surface, id string) error`](#Host.DoubleClick)
   - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
+  - [`func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error`](#Host.DragEndOver)
   - [`func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragEndStep)
   - [`func (h *Host) DragMove(id string, c, r int, keys ...string) error`](#Host.DragMove)
   - [`func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragMoveStep)
+  - [`func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error`](#Host.DragOver)
   - [`func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error`](#Host.DragStart)
   - [`func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error`](#Host.DragStartStep)
   - [`func (h *Host) Dragging() bool`](#Host.Dragging)
@@ -283,7 +285,15 @@ DoubleClick clicks an element twice, as a double click does: Click, then a click
 func (h *Host) DragEnd(id string, c, r int, keys ...string) error
 ```
 
-DragEnd releases the button of the drag in progress over the element with an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its t as DragMove's. A drag that ends on the element it began on is also that element's click, after dragend, if it reports clicks.
+DragEnd releases the button of the drag in progress over the element with an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its t as DragMove's. A drag that ends on the element it began on is also that element's click, after dragend, if it reports clicks: the nearest element with an id and drag in its data-on, from the one named outward, is the one it began on, whatever t is.
+
+### <a id="Host.DragEndOver"></a>func (*Host) DragEndOver
+
+```go
+func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error
+```
+
+DragEndOver is DragEnd with the pointer at step tx, ty of t (DragOver).
 
 ### <a id="Host.DragEndStep"></a>func (*Host) DragEndStep
 
@@ -299,7 +309,7 @@ DragEndStep is DragEnd with the pointer at step x, y of the element the drag beg
 func (h *Host) DragMove(id string, c, r int, keys ...string) error
 ```
 
-DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: the nearest one with an id and drag in its data-on, from it outward, or empty; while that is empty, when the cell changes instead.
+DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: t, the nearest one with an id and drag in its data-on (or drop, when the capabilities say Drop), from it outward, or empty; while that is empty, when the cell changes instead. In a t with data-steps the pointer stays at the step it was at in t, or 0 in a new one (DragOver).
 
 ### <a id="Host.DragMoveStep"></a>func (*Host) DragMoveStep
 
@@ -308,6 +318,14 @@ func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error
 ```
 
 DragMoveStep is DragMove with the pointer at step x, y of the element the drag began on, wherever the pointer is (DragStartStep). It also reports drag when the step changes.
+
+### <a id="Host.DragOver"></a>func (*Host) DragOver
+
+```go
+func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error
+```
+
+DragOver is DragMove with the pointer at step tx, ty of t, for a t with drop in its data-on and data-steps (SPEC §9.1): a row with "0 1" is split in halves, a folder with "0 2" into before, into and after. The host lays nothing out, so the test says where in t the pointer is; a step past t's count is clamped to it, and one along an axis t does not count is ignored. It also reports drag when that step changes. The host reports it only when its capabilities say Drop (Caps).
 
 ### <a id="Host.DragStart"></a>func (*Host) DragStart
 

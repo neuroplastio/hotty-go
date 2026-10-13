@@ -357,6 +357,12 @@ func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Steps")
 				return
 			}
+		case "drop":
+			z.Drop, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "Drop")
+				return
+			}
 		case "count":
 			z.Count, err = dc.ReadBool()
 			if err != nil {
@@ -389,8 +395,8 @@ func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 	// check for omitted fields
-	zb0001Len := uint32(14)
-	var zb0001Mask uint16 /* 14 bits */
+	zb0001Len := uint32(15)
+	var zb0001Mask uint16 /* 15 bits */
 	_ = zb0001Mask
 	if z.Ops == nil {
 		zb0001Len--
@@ -432,17 +438,21 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 		zb0001Len--
 		zb0001Mask |= 0x400
 	}
-	if z.Count == false {
+	if z.Drop == false {
 		zb0001Len--
 		zb0001Mask |= 0x800
 	}
-	if z.Host == "" {
+	if z.Count == false {
 		zb0001Len--
 		zb0001Mask |= 0x1000
 	}
-	if z.Version == "" {
+	if z.Host == "" {
 		zb0001Len--
 		zb0001Mask |= 0x2000
+	}
+	if z.Version == "" {
+		zb0001Len--
+		zb0001Mask |= 0x4000
 	}
 	// variable map header, size zb0001Len
 	err = en.Append(0x80 | uint8(zb0001Len))
@@ -651,6 +661,18 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 		if (zb0001Mask & 0x800) == 0 { // if not omitted
+			// write "drop"
+			err = en.Append(0xa4, 0x64, 0x72, 0x6f, 0x70)
+			if err != nil {
+				return
+			}
+			err = en.WriteBool(z.Drop)
+			if err != nil {
+				err = msgp.WrapError(err, "Drop")
+				return
+			}
+		}
+		if (zb0001Mask & 0x1000) == 0 { // if not omitted
 			// write "count"
 			err = en.Append(0xa5, 0x63, 0x6f, 0x75, 0x6e, 0x74)
 			if err != nil {
@@ -662,7 +684,7 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		}
-		if (zb0001Mask & 0x1000) == 0 { // if not omitted
+		if (zb0001Mask & 0x2000) == 0 { // if not omitted
 			// write "host"
 			err = en.Append(0xa4, 0x68, 0x6f, 0x73, 0x74)
 			if err != nil {
@@ -674,7 +696,7 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		}
-		if (zb0001Mask & 0x2000) == 0 { // if not omitted
+		if (zb0001Mask & 0x4000) == 0 { // if not omitted
 			// write "version"
 			err = en.Append(0xa7, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
 			if err != nil {
@@ -723,7 +745,7 @@ func (z *Caps) Msgsize() (s int) {
 			}
 		}
 	}
-	s += 7 + msgp.BoolSize + 12 + msgp.BoolSize + 6 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.StringPrefixSize + len(z.Host) + 8 + msgp.StringPrefixSize + len(z.Version)
+	s += 7 + msgp.BoolSize + 12 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.StringPrefixSize + len(z.Host) + 8 + msgp.StringPrefixSize + len(z.Version)
 	return
 }
 
@@ -1311,6 +1333,42 @@ func (z *dragDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 					return
 				}
 			}
+		case "tx":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+				z.TX = nil
+			} else {
+				if z.TX == nil {
+					z.TX = new(int)
+				}
+				*z.TX, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		case "ty":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+				z.TY = nil
+			} else {
+				if z.TY == nil {
+					z.TY = new(int)
+				}
+				*z.TY, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -1325,8 +1383,8 @@ func (z *dragDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *dragDetail) EncodeMsg(en *msgp.Writer) (err error) {
 	// check for omitted fields
-	zb0001Len := uint32(5)
-	var zb0001Mask uint8 /* 5 bits */
+	zb0001Len := uint32(7)
+	var zb0001Mask uint8 /* 7 bits */
 	_ = zb0001Mask
 	if z.X == nil {
 		zb0001Len--
@@ -1335,6 +1393,14 @@ func (z *dragDetail) EncodeMsg(en *msgp.Writer) (err error) {
 	if z.Y == nil {
 		zb0001Len--
 		zb0001Mask |= 0x10
+	}
+	if z.TX == nil {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	if z.TY == nil {
+		zb0001Len--
+		zb0001Mask |= 0x40
 	}
 	// variable map header, size zb0001Len
 	err = en.Append(0x80 | uint8(zb0001Len))
@@ -1419,6 +1485,44 @@ func (z *dragDetail) EncodeMsg(en *msgp.Writer) (err error) {
 				}
 			}
 		}
+		if (zb0001Mask & 0x20) == 0 { // if not omitted
+			// write "tx"
+			err = en.Append(0xa2, 0x74, 0x78)
+			if err != nil {
+				return
+			}
+			if z.TX == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TX)
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x40) == 0 { // if not omitted
+			// write "ty"
+			err = en.Append(0xa2, 0x74, 0x79)
+			if err != nil {
+				return
+			}
+			if z.TY == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TY)
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
+		}
 	}
 	return
 }
@@ -1437,6 +1541,18 @@ func (z *dragDetail) Msgsize() (s int) {
 	}
 	s += 2
 	if z.Y == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.TX == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.TY == nil {
 		s += msgp.NilSize
 	} else {
 		s += msgp.IntSize

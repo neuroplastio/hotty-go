@@ -105,6 +105,9 @@ func Caps(c hotty.Caps) Option {
 		if c.Steps {
 			d.Steps = true
 		}
+		if c.Drop {
+			d.Drop = true
+		}
 	}
 }
 
@@ -1022,6 +1025,9 @@ type drag struct {
 	c, r  int        // the cell under the pointer, as last reported
 	n     [2]int     // the element's data-steps when the drag began: none is 0
 	x, y  int        // the step as last reported, along each counted axis
+	tn    [2]int     // t's data-steps as last reported: none is 0
+	tx    int        // the step in t as last reported, along each counted axis
+	ty    int
 }
 
 // DragStart presses a mouse's primary button on the element with an id and
@@ -1093,16 +1099,19 @@ func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) erro
 // DragMove moves the pointer of the drag in progress onto the element with
 // an id in the drag's surface, or onto none ("": a gap, another surface, the
 // cells, outside the window), at the surface's cell c, r (SPEC §9.1). It
-// reports drag when the element under the pointer changes: the nearest one
-// with an id and drag in its data-on, from it outward, or empty; while that
-// is empty, when the cell changes instead.
+// reports drag when the element under the pointer changes: t, the nearest
+// one with an id and drag in its data-on (or drop, when the capabilities
+// say Drop), from it outward, or empty; while that is empty, when the cell
+// changes instead. In a t with data-steps the pointer stays at the step it
+// was at in t, or 0 in a new one (DragOver).
 func (h *Host) DragMove(id string, c, r int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.drag == nil {
 		return ErrNoDrag
 	}
-	return h.dragMove(id, c, r, h.drag.x, h.drag.y, keys)
+	d := h.drag
+	return h.dragMove(id, c, r, d.x, d.y, d.tx, d.ty, keys)
 }
 
 // DragMoveStep is DragMove with the pointer at step x, y of the element
@@ -1111,19 +1120,40 @@ func (h *Host) DragMove(id string, c, r int, keys ...string) error {
 func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.dragMove(id, c, r, x, y, keys)
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragMove(id, c, r, x, y, h.drag.tx, h.drag.ty, keys)
 }
 
-func (h *Host) dragMove(id string, c, r, x, y int, keys []string) error {
-	d, t, err := h.dragOver(id)
+// DragOver is DragMove with the pointer at step tx, ty of t, for a t with
+// drop in its data-on and data-steps (SPEC §9.1): a row with "0 1" is split
+// in halves, a folder with "0 2" into before, into and after. The host lays nothing out, so the test
+// says where in t the pointer is; a step past t's count is clamped to it,
+// and one along an axis t does not count is ignored. It also reports drag
+// when that step changes. The host reports it only when its capabilities
+// say Drop (Caps).
+func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragMove(id, c, r, h.drag.x, h.drag.y, tx, ty, keys)
+}
+
+func (h *Host) dragMove(id string, c, r, x, y, tx, ty int, keys []string) error {
+	d, t, _, err := h.dragOver(id)
 	if err != nil {
 		return err
 	}
 	x, y = d.clamp(x, y)
-	if t == d.t && (t != "" || (c == d.c && r == d.r)) && x == d.x && y == d.y {
+	tn := h.targetSteps(d, t)
+	tx, ty = clampSteps(tn, tx, ty)
+	if t == d.t && (t != "" || (c == d.c && r == d.r)) && x == d.x && y == d.y && tx == d.tx && ty == d.ty {
 		return nil
 	}
-	d.t, d.c, d.r, d.x, d.y = t, c, r, x, y
+	d.t, d.c, d.r, d.x, d.y, d.tn, d.tx, d.ty = t, c, r, x, y, tn, tx, ty
 	h.event(d.s, hotty.EventDrag, t, d.detail(c, r, keys))
 	return nil
 }
@@ -1131,14 +1161,17 @@ func (h *Host) dragMove(id string, c, r, x, y int, keys []string) error {
 // DragEnd releases the button of the drag in progress over the element with
 // an id, or none (""), at the surface's cell c, r (SPEC §9.1): dragend, its
 // t as DragMove's. A drag that ends on the element it began on is also
-// that element's click, after dragend, if it reports clicks.
+// that element's click, after dragend, if it reports clicks: the nearest
+// element with an id and drag in its data-on, from the one named outward,
+// is the one it began on, whatever t is.
 func (h *Host) DragEnd(id string, c, r int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.drag == nil {
 		return ErrNoDrag
 	}
-	return h.dragEnd(id, c, r, h.drag.x, h.drag.y, keys)
+	d := h.drag
+	return h.dragEnd(id, c, r, d.x, d.y, d.tx, d.ty, keys)
 }
 
 // DragEndStep is DragEnd with the pointer at step x, y of the element the
@@ -1146,18 +1179,33 @@ func (h *Host) DragEnd(id string, c, r int, keys ...string) error {
 func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.dragEnd(id, c, r, x, y, keys)
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragEnd(id, c, r, x, y, h.drag.tx, h.drag.ty, keys)
 }
 
-func (h *Host) dragEnd(id string, c, r, x, y int, keys []string) error {
-	d, t, err := h.dragOver(id)
+// DragEndOver is DragEnd with the pointer at step tx, ty of t (DragOver).
+func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.drag == nil {
+		return ErrNoDrag
+	}
+	return h.dragEnd(id, c, r, h.drag.x, h.drag.y, tx, ty, keys)
+}
+
+func (h *Host) dragEnd(id string, c, r, x, y, tx, ty int, keys []string) error {
+	d, t, own, err := h.dragOver(id)
 	if err != nil {
 		return err
 	}
 	d.x, d.y = d.clamp(x, y)
+	d.tn = h.targetSteps(d, t)
+	d.tx, d.ty = clampSteps(d.tn, tx, ty)
 	h.drag = nil
 	h.event(d.s, hotty.EventDragEnd, t, d.detail(c, r, keys))
-	if t == d.id && reportsClick(d.start) {
+	if own == d.id && reportsClick(d.start) {
 		var detail any
 		if v, ok := attr(d.start, "value"); ok {
 			detail = map[string]string{"value": v}
@@ -1174,30 +1222,57 @@ func (h *Host) Dragging() bool {
 	return h.drag != nil
 }
 
-func (h *Host) dragOver(id string) (*drag, string, error) {
-	d := h.drag
+// dragOver finds what is under the pointer of the drag in progress, from
+// the element named outward: t, the nearest element with an id and drag in
+// its data-on, or drop when the capabilities say Drop; and own, the nearest
+// with an id and drag, for whether the release is a click.
+func (h *Host) dragOver(id string) (d *drag, t, own string, err error) {
+	d = h.drag
 	if d == nil {
-		return nil, "", ErrNoDrag
+		return nil, "", "", ErrNoDrag
 	}
 	if id == "" {
-		return d, "", nil
+		return d, "", "", nil
 	}
 	el := d.s.byID(id)
 	if el == nil {
-		return nil, "", fmt.Errorf("%w: #%s in %s", ErrNoElement, id, d.s.name)
+		return nil, "", "", fmt.Errorf("%w: #%s in %s", ErrNoElement, id, d.s.name)
 	}
-	t := ""
-	if on := closest(el, func(n *html.Node) bool { _, ok := attr(n, "id"); return ok && listens("drag")(n) }); on != nil {
-		t, _ = attr(on, "id")
+	withID := func(on func(*html.Node) bool) string {
+		n := closest(el, func(n *html.Node) bool { _, ok := attr(n, "id"); return ok && on(n) })
+		if n == nil {
+			return ""
+		}
+		v, _ := attr(n, "id")
+		return v
 	}
-	return d, t, nil
+	own = withID(listens("drag"))
+	t = own
+	if h.caps.Drop {
+		t = withID(func(n *html.Node) bool { return listens("drag")(n) || listens("drop")(n) })
+	}
+	return d, t, own, nil
+}
+
+// targetSteps is t's data-steps, when t has drop in its data-on and the
+// capabilities say Drop.
+func (h *Host) targetSteps(d *drag, t string) [2]int {
+	if t == "" || !h.caps.Drop {
+		return [2]int{}
+	}
+	el := d.s.byID(t)
+	if !listens("drop")(el) {
+		return [2]int{}
+	}
+	return steps(el)
 }
 
 // cutDrag ends the drag in progress early (SPEC §9.1): dragend, with no
-// target and the last cell the pointer was on.
+// target, the last cell the pointer was on, and no step in t.
 func (h *Host) cutDrag() {
 	d := h.drag
 	h.drag = nil
+	d.tn = [2]int{}
 	h.event(d.s, hotty.EventDragEnd, "", d.detail(d.c, d.r, nil))
 }
 
@@ -1229,13 +1304,25 @@ func (d *drag) detail(c, r int, keys []string) map[string]any {
 	if d.n[1] > 0 {
 		m["y"] = d.y
 	}
+	if d.tn[0] > 0 {
+		m["tx"] = d.tx
+	}
+	if d.tn[1] > 0 {
+		m["ty"] = d.ty
+	}
 	return m
 }
 
 // clamp keeps a step within the element's counts, 0 along an axis it does
 // not count.
 func (d *drag) clamp(x, y int) (int, int) {
-	return min(max(x, 0), d.n[0]), min(max(y, 0), d.n[1])
+	return clampSteps(d.n, x, y)
+}
+
+// clampSteps keeps a step within counts n, 0 along an axis n does not
+// count.
+func clampSteps(n [2]int, x, y int) (int, int) {
+	return min(max(x, 0), n[0]), min(max(y, 0), n[1])
 }
 
 // steps reads an element's data-steps (SPEC §9.1): "<x>" or "<x> <y>",

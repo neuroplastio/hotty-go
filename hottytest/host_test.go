@@ -1066,6 +1066,68 @@ func TestDragSteps(t *testing.T) {
 	expect(t, sent(plain), `ev dragstart t=track {"c":0,"keys":[],"r":0}`)
 }
 
+// Drop (SPEC §9.1): a host whose capabilities say Drop takes an element
+// with drop in its data-on as a drag's t, never drags it, and reports
+// where in a t with data-steps the pointer is, as the test gives it. A drag
+// that ends on a drop-only element inside the one it began on is a click.
+func TestDrop(t *testing.T) {
+	h := New(t, Caps(hotty.Caps{Drop: true}))
+	doc := `<i id=card data-on=drag>c</i><i id=ada data-on=drop>Ada</i><i id=col data-on=drop data-steps="3 2">col</i>` +
+		`<i id=row data-on="drag click"><b id=pin data-on=drop>p</b></i><i id=knob data-on=drag data-steps=4>k</i>`
+	send(h, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 6}))
+	sent(h)
+	_ = h.DragStart("s", "card", 1, 0)
+	_ = h.DragMove("ada", 1, 1)          // a drop-only t
+	_ = h.DragMove("col", 1, 2)          // a t with steps, at step 0 of it
+	_ = h.DragOver("col", 2, 2, 0, 0)    // the same step: nothing
+	_ = h.DragOver("col", 2, 3, 1, 1)    // another step: drag
+	_ = h.DragOver("col", 4, 4, 9, 2)    // past the count: clamped
+	_ = h.DragEndOver("col", 4, 4, 3, 2) // the same step, in the dragend
+	expect(t, sent(h),
+		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
+		`ev drag t=ada {"c":1,"keys":[],"r":1}`,
+		`ev drag t=col {"c":1,"keys":[],"r":2,"tx":0,"ty":0}`,
+		`ev drag t=col {"c":2,"keys":[],"r":3,"tx":1,"ty":1}`,
+		`ev drag t=col {"c":4,"keys":[],"r":4,"tx":3,"ty":2}`,
+		`ev dragend t=col {"c":4,"keys":[],"r":4,"tx":3,"ty":2}`)
+
+	// A press on a drop-only element starts no drag.
+	if err := h.DragStart("s", "ada", 1, 1); !errors.Is(err, ErrNoReport) {
+		t.Errorf("DragStart on a drop-only element: %v", err)
+	}
+	// One inside a draggable element starts that one's, and a release on it
+	// is still a click.
+	_ = h.DragStart("s", "pin", 1, 5)
+	_ = h.DragEnd("pin", 1, 5)
+	expect(t, sent(h),
+		`ev dragstart t=row {"c":1,"keys":[],"r":5}`,
+		`ev dragend t=pin {"c":1,"keys":[],"r":5}`,
+		`ev click t=row`)
+
+	// A t that only opts in to drags has no steps in it.
+	_ = h.DragStart("s", "card", 1, 0)
+	_ = h.DragOver("knob", 1, 6, 2, 0)
+	_ = h.DragEndOver("knob", 1, 6, 3, 0)
+	expect(t, sent(h),
+		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
+		`ev drag t=knob {"c":1,"keys":[],"r":6}`,
+		`ev dragend t=knob {"c":1,"keys":[],"r":6}`)
+
+	// A host that does not say Drop takes no drop-only t and no steps in t.
+	plain := New(t, Caps(hotty.Caps{Steps: true}))
+	send(plain, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 6}))
+	sent(plain)
+	_ = plain.DragStart("s", "card", 1, 0)
+	_ = plain.DragMove("ada", 1, 1)
+	_ = plain.DragOver("col", 1, 2, 1, 1)
+	_ = plain.DragEnd("col", 1, 2)
+	expect(t, sent(plain),
+		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
+		`ev drag t= {"c":1,"keys":[],"r":1}`,
+		`ev drag t= {"c":1,"keys":[],"r":2}`,
+		`ev dragend t= {"c":1,"keys":[],"r":2}`)
+}
+
 func TestReplies(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("x", "<p id=p>p</p>", hotty.N(1)), hotty.SetText("x", "p", "q", hotty.Q(hotty.ReplyAlways)))

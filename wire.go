@@ -40,6 +40,12 @@ type Caps struct {
 	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
 	// that does not says nothing, and its drags carry cells only.
 	Steps bool `msg:"steps,omitempty"`
+	// Drop is true when an element with drop in its data-on can be a
+	// drag's t without being dragged, and a drag says where in it the
+	// pointer is when it has data-steps (Drag.TX and Drag.TY, SPEC §9.1); a host
+	// that does not says nothing, and only an element that opts in to
+	// drags is ever t.
+	Drop bool `msg:"drop,omitempty"`
 	// Count is true when a repeated click says its place in its run of
 	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
 	// every click reads as a single one.
@@ -119,6 +125,8 @@ type dragDetail struct {
 	Keys []string `msg:"keys"`
 	X    *int     `msg:"x,omitempty"`
 	Y    *int     `msg:"y,omitempty"`
+	TX   *int     `msg:"tx,omitempty"`
+	TY   *int     `msg:"ty,omitempty"`
 }
 
 type hoverDetail struct {

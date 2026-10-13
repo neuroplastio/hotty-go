@@ -480,6 +480,10 @@ func TestEvents(t *testing.T) {
 	if d := steps.Drag; d == nil || d.Col != 0 || len(d.Keys) != 0 || !d.HasX || d.X != 0 || d.HasY {
 		t.Errorf("a dragend with a step: %+v", d)
 	}
+	over2, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "drag"}, {"t", "row"}}, `{"c":1,"r":2,"keys":[],"x":3,"ty":1}`))
+	if d := over2.Drag; d == nil || !d.HasX || d.X != 3 || d.HasTX || !d.HasTY || d.TY != 1 {
+		t.Errorf("a drag with a step in t: %+v", d)
+	}
 	if button.Drag != nil {
 		t.Error("a click is no drag")
 	}
@@ -526,6 +530,7 @@ func TestEncodeEvent(t *testing.T) {
 		{Surface: "f", Kind: EventFit, FitRows: 7},
 		{Surface: "g", Kind: EventDrag, Target: "c1", Drag: &Drag{Col: -2, Row: 5, Keys: []string{"shift"}, X: x, HasX: true}},
 		{Surface: "g", Kind: EventDragEnd, Drag: &Drag{Col: 1, Row: 0}},
+		{Surface: "g", Kind: EventDrag, Target: "col", Drag: &Drag{Col: 1, Row: 2, TX: 0, HasTX: true, TY: 2, HasTY: true}},
 		{Surface: "g", Kind: EventHover, Target: "c1", Hover: &Hover{Col: 0, Row: 4}},
 		{Surface: "g", Kind: EventHover, Hover: &Hover{Out: true}},
 		{Surface: "d", Kind: EventView, View: &View{Areas: map[string]Area{"intro": {Col: 0, Row: -3, W: 40, H: 5}, "usage": {Col: 0, Row: 2, W: 40, H: 9}}}},

@@ -127,6 +127,11 @@ type Drag struct {
 	// has none, and 0 is a step like any other.
 	X, Y       int
 	HasX, HasY bool
+	// TX and TY are where in t the pointer is, for a t with drop in its
+	// data-on and data-steps (SPEC §9.1), in drag and dragend: measured as X and Y are, against
+	// t's box. HasTX and HasTY say whether the detail has them.
+	TX, TY       int
+	HasTX, HasTY bool
 }
 
 // EventOf returns the message as an event, if it is one, its detail read
@@ -197,6 +202,12 @@ func readDetail(e *Event) {
 			}
 			if d.Y != nil {
 				e.Drag.Y, e.Drag.HasY = *d.Y, true
+			}
+			if d.TX != nil {
+				e.Drag.TX, e.Drag.HasTX = *d.TX, true
+			}
+			if d.TY != nil {
+				e.Drag.TY, e.Drag.HasTY = *d.TY, true
 			}
 		}
 	case EventView:
@@ -282,6 +293,12 @@ func detailOf(e Event) []byte {
 		}
 		if g.HasY {
 			dd.Y = &g.Y
+		}
+		if g.HasTX {
+			dd.TX = &g.TX
+		}
+		if g.HasTY {
+			dd.TY = &g.TY
 		}
 		d = &dd
 	case EventHover:
