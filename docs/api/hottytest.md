@@ -51,6 +51,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
+  - [`func (h *Host) DoubleClick(surface, id string) error`](#Host.DoubleClick)
   - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
   - [`func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragEndStep)
   - [`func (h *Host) DragMove(id string, c, r int, keys ...string) error`](#Host.DragMove)
@@ -267,6 +268,14 @@ func (h *Host) Cursor() (col, row int, shown bool)
 ```
 
 Cursor is where the cursor is, and whether it is on show (DECTCEM: ESC \[ ?25 l hides it): where the program leaves it for what prints next. row is a line of Screen, as a placement's (Surface.At).
+
+### <a id="Host.DoubleClick"></a>func (*Host) DoubleClick
+
+```go
+func (h *Host) DoubleClick(surface, id string) error
+```
+
+DoubleClick clicks an element twice, as a double click does: Click, then a click that says it is the second of its run (Event.Count 2, SPEC §9).
 
 ### <a id="Host.DragEnd"></a>func (*Host) DragEnd
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -518,6 +519,30 @@ func TestLimits(t *testing.T) {
 	send(h, hotty.DelRes("r"))
 	if _, _, ok := h.Resource("r"); ok {
 		t.Error("DelRes")
+	}
+}
+
+// A double click is a click, then a click whose count is 2 (SPEC §9).
+func TestDoubleClick(t *testing.T) {
+	h := New(t)
+	if !h.caps.Count {
+		t.Error("DefaultCaps: no count")
+	}
+	send(h, hotty.Doc("f", `<button id=open value=x>Open</button><a href="/doc" id=l>doc</a>`), hotty.Place("f", hotty.Placement{Cols: 20, Rows: 2}))
+	_ = sent(h)
+	for _, id := range []string{"open", "l"} {
+		if err := h.DoubleClick("f", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var counts []int
+	for _, e := range h.Events() {
+		if e.Kind == hotty.EventClick {
+			counts = append(counts, e.Count)
+		}
+	}
+	if !slices.Equal(counts, []int{1, 2, 1, 2}) {
+		t.Errorf("counts %v, want [1 2 1 2]", counts)
 	}
 }
 

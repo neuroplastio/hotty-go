@@ -34,6 +34,7 @@ var features = map[string]bool{
 	"options.unordered":   true,
 	"decode.abort-count":  true,
 	"decode.max":          true,
+	"event.count":         true,
 	"decode.unterminated": true,
 	"scanner.da1":         true,
 	"graphemes":           true,
@@ -443,6 +444,9 @@ func eventView(e Event) map[string]any {
 	if a := e.Area; a != nil {
 		view["area"] = map[string]any{"c": a.Col, "r": a.Row, "w": a.W, "h": a.H}
 	}
+	if e.Count > 0 {
+		view["count"] = e.Count
+	}
 	if v := e.View; v != nil {
 		areas := map[string]any{}
 		for id, a := range v.Areas {
@@ -459,7 +463,7 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  nil,
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "count": c.Count, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	if c.Cell != nil {

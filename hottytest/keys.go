@@ -120,7 +120,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		if name != " " && name != "Enter" {
 			return false
 		}
-		_ = h.click(s, el, false)
+		_ = h.click(s, el, false, 1)
 		return true
 	}
 	return false

@@ -40,6 +40,10 @@ type Caps struct {
 	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
 	// that does not says nothing, and its drags carry cells only.
 	Steps bool `msg:"steps,omitempty"`
+	// Count is true when a repeated click says its place in its run of
+	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
+	// every click reads as a single one.
+	Count bool `msg:"count,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -89,6 +93,7 @@ type clickDetail struct {
 	Href  *string `msg:"href,omitempty"`
 	URL   string  `msg:"url,omitempty"`
 	Area  *Area   `msg:"area,omitempty"`
+	Count int     `msg:"count,omitempty"`
 }
 
 type pressDetail struct {

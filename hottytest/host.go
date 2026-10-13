@@ -147,7 +147,7 @@ func AutoRows(f func(s *Surface, cols int) int) Option { return func(h *Host) { 
 // otherwise.
 func DefaultCaps() hotty.Caps {
 	c := hotty.Caps{V: hotty.Version, Cell: &hotty.Cell{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
-		Limits: map[string]int{"surfaces": 64, "message": hotty.DefaultMax}}
+		Limits: map[string]int{"surfaces": 64, "message": hotty.DefaultMax}, Count: true}
 	for _, op := range []hotty.Op{hotty.OpMorph, hotty.OpInner, hotty.OpReplace, hotty.OpAppend, hotty.OpPrepend,
 		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar, hotty.OpReveal} {
 		c.Ops = append(c.Ops, string(op))
@@ -896,7 +896,27 @@ func (h *Host) Click(surface, id string) error {
 	if err != nil {
 		return err
 	}
-	return h.click(s, el, true)
+	return h.click(s, el, true, 1)
+}
+
+// DoubleClick clicks an element twice, as a double click does: Click,
+// then a click that says it is the second of its run (Event.Count 2,
+// SPEC §9).
+func (h *Host) DoubleClick(surface, id string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, err := h.target(surface)
+	if err != nil {
+		return err
+	}
+	el, err := h.element(s, id)
+	if err != nil {
+		return err
+	}
+	if err := h.click(s, el, true, 1); err != nil {
+		return err
+	}
+	return h.click(s, el, true, 2)
 }
 
 // ClickLink clicks the first link in a surface whose href is href, as
@@ -916,12 +936,13 @@ func (h *Host) ClickLink(surface, href string) error {
 	if el == nil {
 		return fmt.Errorf("%w: a link to %s in %s", ErrNoElement, href, s.name)
 	}
-	return h.click(s, el, true)
+	return h.click(s, el, true, 1)
 }
 
 // click is a click on el: by the pointer, which presses first, or by
-// the keyboard (Key), which does not.
-func (h *Host) click(s *Surface, el *html.Node, pointer bool) error {
+// the keyboard (Key), which does not. count is its place in its run of
+// clicks, which its detail carries from 2 on (SPEC §9).
+func (h *Host) click(s *Surface, el *html.Node, pointer bool, count int) error {
 	if a := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.A }); a != nil {
 		if _, ok := attr(a, "href"); ok && hyperlink(a) {
 			if u := s.resolve(a); u != "" {
@@ -950,9 +971,12 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool) error {
 	if rep.DataAtom == atom.A {
 		if href, ok := attr(rep, "href"); ok {
 			// The href is the handle, and the id too when there is one.
-			detail := map[string]string{"href": href}
+			detail := map[string]any{"href": href}
 			if u := s.resolve(rep); u != "" {
 				detail["url"] = u
+			}
+			if count > 1 {
+				detail["count"] = count
 			}
 			id, _ := attr(rep, "id")
 			h.event(s, hotty.EventClick, id, detail)
@@ -963,11 +987,21 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool) error {
 	if !ok {
 		return ErrNoReport
 	}
-	var detail any
+	var detail map[string]any
 	if v, ok := attr(rep, "value"); ok {
-		detail = map[string]string{"value": v}
+		detail = map[string]any{"value": v}
 	}
-	h.event(s, hotty.EventClick, rid, detail)
+	if count > 1 {
+		if detail == nil {
+			detail = map[string]any{}
+		}
+		detail["count"] = count
+	}
+	if detail == nil {
+		h.event(s, hotty.EventClick, rid, nil)
+	} else {
+		h.event(s, hotty.EventClick, rid, detail)
+	}
 	if submits(rep) {
 		if form := closest(rep, func(n *html.Node) bool { return n.DataAtom == atom.Form }); form != nil {
 			h.submit(s, form, rep)

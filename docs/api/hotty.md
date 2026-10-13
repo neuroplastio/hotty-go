@@ -823,6 +823,10 @@ type Caps struct {
 	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
 	// that does not says nothing, and its drags carry cells only.
 	Steps bool `msg:"steps,omitempty"`
+	// Count is true when a repeated click says its place in its run of
+	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
+	// every click reads as a single one.
+	Count bool `msg:"count,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -1176,6 +1180,11 @@ type Event struct {
 	// element by, as a browser places a select's list or a menu by its
 	// control.
 	Area *Area
+	// Count is a click's place in its run of clicks on its element, as
+	// the user's platform counts them (SPEC §9): 2 for the second click of
+	// a double click, 1 for a single click or the keyboard's. It is 0 for
+	// any other kind.
+	Count int
 
 	// Detail is the detail as it came, msgpack: nil when the event has
 	// none. It is what a relay passes on (EncodeEvent).

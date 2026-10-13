@@ -73,7 +73,7 @@ func TestEventDetailAbsent(t *testing.T) {
 	if string(ev.Detail) != "{not msgpack" || ev.Value != "" || ev.Area != nil {
 		t.Errorf("a detail that does not decode: %+v", ev)
 	}
-	click := Event{Surface: "card", Kind: EventClick, Target: "go", Value: "1", Detail: body(`{"value":"1"}`)}
+	click := Event{Surface: "card", Kind: EventClick, Target: "go", Value: "1", Count: 1, Detail: body(`{"value":"1"}`)}
 	if got := EncodeEvent(click); got != EncodePlain(Control{{"a", "ev"}, {"s", "card"}, {"e", "click"}, {"t", "go"}}, body(`{"value":"1"}`)) {
 		t.Errorf("EncodeEvent: %q", got)
 	}

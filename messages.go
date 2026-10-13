@@ -68,6 +68,11 @@ type Event struct {
 	// element by, as a browser places a select's list or a menu by its
 	// control.
 	Area *Area
+	// Count is a click's place in its run of clicks on its element, as
+	// the user's platform counts them (SPEC §9): 2 for the second click of
+	// a double click, 1 for a single click or the keyboard's. It is 0 for
+	// any other kind.
+	Count int
 
 	// Detail is the detail as it came, msgpack: nil when the event has
 	// none. It is what a relay passes on (EncodeEvent).
@@ -135,6 +140,9 @@ func EventOf(m Message) (Event, bool) {
 		e.Detail = m.Payload
 		readDetail(&e)
 	}
+	if e.Kind == EventClick && e.Count < 1 {
+		e.Count = 1
+	}
 	return e, true
 }
 
@@ -145,7 +153,7 @@ func readDetail(e *Event) {
 	case EventClick:
 		var d clickDetail
 		if decodeBody(b, &d) {
-			e.Value, e.Area = d.Value, d.Area
+			e.Value, e.Area, e.Count = d.Value, d.Area, d.Count
 			if d.Href != nil {
 				e.Link = &Link{Href: *d.Href, URL: d.URL}
 			}
@@ -232,6 +240,9 @@ func detailOf(e Event) []byte {
 	switch e.Kind {
 	case EventClick:
 		c := clickDetail{Value: e.Value, Area: e.Area}
+		if e.Count > 1 {
+			c.Count = e.Count
+		}
 		if e.Link != nil {
 			c.Href, c.URL = &e.Link.Href, e.Link.URL
 		}

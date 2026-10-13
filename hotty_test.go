@@ -513,9 +513,10 @@ func TestEvents(t *testing.T) {
 func TestEncodeEvent(t *testing.T) {
 	on, x := true, 3
 	for _, e := range []Event{
-		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}},
-		{Surface: "f", Kind: EventClick, Target: "", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}},
-		{Surface: "f", Kind: EventClick, Target: "plain"},
+		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 1},
+		{Surface: "f", Kind: EventClick, Target: "go", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 2},
+		{Surface: "f", Kind: EventClick, Target: "", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}, Count: 1},
+		{Surface: "f", Kind: EventClick, Target: "plain", Count: 1},
 		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
