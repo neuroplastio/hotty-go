@@ -8,8 +8,8 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285
-	github.com/neuroplastio/hotty-go v0.0.0-20261011174050-a9d6a6f8654f
-	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261011174050-a9d6a6f8654f
+	github.com/neuroplastio/hotty-go v0.0.0-20261013184843-bdb624789309
+	github.com/neuroplastio/hotty-go/hottytest v0.0.0-20261013184843-bdb624789309
 	golang.org/x/net v0.39.0
 )
 
@@ -24,7 +24,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261011174050-a9d6a6f8654f // indirect
+	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261013184843-bdb624789309 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
