@@ -33,6 +33,7 @@ var features = map[string]bool{
 	"caps.drag-kinds":     true,
 	"options.unordered":   true,
 	"decode.abort-count":  true,
+	"decode.max":          true,
 	"decode.unterminated": true,
 	"scanner.da1":         true,
 	"graphemes":           true,
@@ -333,6 +334,7 @@ type decodeVector struct {
 	Name     string   `json:"name"`
 	Requires []string `json:"requires"`
 	Seqs     []string `json:"seqs"`
+	Max      int      `json:"max"`
 	Results  []string `json:"results"`
 	Invalid  int      `json:"invalid"`
 	Messages []struct {
@@ -347,7 +349,7 @@ func TestDecodeVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Decode {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
-			var d Decoder
+			d := Decoder{Max: v.Max}
 			var results []string
 			var msgs []Message
 			for _, seq := range v.Seqs {

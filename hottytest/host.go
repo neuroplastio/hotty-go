@@ -147,7 +147,7 @@ func AutoRows(f func(s *Surface, cols int) int) Option { return func(h *Host) { 
 // otherwise.
 func DefaultCaps() hotty.Caps {
 	c := hotty.Caps{V: hotty.Version, Cell: &hotty.Cell{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
-		Limits: map[string]int{"surfaces": 64}}
+		Limits: map[string]int{"surfaces": 64, "message": hotty.DefaultMax}}
 	for _, op := range []hotty.Op{hotty.OpMorph, hotty.OpInner, hotty.OpReplace, hotty.OpAppend, hotty.OpPrepend,
 		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar, hotty.OpReveal} {
 		c.Ops = append(c.Ops, string(op))
@@ -213,6 +213,16 @@ func New(tb testing.TB, opts ...Option) *Host {
 	h.in.cond = sync.NewCond(&h.in.mu)
 	for _, o := range opts {
 		o(h)
+	}
+	// What the program sends is decoded with at most the limit the host
+	// reports as limits.message (SPEC §13), DefaultMax when Caps names none.
+	if h.dec.Max = h.caps.Limits["message"]; h.dec.Max <= 0 {
+		h.dec.Max = hotty.DefaultMax
+		h.caps.Limits = maps.Clone(h.caps.Limits)
+		if h.caps.Limits == nil {
+			h.caps.Limits = map[string]int{}
+		}
+		h.caps.Limits["message"] = hotty.DefaultMax
 	}
 	h.scr = screen{cols: h.cols, rows: h.rows}
 	if h.autoRows == nil {

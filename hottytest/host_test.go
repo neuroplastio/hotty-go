@@ -521,6 +521,26 @@ func TestLimits(t *testing.T) {
 	}
 }
 
+// The host reports the limit it decodes a message with (SPEC §13), and drops
+// a message past it.
+func TestMessageLimit(t *testing.T) {
+	if c := DefaultCaps(); c.Limits["message"] != hotty.DefaultMax {
+		t.Errorf("DefaultCaps: %v", c.Limits)
+	}
+	h := New(t, Caps(hotty.Caps{Limits: map[string]int{"surfaces": 2}}))
+	if h.caps.Limits["message"] != hotty.DefaultMax {
+		t.Errorf("a limit Caps leaves out: %v", h.caps.Limits)
+	}
+	h = New(t, Lenient(), Caps(hotty.Caps{Limits: map[string]int{"message": 8}}))
+	send(h, hotty.Res("r", "text/css", []byte("012345678")), hotty.Res("s", "text/css", []byte("01234567")))
+	if _, _, ok := h.Resource("r"); ok {
+		t.Error("a resource past the limit was taken")
+	}
+	if _, _, ok := h.Resource("s"); !ok {
+		t.Error("a resource at the limit was not taken")
+	}
+}
+
 func TestDeltasAndInspection(t *testing.T) {
 	h := shown(t, "x", `<div id=bar style="width: 1px"></div><p id=p class=a>old</p><textarea id=ta>t</textarea>`+
 		`<select id=sel><option>a<option selected value=bee>b</select><input id=in value=v><input id=box type=checkbox>`)
