@@ -759,3 +759,25 @@ func TestKeymapProgram(t *testing.T) {
 		t.Error("a field's keymap: ArrowLeft is not the program's, or ArrowRight is")
 	}
 }
+
+// A Platform reads Mod as its own modifier (SPEC §10.4).
+func TestPlatformReadKey(t *testing.T) {
+	for _, c := range []struct {
+		p          Platform
+		name, want string
+	}{
+		{Platform{}, "Mod+a", "Control+a"},
+		{Platform{}, "Shift+Mod+z", "Control+Z"},
+		{Platform{Mod: "Meta"}, "Mod+a", "Meta+a"},
+		{Platform{Mod: "Meta"}, "Control+a", "Control+a"},
+		{Platform{Mod: "Meta"}, "Shift+Mod+ArrowLeft", "Meta+Shift+ArrowLeft"},
+		{Platform{}, "Mod+Control+x", "Control+x"},
+	} {
+		if got, ok := c.p.ReadKey(c.name); !ok || got != c.want {
+			t.Errorf("%+v.ReadKey(%q) = %q, %v; want %q", c.p, c.name, got, ok, c.want)
+		}
+	}
+	if _, ok := (Platform{}).ReadKey("Mod+Nope+a"); ok {
+		t.Error("a name that does not parse read")
+	}
+}

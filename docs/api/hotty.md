@@ -153,6 +153,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func PlacementOf(m Message) (Placement, error)`](#PlacementOf)
 - [`type Platform`](#Platform)
   - [`func PlatformOf(c Caps) Platform`](#PlatformOf)
+  - [`func (p Platform) ReadKey(name string) (canonical string, ok bool)`](#Platform.ReadKey)
 - [`type QueryOption`](#QueryOption)
   - [`func Late() QueryOption`](#Late)
 - [`type Quiet`](#Quiet)
@@ -1650,6 +1651,14 @@ func PlatformOf(c Caps) Platform
 ```
 
 PlatformOf is the Platform of a host's capabilities: its Mod and Edit, the zero Platform's where it reports none.
+
+### <a id="Platform.ReadKey"></a>func (Platform) ReadKey
+
+```go
+func (p Platform) ReadKey(name string) (canonical string, ok bool)
+```
+
+ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its canonical name (ParseKey) with Mod read as the Platform's, so that where Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta they are two keys. A menu's items (MenuItem.Key) compare with the keys typed this way. ok is false for a name that does not parse.
 
 ## <a id="QueryOption"></a>type QueryOption
 
