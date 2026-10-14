@@ -932,7 +932,7 @@ CapsOf reads capabilities from the body of a reply to a query (SPEC §4), and re
 func Merge(c, changed Caps) Caps
 ```
 
-Merge is c with the fields a caps event changed (Event.Changed) in place of its own (SPEC §4): those whose keys changed's Raw has. Its Raw is c's with those fields replaced, so a relay announces the capabilities as they are now.
+Merge is c with the fields a caps event changed (Event.Changed) in place of its own (SPEC §4): those whose keys changed's Raw has. A field the event empties ({}) became absent (SPEC §9), and Merge drops it. Its Raw is c's with those fields replaced, so a relay announces the capabilities as they are now.
 
 ### <a id="Caps.DecodeMsg"></a>func (*Caps) DecodeMsg
 

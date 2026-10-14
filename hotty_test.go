@@ -781,3 +781,36 @@ func TestPlatformReadKey(t *testing.T) {
 		t.Error("a name that does not parse read")
 	}
 }
+
+// A caps event's field that became absent comes empty, and Merge drops it
+// (SPEC §9).
+func TestMergeDropsWhatAnEventEmpties(t *testing.T) {
+	b := msgp.AppendMapHeader(nil, 3)
+	b = msgp.AppendString(msgp.AppendString(b, "mod"), "Control")
+	b = msgp.AppendMapHeader(msgp.AppendString(b, "edit"), 1)
+	b = msgp.AppendString(msgp.AppendArrayHeader(msgp.AppendString(b, "copy"), 1), "Control+c")
+	b = msgp.AppendMapHeader(msgp.AppendString(b, "keys"), 2)
+	b = msgp.AppendInt(msgp.AppendString(msgp.AppendString(msgp.AppendString(b, "leader"), "Space"), "timeout"), 2000)
+	c, ok := CapsOf(b)
+	if !ok || c.Keys == nil || len(c.Edit) != 1 {
+		t.Fatalf("caps: %+v", c)
+	}
+	e := msgp.AppendMapHeader(nil, 2)
+	e = msgp.AppendMapHeader(msgp.AppendString(e, "edit"), 0)
+	e = msgp.AppendMapHeader(msgp.AppendString(e, "keys"), 0)
+	changed, ok := CapsOf(e)
+	if !ok {
+		t.Fatal("changed")
+	}
+	m := Merge(c, changed)
+	if m.Edit != nil || m.Keys != nil || m.Mod != "Control" {
+		t.Errorf("merged: edit %v, keys %v, mod %q", m.Edit, m.Keys, m.Mod)
+	}
+	var keys []string
+	for _, f := range rawFields(m.Raw) {
+		keys = append(keys, f.key)
+	}
+	if !slices.Equal(keys, []string{"mod"}) {
+		t.Errorf("merged Raw has %v, want [mod]", keys)
+	}
+}

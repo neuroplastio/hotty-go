@@ -629,9 +629,10 @@ func Views(c Caps) bool {
 func Light(c Caps) bool { return c.Scheme == "light" }
 
 // Merge is c with the fields a caps event changed (Event.Changed) in place
-// of its own (SPEC §4): those whose keys changed's Raw has. Its Raw is c's
-// with those fields replaced, so a relay announces the capabilities as
-// they are now.
+// of its own (SPEC §4): those whose keys changed's Raw has. A field the
+// event empties ({}) became absent (SPEC §9), and Merge drops it. Its Raw
+// is c's with those fields replaced, so a relay announces the capabilities
+// as they are now.
 func Merge(c, changed Caps) Caps {
 	out := c
 	for _, e := range rawFields(changed.Raw) {
@@ -666,8 +667,14 @@ func Merge(c, changed Caps) Caps {
 			out.Mod = changed.Mod
 		case "edit":
 			out.Edit = changed.Edit
+			if emptied(e) {
+				out.Edit = nil
+			}
 		case "keys":
 			out.Keys = changed.Keys
+			if emptied(e) {
+				out.Keys = nil
+			}
 		case "menu":
 			out.Menu = changed.Menu
 		case "host":
@@ -687,7 +694,11 @@ func Merge(c, changed Caps) Caps {
 			merged = append(merged, e)
 		}
 	}
-	merged = append(merged, fields...)
+	for _, f := range fields {
+		if !emptied(f) {
+			merged = append(merged, f)
+		}
+	}
 	b := msgp.AppendMapHeader(nil, uint32(len(merged)))
 	for _, e := range merged {
 		b = msgp.AppendString(b, e.key)
@@ -695,6 +706,13 @@ func Merge(c, changed Caps) Caps {
 	}
 	out.Raw = b
 	return out
+}
+
+// emptied reports whether a field of a caps event is an empty map: the
+// field became absent (SPEC §9).
+func emptied(f rawField) bool {
+	n, _, err := msgp.ReadMapHeaderBytes(f.value)
+	return err == nil && n == 0
 }
 
 // rawField is one field of a msgpack map: its key, and its value as it
