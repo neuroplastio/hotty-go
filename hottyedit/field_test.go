@@ -116,7 +116,7 @@ func TestKey(t *testing.T) {
 		{"Shift+b", hotty.Insert, true, "foo  B", 6, 6},
 		{"+", hotty.Insert, true, "foo  B+", 7, 7},
 		{"Home", hotty.LineStart, false, "foo  B+", 0, 0},
-		{"Control+x", "", false, "foo  B+", 0, 0},
+		{"Control+x", hotty.Cut, false, "foo  B+", 0, 0},
 		{"Escape", "", false, "foo  B+", 0, 0},
 		{"Control+s", hotty.Submit, false, "foo  B+", 0, 0},
 		{"Control+n", "", false, "foo  B+", 0, 0},

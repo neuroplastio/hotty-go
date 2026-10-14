@@ -85,7 +85,7 @@ Anchor is where the selection began, the end of it the caret is not at. ok is fa
 func (f *Field) Do(a hotty.Action) (changed bool)
 ```
 
-Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing, the selection included; they are the program's to act on. An action only a multi-line field has does nothing in an input.
+Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing, the selection included; they are the program's to act on, and so are Cut, Paste, Undo and Redo: a Field keeps no clipboard and no history. An action only a multi-line field has does nothing in an input.
 
 A selection comes first (SPEC §10.2): a delete deletes it and nothing else; a move starts from its start when it goes back or up, and from its end otherwise, and ends it, and char-backward and char-forward stop there; select-all selects the whole value, the anchor at its start and the caret at its end.
 

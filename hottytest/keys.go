@@ -151,6 +151,19 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 			h.commit(s)
 			h.submit(s, form, nil)
 		}
+	case a == hotty.Cut:
+		// No cut with nothing selected, nor in a password field: the key is
+		// the program's (SPEC §10.2). This host keeps no clipboard, so a cut
+		// only deletes.
+		if start, end := f.Selection(); start == end || f.Password {
+			return false
+		}
+		if f.Do(hotty.DeleteCharBackward) {
+			h.typeInto(s, el, f.Value)
+		}
+	case a == hotty.Paste:
+		// This host reads no clipboard: the key is the program's.
+		return false
 	case changed:
 		h.typeInto(s, el, f.Value)
 	}

@@ -99,8 +99,9 @@ func (f *Field) Select(anchor, caret int) {
 
 // Do does an action, and reports whether the value changed: then the
 // program reports an input event. Submit and Program change nothing, the
-// selection included; they are the program's to act on. An action only a
-// multi-line field has does nothing in an input.
+// selection included; they are the program's to act on, and so are Cut,
+// Paste, Undo and Redo: a Field keeps no clipboard and no history. An
+// action only a multi-line field has does nothing in an input.
 //
 // A selection comes first (SPEC §10.2): a delete deletes it and nothing
 // else; a move starts from its start when it goes back or up, and from its
