@@ -660,7 +660,7 @@ type Action string
 
 Action is what a text field does with a key (SPEC §10.2): a keymap binds keys to actions, and Lookup says which one a key does.
 
-<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="SelectAll"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Cut"></a><a id="Paste"></a><a id="Undo"></a><a id="Redo"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
+<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="SelectAll"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Copy"></a><a id="Cut"></a><a id="Paste"></a><a id="Undo"></a><a id="Redo"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
 
 ```go
 const (
@@ -687,9 +687,10 @@ const (
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
 	Program Action = "program"
-	// Cut, Paste, Undo and Redo are the field's clipboard and history
-	// (SPEC §10.2). A hottyedit.Field keeps neither, and does nothing with
-	// them.
+	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
+	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
+	// nothing with them.
+	Copy  Action = "copy"
 	Cut   Action = "cut"
 	Paste Action = "paste"
 	Undo  Action = "undo"

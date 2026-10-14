@@ -36,9 +36,10 @@ const (
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
 	Program Action = "program"
-	// Cut, Paste, Undo and Redo are the field's clipboard and history
-	// (SPEC §10.2). A hottyedit.Field keeps neither, and does nothing with
-	// them.
+	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
+	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
+	// nothing with them.
+	Copy  Action = "copy"
 	Cut   Action = "cut"
 	Paste Action = "paste"
 	Undo  Action = "undo"
@@ -69,7 +70,7 @@ var actions = map[Action]bool{
 	DeleteWordBackward: true, DeleteWordForward: true, DeleteToLineStart: true, DeleteToLineEnd: true,
 	LinePrevious: true, LineNext: true, PageUp: true, PageDown: true,
 	InputStart: true, InputEnd: true, SelectAll: true, Newline: true, Submit: true, Program: true,
-	Cut: true, Paste: true, Undo: true, Redo: true,
+	Copy: true, Cut: true, Paste: true, Undo: true, Redo: true,
 	ScrollUp: true, ScrollDown: true, ScrollLeft: true, ScrollRight: true,
 	ScrollPageUp: true, ScrollPageDown: true, ScrollHalfPageUp: true, ScrollHalfPageDown: true,
 	ScrollStart: true, ScrollEnd: true,
@@ -633,6 +634,7 @@ func Resolve(multiline bool, values ...string) *Keymap {
 		{"Meta+ArrowLeft", LineStart}, {"Meta+ArrowRight", LineEnd},
 		{"Meta+ArrowUp", InputStart}, {"Meta+ArrowDown", InputEnd},
 		{"Meta+Backspace", DeleteToLineStart}, {"Meta+a", SelectAll},
+		{"Control+c", Copy}, {"Meta+c", Copy},
 		{"Control+x", Cut}, {"Meta+x", Cut}, {"Control+v", Paste}, {"Meta+v", Paste},
 		{"Control+z", Undo}, {"Meta+z", Undo},
 		{"Control+Z", Redo}, {"Control+y", Redo}, {"Meta+Z", Redo},
