@@ -300,3 +300,25 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// A host whose capabilities say Mod is Meta reads keymaps as a Mac does
+// (SPEC §10.2, §10.4): Command keys are the field's, and a host on Control
+// leaves them to the program.
+func TestKeysOnAMac(t *testing.T) {
+	h := shown(t, "k", `<input id=t data-on=input value="one two">`, Caps(hotty.Caps{Mod: "Meta"}))
+	send(h, hotty.Focus("k", "t"))
+	h.drain()
+	h.Key("Meta+ArrowLeft")
+	h.Key("x")
+	h.Key("Meta+a")
+	h.Key("z")
+	h.Key("Meta+Backspace")
+	expect(t, sent(h), `ev input t=t {"value":"xone two"}`, `ev input t=t {"value":"z"}`, `ev input t=t {"value":""}`)
+
+	h = shown(t, "k", `<input id=t data-on=input value="one two">`)
+	send(h, hotty.Focus("k", "t"))
+	h.drain()
+	if h.Key("Meta+a") {
+		t.Error("Meta+a was the field's where Mod is Control")
+	}
+}

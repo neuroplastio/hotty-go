@@ -108,6 +108,19 @@ func Caps(c hotty.Caps) Option {
 		if c.Drop {
 			d.Drop = true
 		}
+		// The platform its keymaps are read on (PlatformOf), and the keys.
+		if c.Mod != "" {
+			d.Mod = c.Mod
+		}
+		if c.Edit != nil {
+			d.Edit = c.Edit
+		}
+		if c.Keys != nil {
+			d.Keys = c.Keys
+		}
+		if c.Menu {
+			d.Menu = true
+		}
 	}
 }
 

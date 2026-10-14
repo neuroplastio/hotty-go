@@ -87,7 +87,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	}
 	// Any other element's keymap gives keys to the program, and does
 	// nothing else.
-	if hotty.ParseKeymap(hotty.Platform{}, strings.Join(keymaps(el), " ")).Program(key) {
+	if hotty.ParseKeymap(hotty.PlatformOf(h.caps), strings.Join(keymaps(el), " ")).Program(key) {
 		return false
 	}
 	if !shiftOnly {
@@ -142,7 +142,7 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 		s.fields[el] = f
 	}
 	f.Value = s.valueOf(el)
-	a, changed := f.Key(hotty.Resolve(hotty.Platform{}, multi, values...), key)
+	a, changed := f.Key(hotty.Resolve(hotty.PlatformOf(h.caps), multi, values...), key)
 	switch {
 	case a == "":
 		return false
