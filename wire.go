@@ -50,6 +50,19 @@ type Caps struct {
 	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
 	// every click reads as a single one.
 	Count bool `msg:"count,omitempty"`
+	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
+	// (SPEC §10.4); "" when the host did not say, which is Control.
+	Mod string `msg:"mod,omitempty"`
+	// Edit is the host's edit shortcuts, from each action to its keys
+	// (SPEC §10.2); a host that reports them takes edit commands (Edit,
+	// SPEC §10.6).
+	Edit map[string][]string `msg:"edit,omitempty"`
+	// Keys is the user's leader and sequence timeout (SPEC §10.5); nil
+	// when the host reads no key sequences.
+	Keys *Keys `msg:"keys,omitempty"`
+	// Menu is true when the host shows a program's which-key menus (Menu,
+	// SPEC §10.6).
+	Menu bool `msg:"menu,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -60,6 +73,39 @@ type Caps struct {
 	// does not know included: what a relay announces to the programs
 	// behind it (SPEC §2.7). Writing Caps writes the fields above, not Raw.
 	Raw []byte `msg:"-"`
+}
+
+// Keys is how a host reads key sequences (SPEC §10.5).
+type Keys struct {
+	// Leader is the user's leader, a key sequence: what <leader> stands for.
+	Leader string `msg:"leader,omitempty"`
+	// Timeout is how long a sequence waits for its next key, in
+	// milliseconds.
+	Timeout int `msg:"timeout,omitempty"`
+}
+
+// MenuLevel is a which-key level a program shows while its key sequence
+// waits (Menu, SPEC §10.6), in myelin's names and order: a myelin Menu
+// encodes as one.
+type MenuLevel struct {
+	// Seq is the keys typed so far, named as SPEC §10.4 names them.
+	Seq []string `msg:"seq"`
+	// Label is their group's label: "+file".
+	Label string `msg:"label,omitempty"`
+	// Items are the keys that can follow them.
+	Items []MenuItem `msg:"items"`
+}
+
+// MenuItem is a key that can follow a menu's sequence.
+type MenuItem struct {
+	// Key is the key, named as SPEC §10.4 names it.
+	Key string `msg:"key"`
+	// Label is what it does; empty leaves it to the host.
+	Label string `msg:"label,omitempty"`
+	// Group is set when more keys follow it.
+	Group bool `msg:"group,omitempty"`
+	// Enabled is set when it does anything now.
+	Enabled bool `msg:"enabled"`
 }
 
 // Cell is a cell's size in device pixels.
@@ -147,6 +193,12 @@ type viewArea struct {
 	R *int `msg:"r,omitempty"`
 	W *int `msg:"w,omitempty"`
 	H *int `msg:"h,omitempty"`
+}
+
+type commandDetail struct {
+	Name string  `msg:"name"`
+	Key  string  `msg:"key,omitempty"`
+	Text *string `msg:"text,omitempty"`
 }
 
 // submitDetail is a form's fields by name.

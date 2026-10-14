@@ -9,7 +9,7 @@ import (
 
 // A field in cells, edited with the keymap the program gives its surfaces.
 func ExampleField_Key() {
-	km := hotty.Resolve(false, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 	f := hottyedit.Field{Value: "hello wrld", Caret: 10}
 	f.Key(km, "Alt+b")     // word-backward: hello |wrld
 	f.Key(km, "Control+f") // char-forward: hello w|rld

@@ -37,6 +37,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func CellCSS(c Caps) (w, h float64)`](#CellCSS)
 - [`func CursorBelow(rows int) string`](#CursorBelow)
 - [`func DecodeKeys(input []byte) []string`](#DecodeKeys)
+- [`func DefaultEdit(mod string) map[string][]string`](#DefaultEdit)
 - [`func Del(surface string, opts ...ReplyOption) string`](#Del)
 - [`func DelAll(opts ...ReplyOption) string`](#DelAll)
 - [`func DelRes(id string, opts ...ReplyOption) string`](#DelRes)
@@ -44,6 +45,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Detach(surface string, opts ...ReplyOption) string`](#Detach)
 - [`func Doc(surface, html string, opts ...DocOption) string`](#Doc)
 - [`func Drags(c Caps) bool`](#Drags)
+- [`func Edit(names []string, opts ...ReplyOption) string`](#Edit)
 - [`func Encode(ctl Control, payload []byte) string`](#Encode)
 - [`func EncodeEvent(e Event) string`](#EncodeEvent)
 - [`func EncodePlain(ctl Control, payload []byte) string`](#EncodePlain)
@@ -55,6 +57,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Hovers(c Caps) bool`](#Hovers)
 - [`func Light(c Caps) bool`](#Light)
 - [`func Lookup(c Control, k string) (string, bool)`](#Lookup)
+- [`func Menu(level *MenuLevel, opts ...ReplyOption) string`](#Menu)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
 - [`func ParseKey(name string) (canonical string, ok bool)`](#ParseKey)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
@@ -90,6 +93,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type Axes`](#Axes)
 - [`type Caps`](#Caps)
   - [`func CapsOf(body []byte) (Caps, bool)`](#CapsOf)
+  - [`func Merge(c, changed Caps) Caps`](#Merge)
   - [`func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error)`](#Caps.DecodeMsg)
   - [`func (z *Caps) EncodeMsg(en *msgp.Writer) (err error)`](#Caps.EncodeMsg)
   - [`func (z *Caps) Msgsize() (s int)`](#Caps.Msgsize)
@@ -97,6 +101,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z *Cell) DecodeMsg(dc *msgp.Reader) (err error)`](#Cell.DecodeMsg)
   - [`func (z Cell) EncodeMsg(en *msgp.Writer) (err error)`](#Cell.EncodeMsg)
   - [`func (z Cell) Msgsize() (s int)`](#Cell.Msgsize)
+- [`type Command`](#Command)
 - [`type Control`](#Control)
   - [`func With(c Control, k, v string) Control`](#With)
   - [`func Without(c Control, keys ...string) Control`](#Without)
@@ -121,19 +126,33 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type Hover`](#Hover)
 - [`type KV`](#KV)
 - [`type Keymap`](#Keymap)
-  - [`func ParseKeymap(value string) *Keymap`](#ParseKeymap)
-  - [`func Resolve(multiline bool, values ...string) *Keymap`](#Resolve)
+  - [`func ParseKeymap(p Platform, value string) *Keymap`](#ParseKeymap)
+  - [`func Resolve(p Platform, multiline bool, values ...string) *Keymap`](#Resolve)
   - [`func (m *Keymap) Bind(name string, a Action) bool`](#Keymap.Bind)
   - [`func (m *Keymap) Format() string`](#Keymap.Format)
   - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
   - [`func (m *Keymap) Program(name string) bool`](#Keymap.Program)
   - [`func (m *Keymap) Scroll(name string) Action`](#Keymap.Scroll)
   - [`func (m *Keymap) Selects(name string) bool`](#Keymap.Selects)
+- [`type Keys`](#Keys)
+  - [`func (z *Keys) DecodeMsg(dc *msgp.Reader) (err error)`](#Keys.DecodeMsg)
+  - [`func (z Keys) EncodeMsg(en *msgp.Writer) (err error)`](#Keys.EncodeMsg)
+  - [`func (z Keys) Msgsize() (s int)`](#Keys.Msgsize)
 - [`type Link`](#Link)
+- [`type MenuItem`](#MenuItem)
+  - [`func (z *MenuItem) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuItem.DecodeMsg)
+  - [`func (z *MenuItem) EncodeMsg(en *msgp.Writer) (err error)`](#MenuItem.EncodeMsg)
+  - [`func (z *MenuItem) Msgsize() (s int)`](#MenuItem.Msgsize)
+- [`type MenuLevel`](#MenuLevel)
+  - [`func (z *MenuLevel) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuLevel.DecodeMsg)
+  - [`func (z *MenuLevel) EncodeMsg(en *msgp.Writer) (err error)`](#MenuLevel.EncodeMsg)
+  - [`func (z *MenuLevel) Msgsize() (s int)`](#MenuLevel.Msgsize)
 - [`type Message`](#Message)
 - [`type Op`](#Op)
 - [`type Placement`](#Placement)
   - [`func PlacementOf(m Message) (Placement, error)`](#PlacementOf)
+- [`type Platform`](#Platform)
+  - [`func PlatformOf(c Caps) Platform`](#PlatformOf)
 - [`type QueryOption`](#QueryOption)
   - [`func Late() QueryOption`](#Late)
 - [`type Quiet`](#Quiet)
@@ -203,7 +222,7 @@ const (
 )
 ```
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventResize"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventCommand"></a><a id="EventCaps"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
@@ -218,6 +237,11 @@ const (
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
+
+	// The terminal's events, which belong to no surface: Surface and
+	// Target are empty.
+	EventCommand = "command" // an edit command the program takes, by its key or a menu (SPEC §10.6)
+	EventCaps    = "caps"    // the capabilities mod, edit or keys changed (SPEC §4)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
@@ -276,11 +300,11 @@ const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight
 	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
 	"PageUp=page-up PageDown=page-down " +
 	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
-	"Control+a=select-all " +
+	"Mod+a=select-all " +
 	"Control+m=newline"
 ```
 
-TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for Control+a, which selects all, as in a GUI field and SPEC §10.2's default keymap (Home still goes to the line's start). A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
+TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for Mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: Control+a on Linux, while on macOS Control+a stays the line's start. A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(platform, multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
 
 ## <a id="Blur"></a>func Blur
 
@@ -313,6 +337,14 @@ func DecodeKeys(input []byte) []string
 ```
 
 DecodeKeys reads input from the terminal, the bytes a program reads, as SPEC §10.4 names the keys in it: one entry for each key, its canonical name, or "" for input that is no key it names (a mouse report, a sequence it does not know, a key's release). It reads the input whole: an ESC at its end is Escape.
+
+## <a id="DefaultEdit"></a>func DefaultEdit
+
+```go
+func DefaultEdit(mod string) map[string][]string
+```
+
+DefaultEdit is the default edit shortcuts for a Mod (SPEC §10.2), "Control" or "Meta", the keys canonical with Mod read.
 
 ## <a id="Del"></a>func Del
 
@@ -371,6 +403,14 @@ func Drags(c Caps) bool
 ```
 
 Drags reports whether the host sends drags (SPEC §9.1): drag in its events, which stands for dragstart, drag and dragend. Unlike Sends, a host that lists no kinds is taken not to, since drags came after the first hosts: a program offers another way to do what its drags do.
+
+## <a id="Edit"></a>func Edit
+
+```go
+func Edit(names []string, opts ...ReplyOption) string
+```
+
+Edit takes the edit commands named (SPEC §10.6): "select-all", "copy", "cut", "paste", "undo", "redo". Their keys, the host's edit shortcuts (Caps.Edit), then reach the program as EventCommand in place of their bytes, and the terminal's menus send them with no key. Each Edit replaces the last; none takes nothing. It holds for the screen it is sent on: a full-screen program sends it after switching to the alternate screen, and leaving it drops it.
 
 ## <a id="Encode"></a>func Encode
 
@@ -460,6 +500,14 @@ func Lookup(c Control, k string) (string, bool)
 
 Lookup returns a control's value for a key, and whether it has the key.
 
+## <a id="Menu"></a>func Menu
+
+```go
+func Menu(level *MenuLevel, opts ...ReplyOption) string
+```
+
+Menu shows the which-key menu of a program's key sequence while it waits (SPEC §10.6), or with nil hides it. A host shows it only when it reports Caps.Menu.
+
 ## <a id="MorphTo"></a>func MorphTo
 
 ```go
@@ -474,7 +522,7 @@ MorphTo morphs an element into html, or with no target, each top-level element o
 func ParseKey(name string) (canonical string, ok bool)
 ```
 
-ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any order ("Shift+Control+a", "Control+ "), and returns its canonical name ("Control+A", "Control+Space"): the modifiers in the order Control, Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a space. ok is false for a name that does not parse.
+ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any order ("Shift+Control+a", "Control+ "), and returns its canonical name ("Control+A", "Control+Space"): the modifiers in the order Mod, Control, Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a space. A binding's Mod is kept: a Keymap reads it as its Platform's. ok is false for a name that does not parse.
 
 ## <a id="Place"></a>func Place
 
@@ -841,6 +889,19 @@ type Caps struct {
 	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
 	// every click reads as a single one.
 	Count bool `msg:"count,omitempty"`
+	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
+	// (SPEC §10.4); "" when the host did not say, which is Control.
+	Mod string `msg:"mod,omitempty"`
+	// Edit is the host's edit shortcuts, from each action to its keys
+	// (SPEC §10.2); a host that reports them takes edit commands (Edit,
+	// SPEC §10.6).
+	Edit map[string][]string `msg:"edit,omitempty"`
+	// Keys is the user's leader and sequence timeout (SPEC §10.5); nil
+	// when the host reads no key sequences.
+	Keys *Keys `msg:"keys,omitempty"`
+	// Menu is true when the host shows a program's which-key menus (Menu,
+	// SPEC §10.6).
+	Menu bool `msg:"menu,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -863,6 +924,14 @@ func CapsOf(body []byte) (Caps, bool)
 ```
 
 CapsOf reads capabilities from the body of a reply to a query (SPEC §4), and reports whether it decoded: what a relay that stored or was handed them reads them with. Raw is a copy of body.
+
+### <a id="Merge"></a>func Merge
+
+```go
+func Merge(c, changed Caps) Caps
+```
+
+Merge is c with the fields a caps event changed (Event.Changed) in place of its own (SPEC §4): those whose keys changed's Raw has. Its Raw is c's with those fields replaced, so a relay announces the capabilities as they are now.
 
 ### <a id="Caps.DecodeMsg"></a>func (*Caps) DecodeMsg
 
@@ -922,6 +991,26 @@ func (z Cell) Msgsize() (s int)
 ```
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
+## <a id="Command"></a>type Command
+
+```go
+type Command struct {
+	// Name is the command: "copy", "cut", "paste", "undo", "redo",
+	// "select-all".
+	Name string
+	// Key is the key that sent it, named as SPEC §10.4 names it; empty for
+	// a command from the terminal's menu.
+	Key string
+	// Text is a paste's text, and HasText whether there is one: a paste
+	// with nothing on the clipboard, or from a host that cannot read it,
+	// has none.
+	Text    string
+	HasText bool
+}
+```
+
+Command is an edit command (SPEC §10.6): the program decides what it means, and with nothing to do takes it as its Key, as a text field does.
 
 ## <a id="Control"></a>type Control
 
@@ -1204,6 +1293,11 @@ type Event struct {
 	// a double click, 1 for a single click or the keyboard's. It is 0 for
 	// any other kind.
 	Count int
+	// Command is a command's (SPEC §10.6).
+	Command *Command
+	// Changed is a caps's: the capabilities that changed, with only the
+	// fields the detail has (its Raw), for Merge.
+	Changed *Caps
 
 	// Detail is the detail as it came, msgpack: nil when the event has
 	// none. It is what a relay passes on (EncodeEvent).
@@ -1254,23 +1348,23 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
+Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
 ```go
-func ParseKeymap(value string) *Keymap
+func ParseKeymap(p Platform, value string) *Keymap
 ```
 
-ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and Tab, Shift+Tab and Escape.
+ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and Tab, Shift+Tab and Escape. Mod reads as the Platform's: on Control, Mod+a and Control+a are one key.
 
 ### <a id="Resolve"></a>func Resolve
 
 ```go
-func Resolve(multiline bool, values ...string) *Keymap
+func Resolve(p Platform, multiline bool, values ...string) *Keymap
 ```
 
-Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key.
+Resolve makes a field's keymap (SPEC §10.2): the default keymap for the Platform's Mod, with its edit shortcuts, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key.
 
 ### <a id="Keymap.Bind"></a>func (*Keymap) Bind
 
@@ -1286,7 +1380,7 @@ Bind binds a key to an action, and reports whether it did: a host ignores the bi
 func (m *Keymap) Format() string
 ```
 
-Format writes the keymap as a data-keys value: each key once, where it was first bound, with its last action.
+Format writes the keymap as a data-keys value: each key once, where it was first bound, as its last binding wrote it (Mod kept), with its last action.
 
 ### <a id="Keymap.Lookup"></a>func (*Keymap) Lookup
 
@@ -1304,7 +1398,7 @@ func (m *Keymap) Program(name string) bool
 
 Program reports whether the keymap gives a key to the program: binds it to program, or, for a key with Shift that no binding names, binds it without Shift (SPEC §10.2, keys for the program).
 
-Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds to program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
+Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds to program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
 
 ### <a id="Keymap.Scroll"></a>func (*Keymap) Scroll
 
@@ -1324,6 +1418,44 @@ func (m *Keymap) Selects(name string) bool
 
 Selects reports whether a field with this keymap selects with a key (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves), and its canonical name has Shift, bound so or looked up without it ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+\<"). The field then keeps its anchor and moves the caret (hottyedit.Field.Extend).
 
+## <a id="Keys"></a>type Keys
+
+```go
+type Keys struct {
+	// Leader is the user's leader, a key sequence: what <leader> stands for.
+	Leader string `msg:"leader,omitempty"`
+	// Timeout is how long a sequence waits for its next key, in
+	// milliseconds.
+	Timeout int `msg:"timeout,omitempty"`
+}
+```
+
+Keys is how a host reads key sequences (SPEC §10.5).
+
+### <a id="Keys.DecodeMsg"></a>func (*Keys) DecodeMsg
+
+```go
+func (z *Keys) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="Keys.EncodeMsg"></a>func (Keys) EncodeMsg
+
+```go
+func (z Keys) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="Keys.Msgsize"></a>func (Keys) Msgsize
+
+```go
+func (z Keys) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
 ## <a id="Link"></a>type Link
 
 ```go
@@ -1331,6 +1463,86 @@ type Link struct{ Href, URL string }
 ```
 
 Link is a clicked link: its href, as the document has it, and its URL resolved against the document's base (SPEC §7.3), "" when the href resolves to nothing outside the document.
+
+## <a id="MenuItem"></a>type MenuItem
+
+```go
+type MenuItem struct {
+	// Key is the key, named as SPEC §10.4 names it.
+	Key string `msg:"key"`
+	// Label is what it does; empty leaves it to the host.
+	Label string `msg:"label,omitempty"`
+	// Group is set when more keys follow it.
+	Group bool `msg:"group,omitempty"`
+	// Enabled is set when it does anything now.
+	Enabled bool `msg:"enabled"`
+}
+```
+
+MenuItem is a key that can follow a menu's sequence.
+
+### <a id="MenuItem.DecodeMsg"></a>func (*MenuItem) DecodeMsg
+
+```go
+func (z *MenuItem) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="MenuItem.EncodeMsg"></a>func (*MenuItem) EncodeMsg
+
+```go
+func (z *MenuItem) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="MenuItem.Msgsize"></a>func (*MenuItem) Msgsize
+
+```go
+func (z *MenuItem) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
+## <a id="MenuLevel"></a>type MenuLevel
+
+```go
+type MenuLevel struct {
+	// Seq is the keys typed so far, named as SPEC §10.4 names them.
+	Seq []string `msg:"seq"`
+	// Label is their group's label: "+file".
+	Label string `msg:"label,omitempty"`
+	// Items are the keys that can follow them.
+	Items []MenuItem `msg:"items"`
+}
+```
+
+MenuLevel is a which-key level a program shows while its key sequence waits (Menu, SPEC §10.6), in myelin's names and order: a myelin Menu encodes as one.
+
+### <a id="MenuLevel.DecodeMsg"></a>func (*MenuLevel) DecodeMsg
+
+```go
+func (z *MenuLevel) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="MenuLevel.EncodeMsg"></a>func (*MenuLevel) EncodeMsg
+
+```go
+func (z *MenuLevel) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="MenuLevel.Msgsize"></a>func (*MenuLevel) Msgsize
+
+```go
+func (z *MenuLevel) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
 ## <a id="Message"></a>type Message
 
@@ -1416,6 +1628,28 @@ func PlacementOf(m Message) (Placement, error)
 ```
 
 Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). A command out of range is an \*Error with Code EINVAL, as a host answers it.
+
+## <a id="Platform"></a>type Platform
+
+```go
+type Platform struct {
+	// Mod is "Control" or "Meta" (SPEC §10.4); "" is Control.
+	Mod string
+	// Edit is the host's edit shortcuts, from each action to its keys
+	// (SPEC §10.2); nil is DefaultEdit(Mod).
+	Edit map[string][]string
+}
+```
+
+Platform is how a host reads bindings (SDK.md §3.10): the modifier Mod stands for, and its edit shortcuts. The zero Platform is Control with the default edit shortcuts.
+
+### <a id="PlatformOf"></a>func PlatformOf
+
+```go
+func PlatformOf(c Caps) Platform
+```
+
+PlatformOf is the Platform of a host's capabilities: its Mod and Edit, the zero Platform's where it reports none.
 
 ## <a id="QueryOption"></a>type QueryOption
 

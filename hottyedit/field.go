@@ -6,7 +6,7 @@
 // say), and its cells rendition looks keys up in the same keymap, resolved
 // with hotty.Resolve, and does what they say to a Field:
 //
-//	km := hotty.Resolve(false, hotty.TerminalKeys)
+//	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 //	f := hottyedit.Field{Value: "foo bar"}
 //	switch a, changed := f.Key(km, "Control+w"); {
 //	case a == "":

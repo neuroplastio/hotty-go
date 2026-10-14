@@ -369,6 +369,118 @@ func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Count")
 				return
 			}
+		case "mod":
+			z.Mod, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Mod")
+				return
+			}
+		case "edit":
+			var zb0008 uint32
+			zb0008, err = dc.ReadMapHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Edit")
+				return
+			}
+			if zb0008 > z5817a858limitMaps {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if z.Edit == nil {
+				z.Edit = make(map[string][]string, zb0008)
+			} else if len(z.Edit) > 0 {
+				clear(z.Edit)
+			}
+			for zb0008 > 0 {
+				zb0008--
+				var za0008 string
+				za0008, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Edit")
+					return
+				}
+				var za0009 []string
+				var zb0009 uint32
+				zb0009, err = dc.ReadArrayHeader()
+				if err != nil {
+					err = msgp.WrapError(err, "Edit", za0008)
+					return
+				}
+				if zb0009 > z5817a858limitArrays {
+					err = msgp.ErrLimitExceeded
+					return
+				}
+				if cap(za0009) >= int(zb0009) {
+					za0009 = (za0009)[:zb0009]
+				} else {
+					za0009 = make([]string, zb0009)
+				}
+				for za0010 := range za0009 {
+					za0009[za0010], err = dc.ReadString()
+					if err != nil {
+						err = msgp.WrapError(err, "Edit", za0008, za0010)
+						return
+					}
+				}
+				z.Edit[za0008] = za0009
+			}
+		case "keys":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Keys")
+					return
+				}
+				z.Keys = nil
+			} else {
+				if z.Keys == nil {
+					z.Keys = new(Keys)
+				}
+				var zb0010 uint32
+				zb0010, err = dc.ReadMapHeader()
+				if err != nil {
+					err = msgp.WrapError(err, "Keys")
+					return
+				}
+				if zb0010 > z5817a858limitMaps {
+					err = msgp.ErrLimitExceeded
+					return
+				}
+				for zb0010 > 0 {
+					zb0010--
+					field, err = dc.ReadMapKeyPtr()
+					if err != nil {
+						err = msgp.WrapError(err, "Keys")
+						return
+					}
+					switch msgp.UnsafeString(field) {
+					case "leader":
+						z.Keys.Leader, err = dc.ReadString()
+						if err != nil {
+							err = msgp.WrapError(err, "Keys", "Leader")
+							return
+						}
+					case "timeout":
+						z.Keys.Timeout, err = dc.ReadInt()
+						if err != nil {
+							err = msgp.WrapError(err, "Keys", "Timeout")
+							return
+						}
+					default:
+						err = dc.Skip()
+						if err != nil {
+							err = msgp.WrapError(err, "Keys")
+							return
+						}
+					}
+				}
+			}
+		case "menu":
+			z.Menu, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "Menu")
+				return
+			}
 		case "host":
 			z.Host, err = dc.ReadString()
 			if err != nil {
@@ -395,8 +507,8 @@ func (z *Caps) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 	// check for omitted fields
-	zb0001Len := uint32(15)
-	var zb0001Mask uint16 /* 15 bits */
+	zb0001Len := uint32(19)
+	var zb0001Mask uint32 /* 19 bits */
 	_ = zb0001Mask
 	if z.Ops == nil {
 		zb0001Len--
@@ -446,16 +558,32 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 		zb0001Len--
 		zb0001Mask |= 0x1000
 	}
-	if z.Host == "" {
+	if z.Mod == "" {
 		zb0001Len--
 		zb0001Mask |= 0x2000
 	}
-	if z.Version == "" {
+	if z.Edit == nil {
 		zb0001Len--
 		zb0001Mask |= 0x4000
 	}
+	if z.Keys == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8000
+	}
+	if z.Menu == false {
+		zb0001Len--
+		zb0001Mask |= 0x10000
+	}
+	if z.Host == "" {
+		zb0001Len--
+		zb0001Mask |= 0x20000
+	}
+	if z.Version == "" {
+		zb0001Len--
+		zb0001Mask |= 0x40000
+	}
 	// variable map header, size zb0001Len
-	err = en.Append(0x80 | uint8(zb0001Len))
+	err = en.WriteMapHeader(zb0001Len)
 	if err != nil {
 		return
 	}
@@ -685,6 +813,120 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 		if (zb0001Mask & 0x2000) == 0 { // if not omitted
+			// write "mod"
+			err = en.Append(0xa3, 0x6d, 0x6f, 0x64)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Mod)
+			if err != nil {
+				err = msgp.WrapError(err, "Mod")
+				return
+			}
+		}
+		if (zb0001Mask & 0x4000) == 0 { // if not omitted
+			// write "edit"
+			err = en.Append(0xa4, 0x65, 0x64, 0x69, 0x74)
+			if err != nil {
+				return
+			}
+			err = en.WriteMapHeader(uint32(len(z.Edit)))
+			if err != nil {
+				err = msgp.WrapError(err, "Edit")
+				return
+			}
+			for za0008, za0009 := range z.Edit {
+				err = en.WriteString(za0008)
+				if err != nil {
+					err = msgp.WrapError(err, "Edit")
+					return
+				}
+				err = en.WriteArrayHeader(uint32(len(za0009)))
+				if err != nil {
+					err = msgp.WrapError(err, "Edit", za0008)
+					return
+				}
+				for za0010 := range za0009 {
+					err = en.WriteString(za0009[za0010])
+					if err != nil {
+						err = msgp.WrapError(err, "Edit", za0008, za0010)
+						return
+					}
+				}
+			}
+		}
+		if (zb0001Mask & 0x8000) == 0 { // if not omitted
+			// write "keys"
+			err = en.Append(0xa4, 0x6b, 0x65, 0x79, 0x73)
+			if err != nil {
+				return
+			}
+			if z.Keys == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				// check for omitted fields
+				zb0003Len := uint32(2)
+				var zb0003Mask uint8 /* 2 bits */
+				_ = zb0003Mask
+				if z.Keys.Leader == "" {
+					zb0003Len--
+					zb0003Mask |= 0x1
+				}
+				if z.Keys.Timeout == 0 {
+					zb0003Len--
+					zb0003Mask |= 0x2
+				}
+				// variable map header, size zb0003Len
+				err = en.Append(0x80 | uint8(zb0003Len))
+				if err != nil {
+					return
+				}
+
+				// skip if no fields are to be emitted
+				if zb0003Len != 0 {
+					if (zb0003Mask & 0x1) == 0 { // if not omitted
+						// write "leader"
+						err = en.Append(0xa6, 0x6c, 0x65, 0x61, 0x64, 0x65, 0x72)
+						if err != nil {
+							return
+						}
+						err = en.WriteString(z.Keys.Leader)
+						if err != nil {
+							err = msgp.WrapError(err, "Keys", "Leader")
+							return
+						}
+					}
+					if (zb0003Mask & 0x2) == 0 { // if not omitted
+						// write "timeout"
+						err = en.Append(0xa7, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74)
+						if err != nil {
+							return
+						}
+						err = en.WriteInt(z.Keys.Timeout)
+						if err != nil {
+							err = msgp.WrapError(err, "Keys", "Timeout")
+							return
+						}
+					}
+				}
+			}
+		}
+		if (zb0001Mask & 0x10000) == 0 { // if not omitted
+			// write "menu"
+			err = en.Append(0xa4, 0x6d, 0x65, 0x6e, 0x75)
+			if err != nil {
+				return
+			}
+			err = en.WriteBool(z.Menu)
+			if err != nil {
+				err = msgp.WrapError(err, "Menu")
+				return
+			}
+		}
+		if (zb0001Mask & 0x20000) == 0 { // if not omitted
 			// write "host"
 			err = en.Append(0xa4, 0x68, 0x6f, 0x73, 0x74)
 			if err != nil {
@@ -696,7 +938,7 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		}
-		if (zb0001Mask & 0x4000) == 0 { // if not omitted
+		if (zb0001Mask & 0x40000) == 0 { // if not omitted
 			// write "version"
 			err = en.Append(0xa7, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e)
 			if err != nil {
@@ -714,7 +956,7 @@ func (z *Caps) EncodeMsg(en *msgp.Writer) (err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *Caps) Msgsize() (s int) {
-	s = 1 + 2 + msgp.StringPrefixSize + len(z.V) + 4 + msgp.ArrayHeaderSize
+	s = 3 + 2 + msgp.StringPrefixSize + len(z.V) + 4 + msgp.ArrayHeaderSize
 	for za0001 := range z.Ops {
 		s += msgp.StringPrefixSize + len(z.Ops[za0001])
 	}
@@ -745,7 +987,23 @@ func (z *Caps) Msgsize() (s int) {
 			}
 		}
 	}
-	s += 7 + msgp.BoolSize + 12 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.StringPrefixSize + len(z.Host) + 8 + msgp.StringPrefixSize + len(z.Version)
+	s += 7 + msgp.BoolSize + 12 + msgp.BoolSize + 6 + msgp.BoolSize + 5 + msgp.BoolSize + 6 + msgp.BoolSize + 4 + msgp.StringPrefixSize + len(z.Mod) + 5 + msgp.MapHeaderSize
+	if z.Edit != nil {
+		for za0008, za0009 := range z.Edit {
+			_ = za0009
+			s += msgp.StringPrefixSize + len(za0008) + msgp.ArrayHeaderSize
+			for za0010 := range za0009 {
+				s += msgp.StringPrefixSize + len(za0009[za0010])
+			}
+		}
+	}
+	s += 5
+	if z.Keys == nil {
+		s += msgp.NilSize
+	} else {
+		s += 1 + 7 + msgp.StringPrefixSize + len(z.Keys.Leader) + 8 + msgp.IntSize
+	}
+	s += 5 + msgp.BoolSize + 5 + msgp.StringPrefixSize + len(z.Host) + 8 + msgp.StringPrefixSize + len(z.Version)
 	return
 }
 
@@ -823,6 +1081,406 @@ func (z Cell) EncodeMsg(en *msgp.Writer) (err error) {
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z Cell) Msgsize() (s int) {
 	s = 1 + 2 + msgp.IntSize + 2 + msgp.IntSize
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *Keys) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "leader":
+			z.Leader, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Leader")
+				return
+			}
+		case "timeout":
+			z.Timeout, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Timeout")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z Keys) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(2)
+	var zb0001Mask uint8 /* 2 bits */
+	_ = zb0001Mask
+	if z.Leader == "" {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	if z.Timeout == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "leader"
+			err = en.Append(0xa6, 0x6c, 0x65, 0x61, 0x64, 0x65, 0x72)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Leader)
+			if err != nil {
+				err = msgp.WrapError(err, "Leader")
+				return
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "timeout"
+			err = en.Append(0xa7, 0x74, 0x69, 0x6d, 0x65, 0x6f, 0x75, 0x74)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Timeout)
+			if err != nil {
+				err = msgp.WrapError(err, "Timeout")
+				return
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z Keys) Msgsize() (s int) {
+	s = 1 + 7 + msgp.StringPrefixSize + len(z.Leader) + 8 + msgp.IntSize
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *MenuItem) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "key":
+			z.Key, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Key")
+				return
+			}
+		case "label":
+			z.Label, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Label")
+				return
+			}
+		case "group":
+			z.Group, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "Group")
+				return
+			}
+		case "enabled":
+			z.Enabled, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "Enabled")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *MenuItem) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(4)
+	var zb0001Mask uint8 /* 4 bits */
+	_ = zb0001Mask
+	if z.Label == "" {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.Group == false {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "key"
+		err = en.Append(0xa3, 0x6b, 0x65, 0x79)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z.Key)
+		if err != nil {
+			err = msgp.WrapError(err, "Key")
+			return
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "label"
+			err = en.Append(0xa5, 0x6c, 0x61, 0x62, 0x65, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Label)
+			if err != nil {
+				err = msgp.WrapError(err, "Label")
+				return
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "group"
+			err = en.Append(0xa5, 0x67, 0x72, 0x6f, 0x75, 0x70)
+			if err != nil {
+				return
+			}
+			err = en.WriteBool(z.Group)
+			if err != nil {
+				err = msgp.WrapError(err, "Group")
+				return
+			}
+		}
+		// write "enabled"
+		err = en.Append(0xa7, 0x65, 0x6e, 0x61, 0x62, 0x6c, 0x65, 0x64)
+		if err != nil {
+			return
+		}
+		err = en.WriteBool(z.Enabled)
+		if err != nil {
+			err = msgp.WrapError(err, "Enabled")
+			return
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *MenuItem) Msgsize() (s int) {
+	s = 1 + 4 + msgp.StringPrefixSize + len(z.Key) + 6 + msgp.StringPrefixSize + len(z.Label) + 6 + msgp.BoolSize + 8 + msgp.BoolSize
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *MenuLevel) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "seq":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Seq")
+				return
+			}
+			if zb0002 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Seq) >= int(zb0002) {
+				z.Seq = (z.Seq)[:zb0002]
+			} else {
+				z.Seq = make([]string, zb0002)
+			}
+			for za0001 := range z.Seq {
+				z.Seq[za0001], err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Seq", za0001)
+					return
+				}
+			}
+		case "label":
+			z.Label, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Label")
+				return
+			}
+		case "items":
+			var zb0003 uint32
+			zb0003, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Items")
+				return
+			}
+			if zb0003 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Items) >= int(zb0003) {
+				z.Items = (z.Items)[:zb0003]
+			} else {
+				z.Items = make([]MenuItem, zb0003)
+			}
+			for za0002 := range z.Items {
+				err = z.Items[za0002].DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "Items", za0002)
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *MenuLevel) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(3)
+	var zb0001Mask uint8 /* 3 bits */
+	_ = zb0001Mask
+	if z.Label == "" {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "seq"
+		err = en.Append(0xa3, 0x73, 0x65, 0x71)
+		if err != nil {
+			return
+		}
+		err = en.WriteArrayHeader(uint32(len(z.Seq)))
+		if err != nil {
+			err = msgp.WrapError(err, "Seq")
+			return
+		}
+		for za0001 := range z.Seq {
+			err = en.WriteString(z.Seq[za0001])
+			if err != nil {
+				err = msgp.WrapError(err, "Seq", za0001)
+				return
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "label"
+			err = en.Append(0xa5, 0x6c, 0x61, 0x62, 0x65, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Label)
+			if err != nil {
+				err = msgp.WrapError(err, "Label")
+				return
+			}
+		}
+		// write "items"
+		err = en.Append(0xa5, 0x69, 0x74, 0x65, 0x6d, 0x73)
+		if err != nil {
+			return
+		}
+		err = en.WriteArrayHeader(uint32(len(z.Items)))
+		if err != nil {
+			err = msgp.WrapError(err, "Items")
+			return
+		}
+		for za0002 := range z.Items {
+			err = z.Items[za0002].EncodeMsg(en)
+			if err != nil {
+				err = msgp.WrapError(err, "Items", za0002)
+				return
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *MenuLevel) Msgsize() (s int) {
+	s = 1 + 4 + msgp.ArrayHeaderSize
+	for za0001 := range z.Seq {
+		s += msgp.StringPrefixSize + len(z.Seq[za0001])
+	}
+	s += 6 + msgp.StringPrefixSize + len(z.Label) + 6 + msgp.ArrayHeaderSize
+	for za0002 := range z.Items {
+		s += z.Items[za0002].Msgsize()
+	}
 	return
 }
 
@@ -1237,6 +1895,147 @@ func (z *clickDetail) Msgsize() (s int) {
 		s += z.Area.Msgsize()
 	}
 	s += 6 + msgp.IntSize
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *commandDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "name":
+			z.Name, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Name")
+				return
+			}
+		case "key":
+			z.Key, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Key")
+				return
+			}
+		case "text":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+				z.Text = nil
+			} else {
+				if z.Text == nil {
+					z.Text = new(string)
+				}
+				*z.Text, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *commandDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(3)
+	var zb0001Mask uint8 /* 3 bits */
+	_ = zb0001Mask
+	if z.Key == "" {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.Text == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "name"
+		err = en.Append(0xa4, 0x6e, 0x61, 0x6d, 0x65)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z.Name)
+		if err != nil {
+			err = msgp.WrapError(err, "Name")
+			return
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "key"
+			err = en.Append(0xa3, 0x6b, 0x65, 0x79)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Key)
+			if err != nil {
+				err = msgp.WrapError(err, "Key")
+				return
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "text"
+			err = en.Append(0xa4, 0x74, 0x65, 0x78, 0x74)
+			if err != nil {
+				return
+			}
+			if z.Text == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteString(*z.Text)
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *commandDetail) Msgsize() (s int) {
+	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 4 + msgp.StringPrefixSize + len(z.Key) + 5
+	if z.Text == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.StringPrefixSize + len(*z.Text)
+	}
 	return
 }
 

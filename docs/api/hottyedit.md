@@ -17,7 +17,7 @@ Package hottyedit edits a text field as a HOTTY host edits one (SPEC §10.2), fo
 A program gives its surfaces a keymap in data-keys (hotty.TerminalKeys, say), and its cells rendition looks keys up in the same keymap, resolved with hotty.Resolve, and does what they say to a Field:
 
 ```go
-km := hotty.Resolve(false, hotty.TerminalKeys)
+km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 f := hottyedit.Field{Value: "foo bar"}
 switch a, changed := f.Key(km, "Control+w"); {
 case a == "":
@@ -110,7 +110,7 @@ Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): i
 A field in cells, edited with the keymap the program gives its surfaces.
 
 ```go
-km := hotty.Resolve(false, hotty.TerminalKeys)
+km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 f := hottyedit.Field{Value: "hello wrld", Caret: 10}
 f.Key(km, "Alt+b")     // word-backward: hello |wrld
 f.Key(km, "Control+f") // char-forward: hello w|rld

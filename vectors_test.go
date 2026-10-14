@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"slices"
@@ -85,8 +86,9 @@ type buildVector struct {
 type segment struct {
 	Raw *string `json:"raw,omitempty"`
 	Cmd *struct {
-		Control map[string]string `json:"control"`
-		Payload string            `json:"payload"`
+		Control    map[string]string `json:"control"`
+		Payload    string            `json:"payload"`
+		PayloadB64 string            `json:"payload_b64,omitempty"`
 	} `json:"cmd,omitempty"`
 }
 
@@ -97,6 +99,13 @@ func TestBuildVectors(t *testing.T) {
 			for _, s := range v.Out {
 				if s.Cmd != nil && s.Cmd.Control == nil {
 					s.Cmd.Control = map[string]string{}
+				}
+				if s.Cmd != nil && s.Cmd.PayloadB64 != "" {
+					b, err := base64.StdEncoding.DecodeString(s.Cmd.PayloadB64)
+					if err != nil {
+						t.Fatal(err)
+					}
+					s.Cmd.Payload, s.Cmd.PayloadB64 = string(b), ""
 				}
 			}
 			// The options have no order: each order must build the same.
@@ -183,6 +192,34 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return Focus(str("surface"), str("target"), opts...)
 	case "blur":
 		return Blur(str("surface"), opts...)
+	case "edit":
+		names := []string{}
+		for _, n := range asSlice(args["names"]) {
+			names = append(names, n.(string))
+		}
+		return Edit(names, opts...)
+	case "menu":
+		m, ok := args["menu"].(map[string]any)
+		if !ok {
+			return Menu(nil, opts...)
+		}
+		l := MenuLevel{Seq: []string{}, Items: []MenuItem{}}
+		l.Label, _ = m["label"].(string)
+		for _, k := range asSlice(m["seq"]) {
+			l.Seq = append(l.Seq, k.(string))
+		}
+		for _, i := range asSlice(m["items"]) {
+			i := i.(map[string]any)
+			it := MenuItem{Enabled: true}
+			it.Key, _ = i["key"].(string)
+			it.Label, _ = i["label"].(string)
+			it.Group, _ = i["group"].(bool)
+			if e, ok := i["enabled"].(bool); ok {
+				it.Enabled = e
+			}
+			l.Items = append(l.Items, it)
+		}
+		return Menu(&l, opts...)
 	case "sync":
 		var cmds []string
 		for _, c := range args["commands"].([]any) {
@@ -244,9 +281,10 @@ func segments(t *testing.T, out string) []segment {
 		switch r {
 		case Complete:
 			s := segment{Cmd: &struct {
-				Control map[string]string `json:"control"`
-				Payload string            `json:"payload"`
-			}{ctlMap(m.Control), string(m.Payload)}}
+				Control    map[string]string `json:"control"`
+				Payload    string            `json:"payload"`
+				PayloadB64 string            `json:"payload_b64,omitempty"`
+			}{ctlMap(m.Control), string(m.Payload), ""}}
 			segs = append(segs, s)
 		case Partial:
 		default:
@@ -344,6 +382,7 @@ type decodeVector struct {
 		Reply   map[string]any    `json:"reply"`
 		Event   map[string]any    `json:"event"`
 		Caps    *map[string]any   `json:"caps"`
+		Changed map[string]any    `json:"changed"`
 	} `json:"messages"`
 }
 
@@ -388,6 +427,25 @@ func TestDecodeVectors(t *testing.T) {
 						t.Fatalf("message %d is not an event", i)
 					}
 					check(t, fmt.Sprintf("message %d: event", i), eventView(e), want.Event)
+					if want.Changed != nil {
+						if e.Changed == nil {
+							t.Fatalf("message %d: no Changed", i)
+						}
+						var fields []string
+						for _, f := range rawFields(e.Changed.Raw) {
+							fields = append(fields, f.key)
+						}
+						var wantFields []string
+						for _, f := range asSlice(want.Changed["fields"]) {
+							wantFields = append(wantFields, f.(string))
+						}
+						if !slices.Equal(fields, wantFields) {
+							t.Errorf("message %d: changed fields %v, want %v", i, fields, wantFields)
+						}
+						w := maps.Clone(want.Changed)
+						delete(w, "fields")
+						check(t, fmt.Sprintf("message %d: changed", i), capsView(*e.Changed, w), w)
+					}
 				}
 				switch r, _ := ReplyOf(m); {
 				case want.Caps == nil:
@@ -454,6 +512,9 @@ func eventView(e Event) map[string]any {
 	if e.Count > 0 {
 		view["count"] = e.Count
 	}
+	if c := e.Command; c != nil {
+		view["command"] = map[string]any{"name": c.Name, "key": c.Key, "text": c.Text, "has_text": c.HasText}
+	}
 	if v := e.View; v != nil {
 		areas := map[string]any{}
 		for id, a := range v.Areas {
@@ -470,11 +531,14 @@ func capsView(c Caps, want map[string]any) map[string]any {
 		"v": c.V, "ops": c.Ops, "events": c.Events,
 		"cell":  nil,
 		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "drop": c.Drop, "count": c.Count, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
+		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "drop": c.Drop, "count": c.Count, "mod": c.Mod, "edit": c.Edit, "menu": c.Menu, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
 		"cell_css": map[string]any{"w": w, "h": h},
 	}
 	if c.Cell != nil {
 		view["cell"] = map[string]any{"w": c.Cell.W, "h": c.Cell.H}
+	}
+	if c.Keys != nil {
+		view["keys"] = map[string]any{"leader": c.Keys.Leader, "timeout": c.Keys.Timeout}
 	}
 	supports, sends := map[string]any{}, map[string]any{}
 	for op := range asMap(want["supports"]) {
@@ -568,6 +632,8 @@ func zero(v any) bool {
 }
 
 func asMap(v any) map[string]any { m, _ := v.(map[string]any); return m }
+
+func asSlice(v any) []any { s, _ := v.([]any); return s }
 
 func deref(s *string) string {
 	if s == nil {
@@ -842,6 +908,10 @@ type keymapVector struct {
 	Selects      map[string]bool    `json:"selects"`
 	Program      map[string]bool    `json:"program"`
 	Scroll       map[string]*string `json:"scroll"`
+	Platform     struct {
+		Mod  string              `json:"mod"`
+		Edit map[string][]string `json:"edit"`
+	} `json:"platform"`
 }
 
 // TestKeymapVectors formats keymaps, looks keys up in resolved ones and
@@ -852,7 +922,7 @@ func TestKeymapVectors(t *testing.T) {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
 			if v.Program != nil || v.Scroll != nil {
-				m := ParseKeymap(strings.Join(v.Keys, " "))
+				m := ParseKeymap(Platform(v.Platform), strings.Join(v.Keys, " "))
 				for k, want := range v.Program {
 					if got := m.Program(k); got != want {
 						t.Errorf("Program(%q) = %v, want %v", k, got, want)
@@ -874,7 +944,7 @@ func TestKeymapVectors(t *testing.T) {
 				if v.Parse != nil {
 					value = *v.Parse
 				}
-				if got := ParseKeymap(value).Format(); got != v.Format {
+				if got := ParseKeymap(Platform(v.Platform), value).Format(); got != v.Format {
 					t.Errorf("Format() = %q, want %q", got, v.Format)
 				}
 				return
@@ -883,7 +953,7 @@ func TestKeymapVectors(t *testing.T) {
 			if v.TerminalKeys {
 				values = append([]string{TerminalKeys}, values...)
 			}
-			m := Resolve(v.Multiline, values...)
+			m := Resolve(Platform(v.Platform), v.Multiline, values...)
 			for k, want := range v.Lookup {
 				w := Action("")
 				if want != nil {

@@ -738,7 +738,7 @@ func TestVectorsAreCurrent(t *testing.T) {
 func TestKeymapProgram(t *testing.T) {
 	// The root gives the arrows and End to the program; the element takes
 	// End back with an action, which counts for nothing outside a field.
-	m := ParseKeymap(strings.Join([]string{"ArrowDown=program ArrowUp=program End=program j=program", "End=line-end"}, " "))
+	m := ParseKeymap(Platform{}, strings.Join([]string{"ArrowDown=program ArrowUp=program End=program j=program", "End=line-end"}, " "))
 	for key, want := range map[string]bool{
 		"ArrowDown": true, "Shift+ArrowDown": true, "ArrowUp": true, "j": true,
 		"End": false, "Home": false, "Enter": false, "J": false, "Control+ArrowDown": false,
@@ -750,11 +750,11 @@ func TestKeymapProgram(t *testing.T) {
 	}
 	// A key with Shift bound to an action of its own is not looked up
 	// without Shift.
-	if ParseKeymap("ArrowDown=program Shift+ArrowDown=line-next").Program("Shift+ArrowDown") {
+	if ParseKeymap(Platform{}, "ArrowDown=program Shift+ArrowDown=line-next").Program("Shift+ArrowDown") {
 		t.Error("Shift+ArrowDown, bound to line-next, went to the program")
 	}
 	// In a field's keymap, Lookup says as much.
-	f := Resolve(false, "ArrowLeft=program")
+	f := Resolve(Platform{}, false, "ArrowLeft=program")
 	if !f.Program("ArrowLeft") || f.Lookup("ArrowLeft") != "" || f.Program("ArrowRight") {
 		t.Error("a field's keymap: ArrowLeft is not the program's, or ArrowRight is")
 	}

@@ -111,11 +111,12 @@ func (a Action) Scrolls() bool {
 
 // TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value:
 // the keys of Bubble Tea's text input and text area (bubbles), but for
-// Control+a, which selects all, as in a GUI field and SPEC §10.2's default
-// keymap (Home still goes to the line's start). A program puts it in the
-// data-keys of an element that holds its fields, and edits its fields in
-// cells with Resolve(multiline, TerminalKeys), so that they edit the same
-// on a surface and in cells. It leaves Enter to SPEC §10.2's default.
+// Mod+a, which selects all, as in a GUI field and SPEC §10.2's default
+// keymap: Control+a on Linux, while on macOS Control+a stays the line's
+// start. A program puts it in the data-keys of an element that holds its
+// fields, and edits its fields in cells with Resolve(platform, multiline,
+// TerminalKeys), so that they edit the same on a surface and in cells. It
+// leaves Enter to SPEC §10.2's default.
 const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
 	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
 	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
@@ -128,21 +129,31 @@ const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight
 	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
 	"PageUp=page-up PageDown=page-down " +
 	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
-	"Control+a=select-all " +
+	"Mod+a=select-all " +
 	"Control+m=newline"
 
-// The modifiers, in the order a key's name writes them.
-var modifiers = [...]string{"Control", "Alt", "Meta", "Shift"}
+// The modifiers, in the order a key's name writes them. Mod is a binding's
+// platform modifier (SPEC §10.4), which a keymap reads as its Platform's.
+var modifiers = [...]string{"Mod", "Control", "Alt", "Meta", "Shift"}
 
 // mods is a set of modifiers, a bit for each of modifiers.
 type mods uint8
 
 const (
-	modControl mods = 1 << iota
+	modMod mods = 1 << iota
+	modControl
 	modAlt
 	modMeta
 	modShift
 )
+
+// readMod is the key with Mod read as m, modControl or modMeta.
+func (k key) readMod(m mods) key {
+	if k.mods&modMod != 0 {
+		k.mods = k.mods&^modMod | m
+	}
+	return k
+}
 
 // key is a key's name, split.
 type key struct {
@@ -249,9 +260,10 @@ func splitKey(name string) (key, bool) {
 
 // ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any
 // order ("Shift+Control+a", "Control+ "), and returns its canonical name
-// ("Control+A", "Control+Space"): the modifiers in the order Control, Alt,
-// Meta, Shift; Shift shown in a letter where it can be; Space for a space.
-// ok is false for a name that does not parse.
+// ("Control+A", "Control+Space"): the modifiers in the order Mod, Control,
+// Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a
+// space. A binding's Mod is kept: a Keymap reads it as its Platform's. ok is
+// false for a name that does not parse.
 func ParseKey(name string) (canonical string, ok bool) {
 	k, ok := splitKey(name)
 	if !ok {
@@ -544,23 +556,70 @@ func clusterLen(s string) int {
 
 func isRegional(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
 
-// Keymap binds keys to actions (SPEC §10.2). ParseKeymap reads one from a
-// data-keys value; Resolve makes the one a field uses, whose Lookup says
-// what the field does with a key, and Selects whether it selects as it
-// moves. Program says whether any focused element's keymap gives a key to
-// the program, and Scroll which scroll action it binds a key to.
+// Platform is how a host reads bindings (SDK.md §3.10): the modifier Mod
+// stands for, and its edit shortcuts. The zero Platform is Control with
+// the default edit shortcuts.
+type Platform struct {
+	// Mod is "Control" or "Meta" (SPEC §10.4); "" is Control.
+	Mod string
+	// Edit is the host's edit shortcuts, from each action to its keys
+	// (SPEC §10.2); nil is DefaultEdit(Mod).
+	Edit map[string][]string
+}
+
+// PlatformOf is the Platform of a host's capabilities: its Mod and Edit,
+// the zero Platform's where it reports none.
+func PlatformOf(c Caps) Platform { return Platform{Mod: c.Mod, Edit: c.Edit} }
+
+// The edit actions, in SPEC §10.2's order.
+var editActions = [...]Action{SelectAll, Copy, Cut, Paste, Undo, Redo}
+
+// DefaultEdit is the default edit shortcuts for a Mod (SPEC §10.2),
+// "Control" or "Meta", the keys canonical with Mod read.
+func DefaultEdit(mod string) map[string][]string {
+	m := "Control"
+	if mod == "Meta" {
+		m = "Meta"
+	}
+	e := map[string][]string{
+		string(SelectAll): {m + "+a"}, string(Copy): {m + "+c"}, string(Cut): {m + "+x"},
+		string(Paste): {m + "+v"}, string(Undo): {m + "+z"}, string(Redo): {m + "+Z"},
+	}
+	if m == "Control" {
+		e[string(Redo)] = append(e[string(Redo)], "Control+y")
+	}
+	return e
+}
+
+// modOf is the bit Mod reads as on a Platform.
+func (p Platform) modOf() mods {
+	if p.Mod == "Meta" {
+		return modMeta
+	}
+	return modControl
+}
+
+// Keymap binds keys to actions (SPEC §10.2), read on a Platform.
+// ParseKeymap reads one from a data-keys value; Resolve makes the one a
+// field uses, whose Lookup says what the field does with a key, and Selects
+// whether it selects as it moves. Program says whether any focused
+// element's keymap gives a key to the program, and Scroll which scroll
+// action it binds a key to.
 type Keymap struct {
-	keys      []string
-	actions   map[string]Action
+	keys      []string          // canonical, Mod read, in the order first bound
+	actions   map[string]Action // by key
+	written   map[string]string // by key: its last binding's key, Mod kept
 	multiline bool
+	mod       mods
 }
 
 // ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it:
 // bindings separated by ASCII white space, each key=action, split at its
-// last '='. It drops the bindings a host ignores: a key that does not parse, an
-// action it does not know, and Tab, Shift+Tab and Escape.
-func ParseKeymap(value string) *Keymap {
-	m := &Keymap{}
+// last '='. It drops the bindings a host ignores: a key that does not
+// parse, an action it does not know, and Tab, Shift+Tab and Escape. Mod
+// reads as the Platform's: on Control, Mod+a and Control+a are one key.
+func ParseKeymap(p Platform, value string) *Keymap {
+	m := &Keymap{mod: p.modOf()}
 	bindings(value, func(k string, a Action) { m.Bind(k, a) })
 	return m
 }
@@ -578,69 +637,121 @@ func bindings(value string, f func(key string, a Action)) {
 // Bind binds a key to an action, and reports whether it did: a host
 // ignores the bindings ParseKeymap drops, and so does Bind.
 func (m *Keymap) Bind(name string, a Action) bool {
-	k, ok := ParseKey(name)
-	if !ok || !actions[a] || k == "Tab" || k == "Shift+Tab" || k == "Escape" {
+	w, ok := splitKey(name)
+	if !ok || !actions[a] {
+		return false
+	}
+	w = w.canonical()
+	k := w.readMod(m.modBit()).canonical().String()
+	if k == "Tab" || k == "Shift+Tab" || k == "Escape" {
 		return false
 	}
 	if m.actions == nil {
-		m.actions = map[string]Action{}
+		m.actions, m.written = map[string]Action{}, map[string]string{}
 	}
 	if _, bound := m.actions[k]; !bound {
 		m.keys = append(m.keys, k)
 	}
 	m.actions[k] = a
+	m.written[k] = w.String()
 	return true
 }
 
+// modBit is what Mod reads as: Control on a Keymap made without a
+// Platform.
+func (m *Keymap) modBit() mods {
+	if m.mod == 0 {
+		return modControl
+	}
+	return m.mod
+}
+
 // Format writes the keymap as a data-keys value: each key once, where it
-// was first bound, with its last action.
+// was first bound, as its last binding wrote it (Mod kept), with its last
+// action.
 func (m *Keymap) Format() string {
 	var b strings.Builder
 	for i, k := range m.keys {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
-		b.WriteString(k)
+		b.WriteString(m.written[k])
 		b.WriteByte('=')
 		b.WriteString(string(m.actions[k]))
 	}
 	return b.String()
 }
 
-// Resolve makes a field's keymap (SPEC §10.2): the default keymap, for an
-// input or for a multi-line field, then each data-keys value in turn, the
-// root's first, each overriding the bindings before it key by key. It
-// leaves out each binding to a scroll action where it stands, in its own
-// value too: one neither acts nor overrides an earlier binding of its key.
-func Resolve(multiline bool, values ...string) *Keymap {
-	m := &Keymap{multiline: multiline}
-	enter := Submit
-	if multiline {
-		enter = Newline
-	}
-	for _, b := range []struct {
+// The default keymap (SPEC §10.2): every host's keys, then those of its
+// Mod. The edit shortcuts and Enter follow.
+var (
+	defaultKeys = [...]struct {
 		key    string
 		action Action
 	}{
 		{"ArrowLeft", CharBackward}, {"ArrowRight", CharForward},
-		{"Control+ArrowLeft", WordBackward}, {"Control+ArrowRight", WordForward},
 		{"Alt+ArrowLeft", WordBackward}, {"Alt+ArrowRight", WordForward},
-		{"Home", LineStart}, {"End", LineEnd}, {"Control+Home", InputStart}, {"Control+End", InputEnd},
+		{"Home", LineStart}, {"End", LineEnd},
 		{"Backspace", DeleteCharBackward}, {"Delete", DeleteCharForward},
-		{"Control+Backspace", DeleteWordBackward}, {"Control+Delete", DeleteWordForward},
 		{"Alt+Backspace", DeleteWordBackward}, {"Alt+Delete", DeleteWordForward},
 		{"ArrowUp", LinePrevious}, {"ArrowDown", LineNext}, {"PageUp", PageUp}, {"PageDown", PageDown},
-		{"Control+a", SelectAll},
+	}
+	controlKeys = [...]struct {
+		key    string
+		action Action
+	}{
+		{"Control+ArrowLeft", WordBackward}, {"Control+ArrowRight", WordForward},
+		{"Control+Home", InputStart}, {"Control+End", InputEnd},
+		{"Control+Backspace", DeleteWordBackward}, {"Control+Delete", DeleteWordForward},
+	}
+	metaKeys = [...]struct {
+		key    string
+		action Action
+	}{
 		{"Meta+ArrowLeft", LineStart}, {"Meta+ArrowRight", LineEnd},
 		{"Meta+ArrowUp", InputStart}, {"Meta+ArrowDown", InputEnd},
-		{"Meta+Backspace", DeleteToLineStart}, {"Meta+a", SelectAll},
-		{"Control+c", Copy}, {"Meta+c", Copy},
-		{"Control+x", Cut}, {"Meta+x", Cut}, {"Control+v", Paste}, {"Meta+v", Paste},
-		{"Control+z", Undo}, {"Meta+z", Undo},
-		{"Control+Z", Redo}, {"Control+y", Redo}, {"Meta+Z", Redo},
-		{"Enter", enter},
-	} {
+		{"Meta+Backspace", DeleteToLineStart},
+		{"Control+a", LineStart}, {"Control+e", LineEnd},
+		{"Control+b", CharBackward}, {"Control+f", CharForward},
+		{"Control+p", LinePrevious}, {"Control+n", LineNext},
+		{"Control+h", DeleteCharBackward}, {"Control+d", DeleteCharForward},
+		{"Control+k", DeleteToLineEnd},
+	}
+)
+
+// Resolve makes a field's keymap (SPEC §10.2): the default keymap for the
+// Platform's Mod, with its edit shortcuts, for an input or for a
+// multi-line field, then each data-keys value in turn, the root's first,
+// each overriding the bindings before it key by key. It leaves out each
+// binding to a scroll action where it stands, in its own value too: one
+// neither acts nor overrides an earlier binding of its key.
+func Resolve(p Platform, multiline bool, values ...string) *Keymap {
+	m := &Keymap{multiline: multiline, mod: p.modOf()}
+	for _, b := range defaultKeys {
 		m.Bind(b.key, b.action)
+	}
+	enter := Submit
+	if multiline {
+		enter = Newline
+	}
+	m.Bind("Enter", enter)
+	if m.mod == modMeta {
+		for _, b := range metaKeys {
+			m.Bind(b.key, b.action)
+		}
+	} else {
+		for _, b := range controlKeys {
+			m.Bind(b.key, b.action)
+		}
+	}
+	edit := p.Edit
+	if edit == nil {
+		edit = DefaultEdit(p.Mod)
+	}
+	for _, a := range editActions {
+		for _, k := range edit[string(a)] {
+			m.Bind(k, a)
+		}
 	}
 	for _, v := range values {
 		bindings(v, func(k string, a Action) {
@@ -652,14 +763,14 @@ func Resolve(multiline bool, values ...string) *Keymap {
 	return m
 }
 
-// bound is the action the keymap binds a key to, and the key, canonical: a
-// key with Shift that no binding names is looked up without Shift. ok is
-// false when the name does not parse.
+// bound is the action the keymap binds a key to, and the key, canonical
+// with Mod read: a key with Shift that no binding names is looked up
+// without Shift. ok is false when the name does not parse.
 func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
 	if k, ok = splitKey(name); !ok {
 		return key{}, "", false, false
 	}
-	k = k.canonical()
+	k = k.readMod(m.modBit()).canonical()
 	a, bound = m.actions[k.String()]
 	if !bound && k.mods&modShift != 0 {
 		a, bound = m.actions[key{k.mods &^ modShift, k.value}.String()]
@@ -675,7 +786,7 @@ func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
 // the scroll actions are the only actions it gives. A host reads the
 // element's as a field's, from the data-keys values of the elements from
 // the root down to it, but with its scroll actions and no default keymap:
-// ParseKeymap(strings.Join(values, " ")). It gives a key the keymap binds
+// ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds
 // to program to the program before the element uses it, and before the
 // surface scrolls with it; a nearer binding of the key to another action
 // takes it back. In a field, Lookup says as much.

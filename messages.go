@@ -23,6 +23,11 @@ const (
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
 
+	// The terminal's events, which belong to no surface: Surface and
+	// Target are empty.
+	EventCommand = "command" // an edit command the program takes, by its key or a menu (SPEC §10.6)
+	EventCaps    = "caps"    // the capabilities mod, edit or keys changed (SPEC §4)
+
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
 	EventDragStart = "dragstart" // the primary button pressed on the element
@@ -73,10 +78,31 @@ type Event struct {
 	// a double click, 1 for a single click or the keyboard's. It is 0 for
 	// any other kind.
 	Count int
+	// Command is a command's (SPEC §10.6).
+	Command *Command
+	// Changed is a caps's: the capabilities that changed, with only the
+	// fields the detail has (its Raw), for Merge.
+	Changed *Caps
 
 	// Detail is the detail as it came, msgpack: nil when the event has
 	// none. It is what a relay passes on (EncodeEvent).
 	Detail []byte
+}
+
+// Command is an edit command (SPEC §10.6): the program decides what it
+// means, and with nothing to do takes it as its Key, as a text field does.
+type Command struct {
+	// Name is the command: "copy", "cut", "paste", "undo", "redo",
+	// "select-all".
+	Name string
+	// Key is the key that sent it, named as SPEC §10.4 names it; empty for
+	// a command from the terminal's menu.
+	Key string
+	// Text is a paste's text, and HasText whether there is one: a paste
+	// with nothing on the clipboard, or from a host that cannot read it,
+	// has none.
+	Text    string
+	HasText bool
 }
 
 // Link is a clicked link: its href, as the document has it, and its URL
@@ -220,6 +246,18 @@ func readDetail(e *Event) {
 				}
 			}
 		}
+	case EventCommand:
+		var d commandDetail
+		if decodeBody(b, &d) && d.Name != "" {
+			e.Command = &Command{Name: d.Name, Key: d.Key}
+			if d.Text != nil {
+				e.Command.Text, e.Command.HasText = *d.Text, true
+			}
+		}
+	case EventCaps:
+		if c, ok := CapsOf(b); ok {
+			e.Changed = &c
+		}
 	case EventHover:
 		var d hoverDetail
 		switch {
@@ -241,6 +279,9 @@ func EncodeEvent(e Event) string {
 	body := e.Detail
 	if body == nil {
 		body = detailOf(e)
+	}
+	if e.Kind == EventCommand || e.Kind == EventCaps {
+		return EncodePlain(Control{{"a", "ev"}, {"e", e.Kind}}, body)
 	}
 	return EncodePlain(Control{{"a", "ev"}, {"s", e.Surface}, {"e", e.Kind}, {"t", e.Target}}, body)
 }
@@ -319,6 +360,20 @@ func detailOf(e Event) []byte {
 			in[id] = viewArea{C: &a.Col, R: &a.Row, W: &a.W, H: &a.H}
 		}
 		d = &viewDetail{In: in, End: e.View.AtEnd}
+	case EventCommand:
+		if e.Command == nil {
+			return nil
+		}
+		c := commandDetail{Name: e.Command.Name, Key: e.Command.Key}
+		if e.Command.HasText {
+			c.Text = &e.Command.Text
+		}
+		d = &c
+	case EventCaps:
+		if e.Changed == nil {
+			return nil
+		}
+		return e.Changed.Raw
 	default:
 		return nil
 	}
@@ -572,3 +627,102 @@ func Views(c Caps) bool {
 
 // Light reports whether the terminal's colour scheme is light.
 func Light(c Caps) bool { return c.Scheme == "light" }
+
+// Merge is c with the fields a caps event changed (Event.Changed) in place
+// of its own (SPEC §4): those whose keys changed's Raw has. Its Raw is c's
+// with those fields replaced, so a relay announces the capabilities as
+// they are now.
+func Merge(c, changed Caps) Caps {
+	out := c
+	for _, e := range rawFields(changed.Raw) {
+		switch e.key {
+		case "v":
+			out.V = changed.V
+		case "ops":
+			out.Ops = changed.Ops
+		case "events":
+			out.Events = changed.Events
+		case "cell":
+			out.Cell = changed.Cell
+		case "scale":
+			out.Scale = changed.Scale
+		case "scheme":
+			out.Scheme = changed.Scheme
+		case "limits":
+			out.Limits = changed.Limits
+		case "net":
+			out.Net = changed.Net
+		case "scroll":
+			out.Scroll = changed.Scroll
+		case "passthrough":
+			out.Passthrough = changed.Passthrough
+		case "steps":
+			out.Steps = changed.Steps
+		case "drop":
+			out.Drop = changed.Drop
+		case "count":
+			out.Count = changed.Count
+		case "mod":
+			out.Mod = changed.Mod
+		case "edit":
+			out.Edit = changed.Edit
+		case "keys":
+			out.Keys = changed.Keys
+		case "menu":
+			out.Menu = changed.Menu
+		case "host":
+			out.Host = changed.Host
+		case "version":
+			out.Version = changed.Version
+		}
+	}
+	raw := c.Raw
+	if raw == nil {
+		raw = encodeBody(&c)
+	}
+	fields := rawFields(changed.Raw)
+	merged := make([]rawField, 0, len(fields))
+	for _, e := range rawFields(raw) {
+		if !slices.ContainsFunc(fields, func(f rawField) bool { return f.key == e.key }) {
+			merged = append(merged, e)
+		}
+	}
+	merged = append(merged, fields...)
+	b := msgp.AppendMapHeader(nil, uint32(len(merged)))
+	for _, e := range merged {
+		b = msgp.AppendString(b, e.key)
+		b = append(b, e.value...)
+	}
+	out.Raw = b
+	return out
+}
+
+// rawField is one field of a msgpack map: its key, and its value as it
+// came.
+type rawField struct {
+	key   string
+	value []byte
+}
+
+// rawFields are the fields of a msgpack map, in order; none when b is not
+// one.
+func rawFields(b []byte) []rawField {
+	n, b, err := msgp.ReadMapHeaderBytes(b)
+	if err != nil {
+		return nil
+	}
+	out := make([]rawField, 0, n)
+	for range n {
+		var k string
+		if k, b, err = msgp.ReadStringBytes(b); err != nil {
+			return nil
+		}
+		rest, err := msgp.Skip(b)
+		if err != nil {
+			return nil
+		}
+		out = append(out, rawField{k, b[:len(b)-len(rest)]})
+		b = rest
+	}
+	return out
+}

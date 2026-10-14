@@ -100,7 +100,7 @@ func TestEditVectors(t *testing.T) {
 }
 
 func TestKey(t *testing.T) {
-	km := hotty.Resolve(false, hotty.TerminalKeys, "Control+s=submit")
+	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys, "Control+s=submit")
 	f := Field{Value: "foo bar"}
 	f.Caret = len("foo bar")
 	for _, c := range []struct {

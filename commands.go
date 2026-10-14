@@ -403,3 +403,32 @@ func Blur(surface string, opts ...ReplyOption) string {
 func Sync(cmds ...string) string {
 	return "\x1b[?2026h" + strings.Join(cmds, "") + "\x1b[?2026l"
 }
+
+// Edit takes the edit commands named (SPEC §10.6): "select-all", "copy",
+// "cut", "paste", "undo", "redo". Their keys, the host's edit shortcuts
+// (Caps.Edit), then reach the program as EventCommand in place of their
+// bytes, and the terminal's menus send them with no key. Each Edit replaces
+// the last; none takes nothing. It holds for the screen it is sent on: a
+// full-screen program sends it after switching to the alternate screen,
+// and leaving it drops it.
+func Edit(names []string, opts ...ReplyOption) string {
+	return command(Control{{"a", "edit"}, {"take", strings.Join(names, ",")}}, nil, NoReply, opts)
+}
+
+// Menu shows the which-key menu of a program's key sequence while it waits
+// (SPEC §10.6), or with nil hides it. A host shows it only when it reports
+// Caps.Menu.
+func Menu(level *MenuLevel, opts ...ReplyOption) string {
+	var body []byte
+	if level != nil {
+		l := *level
+		if l.Seq == nil {
+			l.Seq = []string{}
+		}
+		if l.Items == nil {
+			l.Items = []MenuItem{}
+		}
+		body = encodeBody(&l)
+	}
+	return command(Control{{"a", "menu"}}, body, NoReply, opts)
+}
