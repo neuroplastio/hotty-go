@@ -917,6 +917,28 @@ func TestMergeDropsWhatAnEventEmpties(t *testing.T) {
 	}
 }
 
+// nested is a menu of n groups, one in the other, ending in a leaf.
+func nested(n int) *MenuTree {
+	leaf := MenuItem{Key: "a", Label: "Leaf", Name: "leaf", Enabled: true}
+	for ; n > 1; n-- {
+		leaf = MenuItem{Key: "a", Label: "Group", Enabled: true, Items: []MenuItem{leaf}}
+	}
+	return &MenuTree{Items: []MenuItem{leaf}}
+}
+
+// testMenu is a leader with a group in it, as a program names its bindings.
+var testMenu = &MenuTree{Label: "Files", Items: []MenuItem{
+	{Key: "Space", Label: "Leader", Enabled: true, Items: []MenuItem{
+		{Key: "f", Label: "File", Enabled: true, Items: []MenuItem{
+			{Key: "n", Label: "New file", Name: "file-new", Enabled: true},
+			{Key: "r", Label: "Rename", Name: "file-rename"},
+		}},
+		{Key: "q", Label: "Quit", Name: "quit", Enabled: true},
+		{Label: "Sort by name", Name: "sort-name", Enabled: true},
+	}},
+	{Label: "Reload", Name: "reload", Enabled: true},
+}}
+
 func TestMenuOf(t *testing.T) {
 	var d Decoder
 	read := func(cmd string) Message {
@@ -926,21 +948,139 @@ func TestMenuOf(t *testing.T) {
 		}
 		return m
 	}
-	l, err := MenuOf(read(Menu(&MenuLevel{Seq: []string{"g"}, Label: "+go", Items: []MenuItem{{Key: "d", Label: "def"}}})))
-	if err != nil || l == nil || l.Label != "+go" || len(l.Items) != 1 || l.Items[0].Key != "d" {
+	l, err := MenuOf(read(Menu(testMenu)))
+	if err != nil || !reflect.DeepEqual(l, testMenu) {
 		t.Errorf("a menu: %+v, %v", l, err)
 	}
 	if l, err := MenuOf(read(Menu(nil))); l != nil || err != nil {
 		t.Errorf("no body: %+v, %v", l, err)
 	}
+	if l, err := MenuOf(read(Menu(nested(MenuDepth)))); err != nil || l == nil {
+		t.Errorf("a menu eight deep: %+v, %v", l, err)
+	}
 	for name, m := range map[string]Message{
-		"not a menu":     read(Hide("s")),
-		"not a map":      host(Control{{"a", "menu"}}, `[1]`),
-		"does not parse": host(Control{{"a", "menu"}}, `{`),
+		"not a menu":      read(Hide("s")),
+		"not a map":       host(Control{{"a", "menu"}}, `[1]`),
+		"does not parse":  host(Control{{"a", "menu"}}, `{`),
+		"key of a number": host(Control{{"a", "menu"}}, `{"items":[{"key":5}]}`),
+		"enabled a str":   host(Control{{"a", "menu"}}, `{"items":[{"enabled":"no"}]}`),
+		"label a number":  host(Control{{"a", "menu"}}, `{"label":1}`),
+		"items a map":     host(Control{{"a", "menu"}}, `{"items":{}}`),
+		"nine deep":       read(Menu(nested(MenuDepth + 1))),
 	} {
 		var e *Error
 		if _, err := MenuOf(m); !errors.As(err, &e) || e.Code != EINVAL {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestMenuShowOf(t *testing.T) {
+	var d Decoder
+	read := func(cmd string) Message {
+		m, r := d.Feed(cmd)
+		if r != Complete {
+			t.Fatalf("%q: %v", cmd, r)
+		}
+		return m
+	}
+	if seq, err := MenuShowOf(read(MenuShow([]string{"Space", "f"}))); err != nil || !slices.Equal(seq, []string{"Space", "f"}) {
+		t.Errorf("keys: %v, %v", seq, err)
+	}
+	for name, m := range map[string]Message{
+		"no keys":    read(MenuShow(nil)),
+		"empty keys": host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":[]}`),
+		"no seq":     host(Control{{"a", "menu"}, {"show", "1"}}, `{}`),
+	} {
+		if seq, err := MenuShowOf(m); err != nil || len(seq) != 0 {
+			t.Errorf("%s: %v, %v", name, seq, err)
+		}
+	}
+	for name, m := range map[string]Message{
+		"not a menu":   read(Hide("s")),
+		"not a map":    host(Control{{"a", "menu"}, {"show", "1"}}, `["Space"]`),
+		"seq a str":    host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":"Space"}`),
+		"seq a number": host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":[1]}`),
+	} {
+		var e *Error
+		if _, err := MenuShowOf(m); !errors.As(err, &e) || e.Code != EINVAL {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if !strings.Contains(MenuHide(), "show=0") {
+		t.Errorf("MenuHide: %q", MenuHide())
+	}
+}
+
+func TestMenuLevelOf(t *testing.T) {
+	linux, mac := Platform{Mod: "Control"}, Platform{Mod: "Meta"}
+	keys := func(items []MenuItem) (out []string) {
+		for _, it := range items {
+			out = append(out, it.Key)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		seq  []string
+		want []string // nil: no group
+	}{
+		{nil, []string{"Space", ""}},
+		{[]string{"Space"}, []string{"f", "q", ""}},
+		{[]string{"Space", "f"}, []string{"n", "r"}},
+		{[]string{"Space", "q"}, nil}, // a leaf is no group
+		{[]string{"x"}, nil},
+		{[]string{"Space", "f", "n"}, nil},
+		{[]string{""}, nil}, // an item with no key is reached by none
+		{[]string{"Control+"}, nil},
+	} {
+		items, ok := MenuLevelOf(testMenu, linux, c.seq)
+		if ok != (c.want != nil) || !slices.Equal(keys(items), c.want) {
+			t.Errorf("%v: %v, %v; want %v", c.seq, keys(items), ok, c.want)
+		}
+	}
+	if items, ok := MenuLevelOf(nil, linux, nil); ok || items != nil {
+		t.Errorf("no menu: %v, %v", items, ok)
+	}
+	// Keys compare as the platform reads them: Mod is Control on one and
+	// Meta on the other.
+	m := &MenuTree{Items: []MenuItem{{Key: "Mod+k", Items: []MenuItem{{Key: "a"}}}}}
+	for _, c := range []struct {
+		p    Platform
+		key  string
+		want bool
+	}{{linux, "Control+k", true}, {linux, "Meta+k", false}, {mac, "Meta+k", true}, {mac, "Control+k", false}, {mac, "Mod+k", true}} {
+		if _, ok := MenuLevelOf(m, c.p, []string{c.key}); ok != c.want {
+			t.Errorf("%s on %s: %v", c.key, c.p.Mod, ok)
+		}
+	}
+	// The first group of a key decides.
+	dup := &MenuTree{Items: []MenuItem{{Key: "a", Label: "leaf"}, {Key: "a", Label: "one", Items: []MenuItem{{Key: "x"}}}, {Key: "a", Label: "two", Items: []MenuItem{{Key: "y"}}}}}
+	if items, ok := MenuLevelOf(dup, linux, []string{"a"}); !ok || items[0].Key != "x" {
+		t.Errorf("the first group: %v, %v", items, ok)
+	}
+}
+
+func TestMenuFind(t *testing.T) {
+	for name, want := range map[string]string{"file-new": "New file", "sort-name": "Sort by name", "reload": "Reload", "file-rename": "Rename"} {
+		if it := MenuFind(testMenu, name); it == nil || it.Label != want {
+			t.Errorf("%s: %+v", name, it)
+		}
+	}
+	for _, name := range []string{"", "nothing"} {
+		if it := MenuFind(testMenu, name); it != nil {
+			t.Errorf("%q: %+v", name, it)
+		}
+	}
+	if MenuFind(nil, "quit") != nil {
+		t.Error("no menu")
+	}
+	// Depth first: a name in the first group beats one after it, and a
+	// group's own name beats the items inside it.
+	m := &MenuTree{Items: []MenuItem{{Label: "g1", Items: []MenuItem{{Label: "deep", Name: "x"}}}, {Label: "later", Name: "x"}, {Label: "named group", Name: "g", Items: []MenuItem{{Label: "inner", Name: "g"}}}}}
+	if it := MenuFind(m, "x"); it == nil || it.Label != "deep" {
+		t.Errorf("depth first: %+v", it)
+	}
+	if it := MenuFind(m, "g"); it == nil || it.Label != "named group" {
+		t.Errorf("a group first: %+v", it)
 	}
 }

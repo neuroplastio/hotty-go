@@ -50,28 +50,37 @@ type Caps struct {
 	Raw []byte `msg:"-"`
 }
 
-// MenuLevel is a which-key level a program shows while its key sequence
-// waits (Menu, SPEC §10.5), in myelin's names and order: a myelin Menu
-// encodes as one.
-type MenuLevel struct {
-	// Seq is the keys typed so far, named as SPEC §10.4 names them.
-	Seq []string `msg:"seq"`
-	// Label is their group's label: "+file".
+// MenuTree is what a program can do (Menu, SPEC §10.7): a myelin Tree,
+// each binding given a Name, its groups' items nested in them.
+type MenuTree struct {
+	// Label is what the menu is for: "Files". Empty leaves it to the host.
 	Label string `msg:"label,omitempty"`
-	// Items are the keys that can follow them.
+	// Items are the menu's top level, in the order to show them.
 	Items []MenuItem `msg:"items"`
 }
 
-// MenuItem is a key that can follow a menu's sequence.
+// MenuItem is an action of a menu, or a group of them (SPEC §10.7). Items
+// nest at most MenuDepth deep, the top level's being one deep.
 type MenuItem struct {
-	// Key is the key, named as SPEC §10.4 names it.
-	Key string `msg:"key"`
-	// Label is what it does; empty leaves it to the host.
+	// Key is the key that reaches it after its group's, named as SPEC §10.4
+	// names it; empty for an item no key reaches.
+	Key string `msg:"key,omitempty"`
+	// Label is what it does.
 	Label string `msg:"label,omitempty"`
-	// Group is set when more keys follow it.
-	Group bool `msg:"group,omitempty"`
+	// Name is the command a pick sends; empty for an item only its keys
+	// reach.
+	Name string `msg:"name,omitempty"`
 	// Enabled is set when it does anything now.
 	Enabled bool `msg:"enabled"`
+	// Items are the items after it, which make it a group.
+	Items []MenuItem `msg:"items,omitempty"`
+}
+
+// MenuKeys is the body of an a=menu with show=1: the keys typed so far,
+// named as SPEC §10.4 names them, whose level of the menu to show (SPEC
+// §10.7). MenuShow writes it; MenuShowOf reads it.
+type MenuKeys struct {
+	Seq []string `msg:"seq"`
 }
 
 // Area is the cells an element covers (SPEC §9), counted as a drag's are:

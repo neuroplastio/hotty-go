@@ -189,15 +189,17 @@ type Host struct {
 	surfaces map[string]*Surface
 	created  int
 	res      map[string]resource
-	keyboard *Surface         // the surface that has the keyboard
-	drag     *drag            // the drag in progress, if any (SPEC §9.1)
-	hovered  *Surface         // the surface the pointer is on (Hover), if any
-	menu     *hotty.MenuLevel // the menu the program shows (a=menu), if any
-	heard    hotty.Caps       // the capabilities the program last heard (SPEC §4)
-	queried  bool             // the program has asked, so it hears of changes
-	faultOp  int              // the index of the op a delta failed at, or -1
-	prefix   *Surface         // the surface whose keys all reach the program, while it has the keyboard (SPEC §10.5)
-	alt      bool             // the alternate screen is on
+	keyboard *Surface           // the surface that has the keyboard
+	drag     *drag              // the drag in progress, if any (SPEC §9.1)
+	hovered  *Surface           // the surface the pointer is on (Hover), if any
+	menus    [2]*hotty.MenuTree // the program's menu (a=menu) on the main and the alternate screen, if any
+	shown    bool               // the program shows a level of it (a=menu:show=1)
+	menuSeq  []string           // the keys of the level shown
+	heard    hotty.Caps         // the capabilities the program last heard (SPEC §4)
+	queried  bool               // the program has asked, so it hears of changes
+	faultOp  int                // the index of the op a delta failed at, or -1
+	prefix   *Surface           // the surface whose keys all reach the program, while it has the keyboard (SPEC §10.5)
+	alt      bool               // the alternate screen is on
 	commands []hotty.Message
 	replies  []hotty.Message
 	events   []hotty.Event
@@ -395,7 +397,12 @@ func (h *Host) byte(c byte) {
 // belongs to it: leaving deletes its surface (SPEC §5.4, SHOULD).
 func (h *Host) altScreen(on bool) {
 	if on != h.alt {
-		h.menu = nil // the screen changed (SPEC §10.5)
+		// The screen changed: the level shown hides, and leaving the
+		// alternate screen drops its menu (SPEC §10.7).
+		h.shown = false
+		if h.alt {
+			h.menus[1] = nil
+		}
 	}
 	if !on && h.alt {
 		for name, s := range h.surfaces {
@@ -422,7 +429,7 @@ func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
 	h.held = nil
-	h.menu = nil
+	h.menus, h.shown = [2]*hotty.MenuTree{}, false
 	h.scr, h.alt, h.hidden = screen{cols: h.cols, rows: h.rows}, false, false
 }
 
@@ -600,17 +607,12 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		}
 	}
 	if a == "menu" {
-		// The menu a program shows, or none (SPEC §10.5). A host without
-		// the feature takes no a=menu.
+		// The program's menu, and the level of it shown (SPEC §10.7). A
+		// host without the feature takes no a=menu.
 		if !hotty.HasFeature(h.caps, hotty.FeatureMenu) {
 			return hotty.EINVAL, "no menus here", nil
 		}
-		l, err := hotty.MenuOf(m)
-		if e := (*hotty.Error)(nil); errors.As(err, &e) {
-			return e.Code, e.Detail, nil
-		}
-		h.menu = l
-		return "", "", nil
+		return h.menuCommand(m)
 	}
 	switch a {
 	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur":
@@ -1993,14 +1995,90 @@ func (h *Host) tellCaps() {
 	h.send(hotty.EncodePlain(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: hotty.EventCaps}}, buf.Bytes()))
 }
 
-// Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it
-// shows none: the program sent none or an empty a=menu, or the menu went
-// with Escape, a key it does not list, a change of screen or a reset. A
-// host without the feature menu answers a=menu EINVAL.
-func (h *Host) Menu() *hotty.MenuLevel {
+// menuCommand carries out an a=menu: a menu, with no show; the level to
+// show, with show=1; the level hidden, with show=0.
+func (h *Host) menuCommand(m hotty.Message) (code, detail string, extra hotty.Control) {
+	switch hotty.Get(m.Control, "show") {
+	case "":
+		t, err := hotty.MenuOf(m)
+		if e := (*hotty.Error)(nil); errors.As(err, &e) {
+			return e.Code, e.Detail, nil
+		}
+		// A level shown stays, as the same keys' level of the new menu.
+		h.menus[h.screen()] = t
+	case "0":
+		h.shown = false
+	case "1":
+		seq, err := hotty.MenuShowOf(m)
+		if e := (*hotty.Error)(nil); errors.As(err, &e) {
+			return e.Code, e.Detail, nil
+		}
+		h.shown, h.menuSeq = true, seq
+	default:
+		return hotty.EINVAL, "show is 0 or 1", nil
+	}
+	return "", "", nil
+}
+
+// level is the items the level shown has a key for, in order: nil when the
+// program shows none, or its keys reach no group, or no item has a key.
+func (h *Host) level() []hotty.MenuItem {
+	if !h.shown {
+		return nil
+	}
+	items, _ := hotty.MenuLevelOf(h.menus[h.screen()], hotty.PlatformOf(h.caps), h.menuSeq)
+	var keyed []hotty.MenuItem
+	for _, it := range items {
+		if it.Key != "" {
+			keyed = append(keyed, it)
+		}
+	}
+	return keyed
+}
+
+// screen is the index of the screen on: 0 the main, 1 the alternate.
+func (h *Host) screen() int {
+	if h.alt {
+		return 1
+	}
+	return 0
+}
+
+// Menu is the menu the program keeps on the screen it is on (a=menu, SPEC
+// §10.7), nil when it has none: the program sent none or an empty a=menu,
+// or it was the alternate screen's and the program left it, or a reset. A host without the feature menu answers
+// a=menu EINVAL.
+func (h *Host) Menu() *hotty.MenuTree {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.menu
+	return h.menus[h.screen()]
+}
+
+// Shown is the level of the menu that the host shows (a=menu:show=1, SPEC
+// §10.7): the items of the group the program's keys reach that have a key,
+// in order. It is nil when no level shows: the program showed none or hid
+// it, or the user's Escape or a key the level does not list hid it, or the
+// keys reach no group, or no item there has a key.
+func (h *Host) Shown() []hotty.MenuItem {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.level()
+}
+
+// Pick picks the item of the program's menu named name, as a palette would
+// (SPEC §10.7): the program hears a command event with that name. The
+// first item so named, depth first, is the one. It sends nothing, and
+// reports false, for an item that is not enabled, a name no item has, or
+// no menu.
+func (h *Host) Pick(name string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	it := hotty.MenuFind(h.menus[h.screen()], name)
+	if it == nil || !it.Enabled {
+		return false
+	}
+	h.send(hotty.EncodeEvent(hotty.Event{Kind: hotty.EventCommand, Command: &hotty.Command{Name: name}}))
+	return true
 }
 
 // Prefix is the surface whose keys all reach the program since a key its

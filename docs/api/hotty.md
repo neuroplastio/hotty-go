@@ -55,7 +55,10 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
 - [`func Light(c Caps) bool`](#Light)
 - [`func Lookup(c Control, k string) (string, bool)`](#Lookup)
-- [`func Menu(level *MenuLevel, opts ...ReplyOption) string`](#Menu)
+- [`func Menu(tree *MenuTree, opts ...ReplyOption) string`](#Menu)
+- [`func MenuHide(opts ...ReplyOption) string`](#MenuHide)
+- [`func MenuShow(seq []string, opts ...ReplyOption) string`](#MenuShow)
+- [`func MenuShowOf(m Message) ([]string, error)`](#MenuShowOf)
 - [`func MorphTo(surface, target, html string, opts ...ReplyOption) string`](#MorphTo)
 - [`func ParseKey(name string) (canonical string, ok bool)`](#ParseKey)
 - [`func Place(surface string, p Placement, opts ...ReplyOption) string`](#Place)
@@ -134,14 +137,20 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (m *Keymap) Selects(name string) bool`](#Keymap.Selects)
 - [`type Link`](#Link)
 - [`type MenuItem`](#MenuItem)
+  - [`func MenuFind(tree *MenuTree, name string) *MenuItem`](#MenuFind)
+  - [`func MenuLevelOf(tree *MenuTree, p Platform, seq []string) (items []MenuItem, ok bool)`](#MenuLevelOf)
   - [`func (z *MenuItem) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuItem.DecodeMsg)
   - [`func (z *MenuItem) EncodeMsg(en *msgp.Writer) (err error)`](#MenuItem.EncodeMsg)
   - [`func (z *MenuItem) Msgsize() (s int)`](#MenuItem.Msgsize)
-- [`type MenuLevel`](#MenuLevel)
-  - [`func MenuOf(m Message) (*MenuLevel, error)`](#MenuOf)
-  - [`func (z *MenuLevel) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuLevel.DecodeMsg)
-  - [`func (z *MenuLevel) EncodeMsg(en *msgp.Writer) (err error)`](#MenuLevel.EncodeMsg)
-  - [`func (z *MenuLevel) Msgsize() (s int)`](#MenuLevel.Msgsize)
+- [`type MenuKeys`](#MenuKeys)
+  - [`func (z *MenuKeys) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuKeys.DecodeMsg)
+  - [`func (z *MenuKeys) EncodeMsg(en *msgp.Writer) (err error)`](#MenuKeys.EncodeMsg)
+  - [`func (z *MenuKeys) Msgsize() (s int)`](#MenuKeys.Msgsize)
+- [`type MenuTree`](#MenuTree)
+  - [`func MenuOf(m Message) (*MenuTree, error)`](#MenuOf)
+  - [`func (z *MenuTree) DecodeMsg(dc *msgp.Reader) (err error)`](#MenuTree.DecodeMsg)
+  - [`func (z *MenuTree) EncodeMsg(en *msgp.Writer) (err error)`](#MenuTree.EncodeMsg)
+  - [`func (z *MenuTree) Msgsize() (s int)`](#MenuTree.Msgsize)
 - [`type Message`](#Message)
 - [`type Op`](#Op)
   - [`func DeltaOf(m Message) ([]Op, error)`](#DeltaOf)
@@ -255,7 +264,7 @@ const (
 	FeaturePassthrough = "passthrough" // the pointer passes through the parts of a surface that take none (SPEC §9.3)
 	FeatureHover       = "hover"       // it says where the pointer is, with hover events (SPEC §9.4)
 	FeatureCount       = "count"       // it says that a click repeats one before it (SPEC §9)
-	FeatureMenu        = "menu"        // it shows a program's menus (SPEC §10.5)
+	FeatureMenu        = "menu"        // it keeps a program's menu, shows its levels and lets the user pick from it (SPEC §10.7)
 )
 ```
 
@@ -278,7 +287,7 @@ const (
 
 	// The terminal's events, which belong to no surface: Surface and
 	// Target are empty.
-	EventCommand = "command" // an edit command the program takes, by its key or a menu (SPEC §10.6)
+	EventCommand = "command" // an edit command the program takes, by its key or a menu, or a pick from its own menu (SPEC §10.6, §10.7)
 	EventCaps    = "caps"    // a capability changed (SPEC §4)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
@@ -322,6 +331,14 @@ const MaxDepth = 32
 ```
 
 MaxDepth is how deep a body may nest, its map being the first level (SDK.md §3.9). A body nested deeper does not decode, so that no body can exhaust a stack: TinyGo's is 64 KB.
+
+<a id="MenuDepth"></a>
+
+```go
+const MenuDepth = 8
+```
+
+MenuDepth is how deep a menu's items nest, the top level's being one deep (SPEC §10.7). A menu nested deeper is EINVAL.
 
 <a id="TerminalKeys"></a>
 
@@ -525,10 +542,34 @@ Lookup returns a control's value for a key, and whether it has the key.
 ## <a id="Menu"></a>func Menu
 
 ```go
-func Menu(level *MenuLevel, opts ...ReplyOption) string
+func Menu(tree *MenuTree, opts ...ReplyOption) string
 ```
 
-Menu shows the which-key menu of a program's key sequence while it waits (SPEC §10.5), or with nil hides it. A host shows it when its capabilities have the feature menu (HasFeature(caps, FeatureMenu)); on one that does not, the program shows its menu itself.
+Menu tells the host what the program can do now (SPEC §10.7): its menu, a tree of actions with the keys that reach them and the names a pick sends. It lasts until the program sends another, and with nil the program has none. A host shows and picks from it when its capabilities have the feature menu (HasFeature(caps, FeatureMenu)); on one that does not, the program shows its menu itself. The tree is kept within MenuDepth levels.
+
+## <a id="MenuHide"></a>func MenuHide
+
+```go
+func MenuHide(opts ...ReplyOption) string
+```
+
+MenuHide hides the level shown (SPEC §10.7). The menu stays.
+
+## <a id="MenuShow"></a>func MenuShow
+
+```go
+func MenuShow(seq []string, opts ...ReplyOption) string
+```
+
+MenuShow shows the level of the program's menu that the keys typed reach (SPEC §10.7): seq names them as SPEC §10.4 does, "Space" and "f" for a leader and a group. With none it shows the top level. A level shows until the program shows another, or MenuHide.
+
+## <a id="MenuShowOf"></a>func MenuShowOf
+
+```go
+func MenuShowOf(m Message) ([]string, error)
+```
+
+MenuShowOf reads an a=menu command's show body (SPEC §10.7), as a host or a relay does: the keys typed, as the program names them, whose level to show. No body, or none in it, is the top level: nil, and no error. A command with show=0 has none to read. A body that is no map, or whose seq is not an array of str, is an \*Error with Code EINVAL.
 
 ## <a id="MorphTo"></a>func MorphTo
 
@@ -948,7 +989,7 @@ type Command struct {
 	// "select-all".
 	Name string
 	// Key is the key that sent it, named as SPEC §10.4 names it; empty for
-	// a command from the terminal's menu.
+	// a command from the terminal's menu or a pick from the program's.
 	Key string
 	// Text is a paste's text, and HasText whether there is one: a paste
 	// with nothing on the clipboard, or from a host that cannot read it,
@@ -1443,18 +1484,38 @@ Link is a clicked link: its href, as the document has it, and its URL resolved a
 
 ```go
 type MenuItem struct {
-	// Key is the key, named as SPEC §10.4 names it.
-	Key string `msg:"key"`
-	// Label is what it does; empty leaves it to the host.
+	// Key is the key that reaches it after its group's, named as SPEC §10.4
+	// names it; empty for an item no key reaches.
+	Key string `msg:"key,omitempty"`
+	// Label is what it does.
 	Label string `msg:"label,omitempty"`
-	// Group is set when more keys follow it.
-	Group bool `msg:"group,omitempty"`
+	// Name is the command a pick sends; empty for an item only its keys
+	// reach.
+	Name string `msg:"name,omitempty"`
 	// Enabled is set when it does anything now.
 	Enabled bool `msg:"enabled"`
+	// Items are the items after it, which make it a group.
+	Items []MenuItem `msg:"items,omitempty"`
 }
 ```
 
-MenuItem is a key that can follow a menu's sequence.
+MenuItem is an action of a menu, or a group of them (SPEC §10.7). Items nest at most MenuDepth deep, the top level's being one deep.
+
+### <a id="MenuFind"></a>func MenuFind
+
+```go
+func MenuFind(tree *MenuTree, name string) *MenuItem
+```
+
+MenuFind is the first item of tree named name, depth first (SPEC §10.7), or nil: a pick of name is for it. An item with no name, as name "" asks for, is never found.
+
+### <a id="MenuLevelOf"></a>func MenuLevelOf
+
+```go
+func MenuLevelOf(tree *MenuTree, p Platform, seq []string) (items []MenuItem, ok bool)
+```
+
+MenuLevelOf is the level of tree that the keys seq reach (SPEC §10.7): its items, a group's, for a host to show those that have a key. From the top level, each key of seq enters the first group (an item with Items) at the level whose Key is that key, compared as ReadKey compares: with Mod read as p reads it. With no keys it is the top level. ok is false when the keys reach no group, or tree is nil.
 
 ### <a id="MenuItem.DecodeMsg"></a>func (*MenuItem) DecodeMsg
 
@@ -1480,49 +1541,81 @@ func (z *MenuItem) Msgsize() (s int)
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
-## <a id="MenuLevel"></a>type MenuLevel
+## <a id="MenuKeys"></a>type MenuKeys
 
 ```go
-type MenuLevel struct {
-	// Seq is the keys typed so far, named as SPEC §10.4 names them.
+type MenuKeys struct {
 	Seq []string `msg:"seq"`
-	// Label is their group's label: "+file".
-	Label string `msg:"label,omitempty"`
-	// Items are the keys that can follow them.
-	Items []MenuItem `msg:"items"`
 }
 ```
 
-MenuLevel is a which-key level a program shows while its key sequence waits (Menu, SPEC §10.5), in myelin's names and order: a myelin Menu encodes as one.
+MenuKeys is the body of an a=menu with show=1: the keys typed so far, named as SPEC §10.4 names them, whose level of the menu to show (SPEC §10.7). MenuShow writes it; MenuShowOf reads it.
 
-### <a id="MenuOf"></a>func MenuOf
-
-```go
-func MenuOf(m Message) (*MenuLevel, error)
-```
-
-MenuOf reads an a=menu command's menu (SPEC §10.5), as a host or a relay does: nil, and no error, for a command with no body, which hides the menu. A body that is no menu is an \*Error with Code EINVAL.
-
-### <a id="MenuLevel.DecodeMsg"></a>func (*MenuLevel) DecodeMsg
+### <a id="MenuKeys.DecodeMsg"></a>func (*MenuKeys) DecodeMsg
 
 ```go
-func (z *MenuLevel) DecodeMsg(dc *msgp.Reader) (err error)
+func (z *MenuKeys) DecodeMsg(dc *msgp.Reader) (err error)
 ```
 
 DecodeMsg implements msgp.Decodable
 
-### <a id="MenuLevel.EncodeMsg"></a>func (*MenuLevel) EncodeMsg
+### <a id="MenuKeys.EncodeMsg"></a>func (*MenuKeys) EncodeMsg
 
 ```go
-func (z *MenuLevel) EncodeMsg(en *msgp.Writer) (err error)
+func (z *MenuKeys) EncodeMsg(en *msgp.Writer) (err error)
 ```
 
 EncodeMsg implements msgp.Encodable
 
-### <a id="MenuLevel.Msgsize"></a>func (*MenuLevel) Msgsize
+### <a id="MenuKeys.Msgsize"></a>func (*MenuKeys) Msgsize
 
 ```go
-func (z *MenuLevel) Msgsize() (s int)
+func (z *MenuKeys) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
+## <a id="MenuTree"></a>type MenuTree
+
+```go
+type MenuTree struct {
+	// Label is what the menu is for: "Files". Empty leaves it to the host.
+	Label string `msg:"label,omitempty"`
+	// Items are the menu's top level, in the order to show them.
+	Items []MenuItem `msg:"items"`
+}
+```
+
+MenuTree is what a program can do (Menu, SPEC §10.7): a myelin Tree, each binding given a Name, its groups' items nested in them.
+
+### <a id="MenuOf"></a>func MenuOf
+
+```go
+func MenuOf(m Message) (*MenuTree, error)
+```
+
+MenuOf reads an a=menu command's menu (SPEC §10.7), as a host or a relay does: nil, and no error, for a command with no body, which leaves the program no menu. A body that is no menu, holds a field of another type, or nests its items deeper than MenuDepth is an \*Error with Code EINVAL. A command with show is not a menu: MenuShowOf reads it.
+
+### <a id="MenuTree.DecodeMsg"></a>func (*MenuTree) DecodeMsg
+
+```go
+func (z *MenuTree) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="MenuTree.EncodeMsg"></a>func (*MenuTree) EncodeMsg
+
+```go
+func (z *MenuTree) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="MenuTree.Msgsize"></a>func (*MenuTree) Msgsize
+
+```go
+func (z *MenuTree) Msgsize() (s int)
 ```
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
@@ -1769,7 +1862,7 @@ PlatformOf is the Platform of a host's capabilities: its Mod and Edit, the zero 
 func (p Platform) ReadKey(name string) (canonical string, ok bool)
 ```
 
-ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its canonical name (ParseKey) with Mod read as the Platform's, so that where Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta they are two keys. A menu's items (MenuItem.Key) compare with the keys typed this way. ok is false for a name that does not parse.
+ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its canonical name (ParseKey) with Mod read as the Platform's, so that where Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta they are two keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys typed this way. ok is false for a name that does not parse.
 
 ## <a id="QueryOption"></a>type QueryOption
 

@@ -190,23 +190,17 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		if !ok {
 			return Menu(nil, opts...)
 		}
-		l := MenuLevel{Seq: []string{}, Items: []MenuItem{}}
-		l.Label, _ = m["label"].(string)
-		for _, k := range asSlice(m["seq"]) {
-			l.Seq = append(l.Seq, k.(string))
+		t := MenuTree{Items: menuItems(m["items"])}
+		t.Label, _ = m["label"].(string)
+		return Menu(&t, opts...)
+	case "menu_show":
+		var keys []string
+		for _, k := range asSlice(args["keys"]) {
+			keys = append(keys, k.(string))
 		}
-		for _, i := range asSlice(m["items"]) {
-			i := i.(map[string]any)
-			it := MenuItem{Enabled: true}
-			it.Key, _ = i["key"].(string)
-			it.Label, _ = i["label"].(string)
-			it.Group, _ = i["group"].(bool)
-			if e, ok := i["enabled"].(bool); ok {
-				it.Enabled = e
-			}
-			l.Items = append(l.Items, it)
-		}
-		return Menu(&l, opts...)
+		return MenuShow(keys, opts...)
+	case "menu_hide":
+		return MenuHide(opts...)
 	case "sync":
 		var cmds []string
 		for _, c := range args["commands"].([]any) {
@@ -219,6 +213,24 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 	}
 	t.Fatalf("no builder %q", name)
 	return ""
+}
+
+// menuItems reads a menu vector's items.
+func menuItems(v any) []MenuItem {
+	items := []MenuItem{}
+	for _, i := range asSlice(v) {
+		i := i.(map[string]any)
+		var it MenuItem
+		it.Key, _ = i["key"].(string)
+		it.Label, _ = i["label"].(string)
+		it.Name, _ = i["name"].(string)
+		it.Enabled, _ = i["enabled"].(bool)
+		if sub := menuItems(i["items"]); len(sub) > 0 {
+			it.Items = sub
+		}
+		items = append(items, it)
+	}
+	return items
 }
 
 // opsOf reads a delta vector's ops: an op has a value only if the vector

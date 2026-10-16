@@ -1261,67 +1261,163 @@ func TestPrefix(t *testing.T) {
 	}
 }
 
-// The menu a program shows is recorded, and goes with an empty a=menu,
-// Escape, a key it does not list, a change of screen and a reset (SPEC
-// §10.5).
+// The program's menu is kept, and the level it shows is hidden by show=0,
+// Escape, a key the level does not list, a change of screen and a reset
+// (SPEC §10.7).
 func TestMenu(t *testing.T) {
-	menu := &hotty.MenuLevel{Seq: []string{"Space"}, Items: []hotty.MenuItem{{Key: "f", Label: "+file", Group: true, Enabled: true}, {Key: "Mod+q", Label: "Quit", Enabled: true}}}
+	menu := &hotty.MenuTree{Label: "Files", Items: []hotty.MenuItem{
+		{Key: "Space", Label: "Leader", Enabled: true, Items: []hotty.MenuItem{
+			{Key: "f", Label: "+file", Enabled: true, Items: []hotty.MenuItem{{Key: "n", Label: "New", Name: "new", Enabled: true}}},
+			{Key: "Mod+q", Label: "Quit", Name: "quit", Enabled: true},
+			{Label: "Sort", Name: "sort", Enabled: true},
+		}},
+	}}
 	h := New(t)
 	show := func() {
 		t.Helper()
+		send(h, hotty.MenuHide())
 		h.drain()
 		send(h, hotty.Menu(menu, hotty.N(1)))
 		expect(t, sent(h), "ok re=menu")
-		if got := h.Menu(); got == nil || got.Items[0].Key != "f" {
+		if got := h.Menu(); got == nil || got.Items[0].Key != "Space" {
 			t.Fatalf("Menu() = %+v", got)
+		}
+		if h.Shown() != nil {
+			t.Fatalf("a menu shows nothing: %+v", h.Shown())
+		}
+		send(h, hotty.MenuShow([]string{"Space"}))
+		if got := h.Shown(); len(got) != 2 || got[0].Key != "f" || got[1].Key != "Mod+q" {
+			t.Fatalf("Shown() = %+v", got)
 		}
 	}
 	show()
-	send(h, hotty.Menu(nil))
-	if h.Menu() != nil {
-		t.Error("an empty a=menu hides it")
+	send(h, hotty.MenuHide())
+	if h.Shown() != nil || h.Menu() == nil {
+		t.Error("show=0 hides the level, not the menu")
+	}
+	send(h, hotty.MenuShow(nil))
+	if got := h.Shown(); len(got) != 1 || got[0].Key != "Space" {
+		t.Errorf("the top level: %+v", got)
+	}
+	send(h, hotty.MenuShow([]string{"Space", "q"}))
+	if h.Shown() != nil {
+		t.Error("keys that reach no group")
 	}
 	show()
-	h.Key("f") // listed
+	h.Key("f") // listed: the level stays until the program shows another
 	h.Key("Control+q")
-	if h.Menu() == nil {
+	if h.Shown() == nil {
 		t.Error("a key it lists hides it")
 	}
 	h.Key("x")
-	if h.Menu() != nil {
+	if h.Shown() != nil {
 		t.Error("a key it does not list")
 	}
 	show()
 	h.Key("Escape")
-	if h.Menu() != nil {
+	if h.Shown() != nil {
 		t.Error("Escape")
 	}
 	show()
 	h.Type("z")
-	if h.Menu() != nil {
+	if h.Shown() != nil {
 		t.Error("typed text it does not list")
 	}
+	// A new menu shows the same keys' level of it, and one that no longer
+	// has the group shows nothing; a hidden level stays hidden.
+	show()
+	next := &hotty.MenuTree{Items: []hotty.MenuItem{{Key: "Space", Enabled: true, Items: []hotty.MenuItem{{Key: "w", Label: "Write"}}}}}
+	send(h, hotty.Menu(next))
+	if got := h.Shown(); len(got) != 1 || got[0].Key != "w" {
+		t.Errorf("a new menu: %+v", got)
+	}
+	send(h, hotty.Menu(&hotty.MenuTree{Items: []hotty.MenuItem{{Key: "x"}}}))
+	if h.Shown() != nil || h.Menu() == nil {
+		t.Error("a new menu with no such group")
+	}
+	send(h, hotty.Menu(nil))
+	if h.Menu() != nil || h.Shown() != nil {
+		t.Error("an empty a=menu leaves none")
+	}
+	// Each screen keeps its own menu: the alternate starts with none, and
+	// leaving it drops its own and hides the level; the main's stays.
 	show()
 	send(h, "\x1b[?1049h")
-	if h.Menu() != nil {
-		t.Error("a change of screen")
+	if h.Menu() != nil || h.Shown() != nil {
+		t.Error("the alternate screen has a menu of its own")
 	}
+	send(h, hotty.Menu(next))
+	send(h, "\x1b[?1049l")
+	if got := h.Menu(); got == nil || got.Label != "Files" || h.Shown() != nil {
+		t.Errorf("back on the main screen: %+v", got)
+	}
+	send(h, "\x1b[?1049h")
+	if h.Menu() != nil {
+		t.Error("leaving the alternate screen drops its menu")
+	}
+	send(h, "\x1b[?1049l")
 	show()
 	send(h, "\x1bc")
-	if h.Menu() != nil {
+	if h.Menu() != nil || h.Shown() != nil {
 		t.Error("a reset")
 	}
-	// A body that is no menu is refused, and so is any a=menu on a host
-	// without the feature.
+	// A body that is no menu or no keys is refused, and so is any a=menu on
+	// a host without the feature.
 	lenient := New(t, Lenient())
-	send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "menu"}, {K: "n", V: "2"}}, Body(`["Space"]`)))
+	for _, c := range []hotty.Control{{{K: "a", V: "menu"}, {K: "n", V: "2"}}, {{K: "a", V: "menu"}, {K: "n", V: "2"}, {K: "show", V: "1"}}} {
+		send(lenient, hotty.Encode(c, Body(`["Space"]`)))
+		if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
+			t.Errorf("a body that is none: %+v", r)
+		}
+	}
+	send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "menu"}, {K: "n", V: "2"}, {K: "show", V: "2"}}, nil))
 	if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
-		t.Errorf("a menu that is none: %+v", r)
+		t.Errorf("show=2: %+v", r)
 	}
 	plain := New(t, Lenient(), Caps(hotty.Caps{Features: []string{hotty.FeatureHover}}))
-	send(plain, hotty.Menu(menu, hotty.N(3)))
-	if r := plain.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL || plain.Menu() != nil {
-		t.Errorf("a host without menu: %+v, shows %+v", r, plain.Menu())
+	for _, cmd := range []string{hotty.Menu(menu, hotty.N(3)), hotty.MenuShow(nil, hotty.N(3)), hotty.MenuHide(hotty.N(3))} {
+		send(plain, cmd)
+		if r := plain.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL || plain.Menu() != nil {
+			t.Errorf("a host without menu: %+v, keeps %+v", r, plain.Menu())
+		}
+	}
+}
+
+// A pick sends command with the item's name and nothing else; a disabled
+// item, an unknown name and no menu send nothing (SPEC §10.7).
+func TestPick(t *testing.T) {
+	h := New(t)
+	if h.Pick("new") {
+		t.Error("a pick with no menu")
+	}
+	send(h, hotty.Menu(&hotty.MenuTree{Items: []hotty.MenuItem{
+		{Key: "g", Label: "Go", Enabled: true, Items: []hotty.MenuItem{
+			{Label: "New", Name: "new", Enabled: true},
+			{Label: "Off", Name: "off"},
+		}},
+		{Label: "Again", Name: "new", Enabled: true},
+	}}))
+	h.drain()
+	if !h.Pick("new") {
+		t.Fatal("no pick")
+	}
+	_, evs := h.sentBoth()
+	if len(evs) != 1 || evs[0].Kind != hotty.EventCommand || evs[0].Surface != "" || evs[0].Target != "" {
+		t.Fatalf("events %+v", evs)
+	}
+	if c := evs[0].Command; c == nil || c.Name != "new" || c.Key != "" || c.HasText {
+		t.Errorf("command %+v", c)
+	}
+	if !bytes.Equal(evs[0].Detail, Body(`{"name":"new"}`)) {
+		t.Errorf("detail %x", evs[0].Detail)
+	}
+	for _, name := range []string{"off", "nothing", ""} {
+		if h.Pick(name) {
+			t.Errorf("a pick of %q", name)
+		}
+	}
+	if _, evs := h.sentBoth(); len(evs) != 0 {
+		t.Errorf("events %+v", evs)
 	}
 }
 

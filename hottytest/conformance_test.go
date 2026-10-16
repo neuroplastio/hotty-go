@@ -76,6 +76,8 @@ type vectorStep struct {
 	Keys    []string          `json:"keys"`
 	Term    *bool             `json:"terminal"`
 	Events  []vectorEvent     `json:"events"`
+	Menu    string            `json:"menu"`
+	Name    string            `json:"name"`
 	HasEvs  bool              `json:"-"`
 }
 
@@ -352,10 +354,10 @@ func TestConformanceVectors(t *testing.T) {
 			h := New(t, Lenient())
 			steps := make([]vectorStep, len(vec.Steps))
 			// Keys are pressed only in vectors with no pointer, and that
-			// require nothing: this host lays nothing out, so where a
+			// require nothing but menus: this host lays nothing out, so where a
 			// pointer is says nothing here, and it has no passthrough,
 			// hover or scroll.
-			keys := len(vec.Requires) == 0
+			keys := len(vec.Requires) == 0 || len(vec.Requires) == 1 && vec.Requires[0] == "menu"
 			pointer := false
 			for i, raw := range vec.Steps {
 				if err := json.Unmarshal(raw, &steps[i]); err != nil {
@@ -374,6 +376,10 @@ func TestConformanceVectors(t *testing.T) {
 					continue
 				}
 				if st.Pointer != "" {
+					continue
+				}
+				if st.Menu != "" {
+					checkMenu(t, i, h, st)
 					continue
 				}
 				if st.Key != nil {
@@ -477,6 +483,42 @@ func TestConformanceVectors(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// checkMenu runs a menu step (conformance/README.md): the level the host
+// shows, or a pick by name and the events it makes.
+func checkMenu(t *testing.T, i int, h *Host, st vectorStep) {
+	t.Helper()
+	switch st.Menu {
+	case "shown":
+		var want []struct {
+			Key     string `json:"key"`
+			Label   string `json:"label"`
+			Group   bool   `json:"group"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.Unmarshal(st.Expect, &want); err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+		got := h.Shown()
+		if len(got) != len(want) {
+			t.Errorf("step %d: shows %+v, want %+v", i, got, want)
+			return
+		}
+		for j, w := range want {
+			g := got[j]
+			if g.Key != w.Key || g.Label != w.Label || (len(g.Items) > 0) != w.Group || g.Enabled != w.Enabled {
+				t.Errorf("step %d: item %d is %+v, want %+v", i, j, g, w)
+			}
+		}
+	case "pick":
+		h.drain()
+		h.Pick(st.Name)
+		_, got := h.sentBoth()
+		checkEvents(t, fmt.Sprintf("step %d (pick %s)", i, st.Name), got, st.Events)
+	default:
+		t.Fatalf("step %d: menu step %q", i, st.Menu)
 	}
 }
 

@@ -24,7 +24,7 @@ const (
 
 	// The terminal's events, which belong to no surface: Surface and
 	// Target are empty.
-	EventCommand = "command" // an edit command the program takes, by its key or a menu (SPEC §10.6)
+	EventCommand = "command" // an edit command the program takes, by its key or a menu, or a pick from its own menu (SPEC §10.6, §10.7)
 	EventCaps    = "caps"    // a capability changed (SPEC §4)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
@@ -100,7 +100,7 @@ type Command struct {
 	// "select-all".
 	Name string
 	// Key is the key that sent it, named as SPEC §10.4 names it; empty for
-	// a command from the terminal's menu.
+	// a command from the terminal's menu or a pick from the program's.
 	Key string
 	// Text is a paste's text, and HasText whether there is one: a paste
 	// with nothing on the clipboard, or from a host that cannot read it,

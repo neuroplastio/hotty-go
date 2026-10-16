@@ -143,25 +143,24 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	return false
 }
 
-// menuKey hides the menu a program shows (a=menu) when a key makes it
-// stale: Escape, or a key it does not list (SPEC §10.5). The key still
-// goes where it would without the menu.
+// menuKey hides the level a program shows (a=menu:show=1) when a key makes
+// it stale: Escape, or a key it does not list (SPEC §10.7). A key it lists
+// keeps it: the program shows the next level. The key still goes where it
+// would without the level.
 func (h *Host) menuKey(key string) {
-	if h.menu == nil {
+	if !h.shown {
 		return
 	}
 	p := hotty.PlatformOf(h.caps)
 	k, ok := p.ReadKey(key)
-	if !ok || k == "Escape" {
-		h.menu = nil
-		return
-	}
-	for _, it := range h.menu.Items {
-		if c, ok := p.ReadKey(it.Key); ok && c == k {
-			return
+	if ok && k != "Escape" {
+		for _, it := range h.level() {
+			if c, ok := p.ReadKey(it.Key); ok && c == k {
+				return
+			}
 		}
 	}
-	h.menu = nil
+	h.shown = false
 }
 
 // fieldKey gives a key to a text field, which does what its keymap says

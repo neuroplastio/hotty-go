@@ -598,7 +598,7 @@ func DefaultEdit(mod string) map[string][]string {
 // ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its
 // canonical name (ParseKey) with Mod read as the Platform's, so that where
 // Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta
-// they are two keys. A menu's items (MenuItem.Key) compare with the keys
+// they are two keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys
 // typed this way. ok is false for a name that does not parse.
 func (p Platform) ReadKey(name string) (canonical string, ok bool) {
 	k, ok := splitKey(name)

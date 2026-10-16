@@ -70,15 +70,17 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
   - [`func (h *Host) Key(key string) (used bool)`](#Host.Key)
   - [`func (h *Host) Lines() []string`](#Host.Lines)
-  - [`func (h *Host) Menu() *hotty.MenuLevel`](#Host.Menu)
+  - [`func (h *Host) Menu() *hotty.MenuTree`](#Host.Menu)
   - [`func (h *Host) Opened() []string`](#Host.Opened)
   - [`func (h *Host) Output() string`](#Host.Output)
+  - [`func (h *Host) Pick(name string) bool`](#Host.Pick)
   - [`func (h *Host) Prefix() string`](#Host.Prefix)
   - [`func (h *Host) Press(surface, id string, keys ...string) error`](#Host.Press)
   - [`func (h *Host) Read(p []byte) (int, error)`](#Host.Read)
   - [`func (h *Host) Replies() []hotty.Message`](#Host.Replies)
   - [`func (h *Host) Resource(id string) (mime string, data []byte, ok bool)`](#Host.Resource)
   - [`func (h *Host) Screen() string`](#Host.Screen)
+  - [`func (h *Host) Shown() []hotty.MenuItem`](#Host.Shown)
   - [`func (h *Host) Submit(surface, id string) error`](#Host.Submit)
   - [`func (h *Host) Surface(name string) *Surface`](#Host.Surface)
   - [`func (h *Host) Surfaces() []*Surface`](#Host.Surfaces)
@@ -451,10 +453,10 @@ Lines is the screen's text as the program wrote its lines: Screen, with each row
 ### <a id="Host.Menu"></a>func (*Host) Menu
 
 ```go
-func (h *Host) Menu() *hotty.MenuLevel
+func (h *Host) Menu() *hotty.MenuTree
 ```
 
-Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it shows none: the program sent none or an empty a=menu, or the menu went with Escape, a key it does not list, a change of screen or a reset. A host without the feature menu answers a=menu EINVAL.
+Menu is the menu the program keeps on the screen it is on (a=menu, SPEC §10.7), nil when it has none: the program sent none or an empty a=menu, or it was the alternate screen's and the program left it, or a reset. A host without the feature menu answers a=menu EINVAL.
 
 ### <a id="Host.Opened"></a>func (*Host) Opened
 
@@ -471,6 +473,14 @@ func (h *Host) Output() string
 ```
 
 Output is every byte the program wrote.
+
+### <a id="Host.Pick"></a>func (*Host) Pick
+
+```go
+func (h *Host) Pick(name string) bool
+```
+
+Pick picks the item of the program's menu named name, as a palette would (SPEC §10.7): the program hears a command event with that name. The first item so named, depth first, is the one. It sends nothing, and reports false, for an item that is not enabled, a name no item has, or no menu.
 
 ### <a id="Host.Prefix"></a>func (*Host) Prefix
 
@@ -519,6 +529,14 @@ func (h *Host) Screen() string
 ```
 
 Screen is the cells the program printed, a line a row, without colours: what is left after carriage returns, cursor moves, erases and scrolls. It is the main screen, its scrollback first, or the alternate screen while the program has it on. Surfaces are not drawn in it; the rows a placement covered are blank.
+
+### <a id="Host.Shown"></a>func (*Host) Shown
+
+```go
+func (h *Host) Shown() []hotty.MenuItem
+```
+
+Shown is the level of the menu that the host shows (a=menu:show=1, SPEC §10.7): the items of the group the program's keys reach that have a key, in order. It is nil when no level shows: the program showed none or hid it, or the user's Escape or a key the level does not list hid it, or the keys reach no group, or no item there has a key.
 
 ### <a id="Host.Submit"></a>func (*Host) Submit
 

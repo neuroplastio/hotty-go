@@ -307,21 +307,61 @@ func DeltaOf(m Message) ([]Op, error) {
 	return d.Ops, nil
 }
 
-// MenuOf reads an a=menu command's menu (SPEC §10.5), as a host or a relay
-// does: nil, and no error, for a command with no body, which hides the
-// menu. A body that is no menu is an *Error with Code EINVAL.
-func MenuOf(m Message) (*MenuLevel, error) {
+// MenuDepth is how deep a menu's items nest, the top level's being one deep
+// (SPEC §10.7). A menu nested deeper is EINVAL.
+const MenuDepth = 8
+
+// MenuOf reads an a=menu command's menu (SPEC §10.7), as a host or a relay
+// does: nil, and no error, for a command with no body, which leaves the
+// program no menu. A body that is no menu, holds a field of another type,
+// or nests its items deeper than MenuDepth is an *Error with Code EINVAL.
+// A command with show is not a menu: MenuShowOf reads it.
+func MenuOf(m Message) (*MenuTree, error) {
 	if Get(m.Control, "a") != "menu" {
 		return nil, &Error{Code: EINVAL, Detail: "not a menu command", Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
 	}
 	if len(m.Payload) == 0 {
 		return nil, nil
 	}
-	var l MenuLevel
-	if !decodeBody(m.Payload, &l) {
+	var t MenuTree
+	if !decodeBody(m.Payload, &t) {
 		return nil, &Error{Code: EINVAL, Detail: "body does not decode", Re: "menu"}
 	}
-	return &l, nil
+	if menuDeep(t.Items) > MenuDepth {
+		return nil, &Error{Code: EINVAL, Detail: "items nest deeper than eight", Re: "menu"}
+	}
+	return &t, nil
+}
+
+// menuDeep is how deep items nest, the first level being one.
+func menuDeep(items []MenuItem) int {
+	d := 0
+	for _, it := range items {
+		d = max(d, menuDeep(it.Items))
+	}
+	if len(items) == 0 {
+		return 0
+	}
+	return d + 1
+}
+
+// MenuShowOf reads an a=menu command's show body (SPEC §10.7), as a host or
+// a relay does: the keys typed, as the program names them, whose level to
+// show. No body, or none in it, is the top level: nil, and no error. A
+// command with show=0 has none to read. A body that is no map, or whose seq
+// is not an array of str, is an *Error with Code EINVAL.
+func MenuShowOf(m Message) ([]string, error) {
+	if Get(m.Control, "a") != "menu" {
+		return nil, &Error{Code: EINVAL, Detail: "not a menu command", Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
+	}
+	if len(m.Payload) == 0 {
+		return nil, nil
+	}
+	var k MenuKeys
+	if !decodeBody(m.Payload, &k) {
+		return nil, &Error{Code: EINVAL, Detail: "seq is not an array of str", Re: "menu"}
+	}
+	return k.Seq, nil
 }
 
 // validOps are the delta ops there are.
@@ -593,21 +633,104 @@ func Edit(names []string, opts ...ReplyOption) string {
 	return command(Control{{"a", "edit"}, {"take", strings.Join(names, ",")}}, nil, NoReply, opts)
 }
 
-// Menu shows the which-key menu of a program's key sequence while it waits
-// (SPEC §10.5), or with nil hides it. A host shows it when its capabilities
-// have the feature menu (HasFeature(caps, FeatureMenu)); on one that does
-// not, the program shows its menu itself.
-func Menu(level *MenuLevel, opts ...ReplyOption) string {
+// Menu tells the host what the program can do now (SPEC §10.7): its menu, a
+// tree of actions with the keys that reach them and the names a pick sends.
+// It lasts until the program sends another, and with nil the program has
+// none. A host shows and picks from it when its capabilities have the
+// feature menu (HasFeature(caps, FeatureMenu)); on one that does not, the
+// program shows its menu itself. The tree is kept within MenuDepth levels.
+func Menu(tree *MenuTree, opts ...ReplyOption) string {
 	var body []byte
-	if level != nil {
-		l := *level
-		if l.Seq == nil {
-			l.Seq = []string{}
-		}
-		if l.Items == nil {
-			l.Items = []MenuItem{}
-		}
-		body = encodeBody(&l)
+	if tree != nil {
+		t := MenuTree{Label: tree.Label, Items: menuCopy(tree.Items)}
+		body = encodeBody(&t)
 	}
 	return command(Control{{"a", "menu"}}, body, NoReply, opts)
+}
+
+// menuCopy is items for the wire: the top level's array is always there,
+// and a group's only when it has items.
+func menuCopy(items []MenuItem) []MenuItem {
+	out := make([]MenuItem, len(items))
+	for i, it := range items {
+		out[i] = it
+		out[i].Items = nil
+		if len(it.Items) > 0 {
+			out[i].Items = menuCopy(it.Items)
+		}
+	}
+	return out
+}
+
+// MenuShow shows the level of the program's menu that the keys typed reach
+// (SPEC §10.7): seq names them as SPEC §10.4 does, "Space" and "f" for a
+// leader and a group. With none it shows the top level. A level shows until
+// the program shows another, or MenuHide.
+func MenuShow(seq []string, opts ...ReplyOption) string {
+	var body []byte
+	if len(seq) > 0 {
+		body = encodeBody(&MenuKeys{Seq: seq})
+	}
+	return command(Control{{"a", "menu"}, {"show", "1"}}, body, NoReply, opts)
+}
+
+// MenuHide hides the level shown (SPEC §10.7). The menu stays.
+func MenuHide(opts ...ReplyOption) string {
+	return command(Control{{"a", "menu"}, {"show", "0"}}, nil, NoReply, opts)
+}
+
+// MenuLevelOf is the level of tree that the keys seq reach (SPEC §10.7): its
+// items, a group's, for a host to show those that have a key. From the top
+// level, each key of seq enters the first group (an item with Items) at the
+// level whose Key is that key, compared as ReadKey compares: with Mod read
+// as p reads it. With no keys it is the top level. ok is false when the keys
+// reach no group, or tree is nil.
+func MenuLevelOf(tree *MenuTree, p Platform, seq []string) (items []MenuItem, ok bool) {
+	if tree == nil {
+		return nil, false
+	}
+	items = tree.Items
+	for _, key := range seq {
+		typed, ok := p.ReadKey(key)
+		if !ok {
+			return nil, false
+		}
+		next := -1
+		for i, it := range items {
+			if len(it.Items) == 0 {
+				continue
+			}
+			if c, ok := p.ReadKey(it.Key); ok && c == typed {
+				next = i
+				break
+			}
+		}
+		if next < 0 {
+			return nil, false
+		}
+		items = items[next].Items
+	}
+	return items, true
+}
+
+// MenuFind is the first item of tree named name, depth first (SPEC §10.7),
+// or nil: a pick of name is for it. An item with no name, as name "" asks
+// for, is never found.
+func MenuFind(tree *MenuTree, name string) *MenuItem {
+	if tree == nil || name == "" {
+		return nil
+	}
+	return menuFind(tree.Items, name)
+}
+
+func menuFind(items []MenuItem, name string) *MenuItem {
+	for i := range items {
+		if items[i].Name == name {
+			return &items[i]
+		}
+		if it := menuFind(items[i].Items, name); it != nil {
+			return it
+		}
+	}
+	return nil
 }

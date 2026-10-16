@@ -81,7 +81,7 @@ const (
 	FeaturePassthrough = "passthrough" // the pointer passes through the parts of a surface that take none (SPEC §9.3)
 	FeatureHover       = "hover"       // it says where the pointer is, with hover events (SPEC §9.4)
 	FeatureCount       = "count"       // it says that a click repeats one before it (SPEC §9)
-	FeatureMenu        = "menu"        // it shows a program's menus (SPEC §10.5)
+	FeatureMenu        = "menu"        // it keeps a program's menu, shows its levels and lets the user pick from it (SPEC §10.7)
 )
 
 // Flag is a surface's p, f or v (SPEC §5.2): absent, On or Off. The zero
