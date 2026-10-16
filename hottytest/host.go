@@ -2065,11 +2065,11 @@ func (h *Host) Shown() []hotty.MenuItem {
 	return h.level()
 }
 
-// Pick picks the item of the program's menu named name, as a palette would
-// (SPEC §10.7): the program hears a command event with that name. The
-// first item so named, depth first, is the one. It sends nothing, and
-// reports false, for an item that is not enabled, a name no item has, or
-// no menu.
+// Pick picks the item of the program's menu named name, as a multiplexer's
+// palette or an agent would (SPEC §10.7): the program hears a command event
+// with that name. The first item so named, depth first, is the one. It
+// sends nothing, and reports false, for an item that is not enabled, a name
+// no item has, or no menu.
 func (h *Host) Pick(name string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
