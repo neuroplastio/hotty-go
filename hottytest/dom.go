@@ -21,8 +21,11 @@ type Surface struct {
 	detached bool
 	placed   bool
 	place    hotty.Placement
-	fitRows  int     // with place.Fit: the rows the program last heard (SPEC §5.2)
-	heard    *string // with place.Hover: the element it last heard the pointer is over; nil: out (SPEC §9.4)
+	press    bool    // the program asked for presses (p, SPEC §5.2): the surface's, not the placement's
+	fit      bool    // ... for fit (f)
+	hover    bool    // ... for hover (v)
+	fitRows  int     // with fit: the rows the program last heard (SPEC §5.2)
+	heard    *string // with hover: the element it last heard the pointer is over; nil: out (SPEC §9.4)
 	col, row int     // where the placement's top-left cell is on the screen
 	alt      bool    // placed on the alternate screen
 	created  int     // the order of creation, for stacking
@@ -74,6 +77,29 @@ func (s *Surface) Placed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.placed
+}
+
+// Press reports whether the program asked for presses (Placement.Press):
+// the flag belongs to the surface, and holds across placements (SPEC §5.2).
+func (s *Surface) Press() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.press
+}
+
+// Fit reports whether the program asked for fit events (Placement.Fit).
+func (s *Surface) Fit() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fit
+}
+
+// Hover reports whether the program asked for hover events
+// (Placement.Hover).
+func (s *Surface) Hover() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hover
 }
 
 // Placement is the surface's last placement, as the program sent it; Rows

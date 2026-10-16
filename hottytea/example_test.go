@@ -105,7 +105,10 @@ func Example() {
 		case "doc":
 			fmt.Println("doc", hotty.Get(c.Control, "s"))
 		case "delta":
-			fmt.Println("delta", hotty.Get(c.Control, "s"), "#"+hotty.Get(c.Control, "t"), string(c.Payload))
+			ops, _ := hotty.DeltaOf(c)
+			for _, op := range ops {
+				fmt.Println("delta", hotty.Get(c.Control, "s"), op.Op, "#"+op.Target, *op.Value)
+			}
 		case "del":
 			fmt.Println("del", hotty.Get(c.Control, "s"))
 		}
@@ -113,7 +116,7 @@ func Example() {
 	// Output:
 	// ready: native
 	// doc counter
-	// delta counter #count 1
-	// delta counter #count 2
+	// delta counter text #count 1
+	// delta counter text #count 2
 	// del counter
 }

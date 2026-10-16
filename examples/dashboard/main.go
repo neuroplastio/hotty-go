@@ -394,10 +394,19 @@ func (m *model) layout() (rows, shown int) {
 	return rows, shown
 }
 
+// cellCSS is a cell's size in CSS pixels, a usual 9×18 before the host has
+// said.
+func cellCSS(c hotty.Caps) (w, h float64) {
+	if c.CellCSS.W <= 0 || c.CellCSS.H <= 0 {
+		return 9, 18
+	}
+	return c.CellCSS.W, c.CellCSS.H
+}
+
 // chartSize is a card's chart in CSS pixels: the card less its first row,
 // the header, and its 1px ring.
 func (m *model) chartSize(rows int) (w, h float64) {
-	cw, ch := hotty.CellCSS(m.s.Caps)
+	cw, ch := cellCSS(m.s.Caps)
 	return float64(m.w)*cw - 2, max(float64(rows-1)*ch-1, 1)
 }
 
@@ -431,7 +440,7 @@ func (m *model) line(e *endpoint, w, h float64) chart.Line {
 // card is endpoint i's document, as it is now.
 func (m *model) card(i int, w, h float64) string {
 	e := m.eps[i]
-	_, ch := hotty.CellCSS(m.s.Caps)
+	_, ch := cellCSS(m.s.Caps)
 	ring := ringDark
 	if m.light {
 		ring = ringLight
@@ -472,41 +481,41 @@ func cardClass(sel bool) string {
 	return "card"
 }
 
-// delta is what brings endpoint i's card up to date, as one synchronized
-// update; "" when it is.
+// delta is what brings endpoint i's card up to date, as one delta; "" when
+// it is.
 func (m *model) delta(i int, w, h float64) string {
 	e, name := m.eps[i], m.name(i)
-	var cmds []string
+	var ops []hotty.Op
 	if e.dirty || e.shown.w != w || e.shown.h != h {
 		c := m.line(e, w, h)
 		if e.shown.w != w || e.shown.h != h {
-			cmds = append(cmds, c.Delta(name, e.lat)...) // the box, its grid and line
+			ops = append(ops, c.Ops(e.lat)...) // the box, its grid and line
 		} else {
-			cmds = append(cmds, c.DeltaShapes(name, e.lat)...) // the line alone
+			ops = append(ops, c.ShapeOps(e.lat)...) // the line alone
 		}
 		if s := e.scale(); s != e.shown.scale {
-			cmds = append(cmds, hotty.SetText(name, "scale", s))
+			ops = append(ops, hotty.OpText("scale", s))
 			e.shown.scale = s
 		}
 		e.shown.w, e.shown.h, e.dirty = w, h, false
 	}
 	if st := e.state(); st != e.shown.state {
-		cmds = append(cmds, hotty.SetAttr(name, "status", "data-state", st),
-			hotty.SetText(name, "icon", icons[st]), hotty.SetText(name, "state", st))
+		ops = append(ops, hotty.OpAttr("status", "data-state", st),
+			hotty.OpText("icon", icons[st]), hotty.OpText("state", st))
 		e.shown.state = st
 	}
 	if l := e.last(); l != e.shown.last {
-		cmds = append(cmds, hotty.SetText(name, "last", l))
+		ops = append(ops, hotty.OpText("last", l))
 		e.shown.last = l
 	}
 	if sel := i == m.sel; sel != e.shown.sel {
-		cmds = append(cmds, hotty.SetAttr(name, "card", "class", cardClass(sel)))
+		ops = append(ops, hotty.OpAttr("card", "class", cardClass(sel)))
 		e.shown.sel = sel
 	}
-	if len(cmds) == 0 {
+	if len(ops) == 0 {
 		return ""
 	}
-	return hotty.Sync(cmds...)
+	return hotty.Delta(name, ops)
 }
 
 // title is the frame's first row.

@@ -275,9 +275,18 @@ type surface struct {
 	values []string // the legend's
 }
 
+// cellCSS is a cell's size in CSS pixels, a usual 9×18 before the host has
+// said.
+func cellCSS(c hotty.Caps) (w, h float64) {
+	if c.CellCSS.W <= 0 || c.CellCSS.H <= 0 {
+		return 9, 18
+	}
+	return c.CellCSS.W, c.CellCSS.H
+}
+
 // newSurface places the chart, waiting for numbers, under the command line.
 func newSurface(ctx context.Context, t *hottyterm.Term, rows int) *surface {
-	cw, ch := hotty.CellCSS(t.Caps())
+	cw, ch := cellCSS(t.Caps())
 	s := &surface{ctx: ctx, t: t, name: t.Surface("chart"), cols: t.Size().Cols, rows: rows,
 		ch: ch, light: hotty.Light(t.Caps()), scale: series.NewScale(), n: -1}
 	s.w, s.h = float64(s.cols)*cw, float64(rows-1)*ch
@@ -335,20 +344,21 @@ func (s *surface) frame(d *data) {
 		s.n, s.axis, s.values = len(values), axis, legend
 		return
 	}
-	var cmds []string
+	// The frame's changes are one delta (SDK.md §2.9).
+	var ops []hotty.Op
 	if axis != s.axis {
-		cmds = append(cmds, hotty.SetAttr(s.name, lines[0].GridID(), "d", lines[0].GridPath()),
-			hotty.MorphTo(s.name, "ticks", s.ticks(d, axis)))
+		ops = append(ops, hotty.OpAttr(lines[0].GridID(), "d", lines[0].GridPath()),
+			hotty.OpMorph("ticks", s.ticks(d, axis)))
 		s.axis = axis
 	}
 	for i, l := range lines {
-		cmds = append(cmds, l.DeltaShapes(s.name, values[i])...)
+		ops = append(ops, l.ShapeOps(values[i])...)
 		if legend[i] != s.values[i] {
-			cmds = append(cmds, hotty.SetText(s.name, "v"+strconv.Itoa(i), legend[i]))
+			ops = append(ops, hotty.OpText("v"+strconv.Itoa(i), legend[i]))
 		}
 	}
 	s.values = legend
-	_ = s.t.Send(hotty.Sync(cmds...))
+	_ = s.t.Send(hotty.Delta(s.name, ops))
 }
 
 // page is the document around a body.

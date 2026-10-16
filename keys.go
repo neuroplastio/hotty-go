@@ -36,6 +36,10 @@ const (
 	Submit             Action = "submit"
 	// Program binds a key to nothing: it reaches the program.
 	Program Action = "program"
+	// Prefix binds a key to the program as Program does, and every key
+	// after it reaches the program too, until it sends a=focus or a=blur
+	// (SPEC §10.5).
+	Prefix Action = "prefix"
 	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
 	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
 	// nothing with them.
@@ -69,7 +73,7 @@ var actions = map[Action]bool{
 	LineStart: true, LineEnd: true, DeleteCharBackward: true, DeleteCharForward: true,
 	DeleteWordBackward: true, DeleteWordForward: true, DeleteToLineStart: true, DeleteToLineEnd: true,
 	LinePrevious: true, LineNext: true, PageUp: true, PageDown: true,
-	InputStart: true, InputEnd: true, SelectAll: true, Newline: true, Submit: true, Program: true,
+	InputStart: true, InputEnd: true, SelectAll: true, Newline: true, Submit: true, Program: true, Prefix: true,
 	Copy: true, Cut: true, Paste: true, Undo: true, Redo: true,
 	ScrollUp: true, ScrollDown: true, ScrollLeft: true, ScrollRight: true,
 	ScrollPageUp: true, ScrollPageDown: true, ScrollHalfPageUp: true, ScrollHalfPageDown: true,
@@ -792,20 +796,31 @@ func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
 }
 
 // Program reports whether the keymap gives a key to the program: binds it
-// to program, or, for a key with Shift that no binding names, binds it
-// without Shift (SPEC §10.2, keys for the program).
+// to program or prefix, or, for a key with Shift that no binding names,
+// binds it without Shift (SPEC §10.2, keys for the program).
 //
 // Every focused element has a keymap, and outside a text field program and
 // the scroll actions are the only actions it gives. A host reads the
 // element's as a field's, from the data-keys values of the elements from
 // the root down to it, but with its scroll actions and no default keymap:
 // ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds
-// to program to the program before the element uses it, and before the
-// surface scrolls with it; a nearer binding of the key to another action
-// takes it back. In a field, Lookup says as much.
+// to program or prefix to the program before the element uses it, and
+// before the surface scrolls with it; a nearer binding of the key to
+// another action takes it back. In a field, Lookup says as much.
 func (m *Keymap) Program(name string) bool {
 	_, a, bound, _ := m.bound(name)
-	return bound && a == Program
+	return bound && (a == Program || a == Prefix)
+}
+
+// Prefix reports whether the keymap binds a key to prefix, or, for a key
+// with Shift that no binding names, binds it without Shift. A host asks it
+// of a key Program gives the program, and from then on gives the program
+// every key, Tab, Shift+Tab and Escape too, until the program sends a=focus
+// or a=blur, the surface loses the keyboard, or the user focuses an
+// element of it with a press (SPEC §10.5).
+func (m *Keymap) Prefix(name string) bool {
+	_, a, bound, _ := m.bound(name)
+	return bound && a == Prefix
 }
 
 // Scroll is the scroll action the keymap binds a key to, or "" for none:
@@ -838,7 +853,7 @@ func (m *Keymap) Lookup(name string) Action {
 		return ""
 	}
 	switch {
-	case bound && (a == Program || a.Multiline() && !m.multiline):
+	case bound && (a == Program || a == Prefix || a.Multiline() && !m.multiline):
 		return ""
 	case bound:
 		return a

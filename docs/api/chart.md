@@ -19,7 +19,7 @@ A Line is one series: its box, its scale and its colour. SVG is the chart in a b
 The SVG keeps to rules that make it draw the same in every host:
 
   - Presentation attributes only (fill, stroke, stroke-width), never CSS. Some hosts hand inline SVG to an SVG library: hotty-blitz gives it to usvg, which the document's stylesheet never reaches.
-  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.CellCSS), and send new ones with Delta when it changes.
+  - The viewBox is the box's size in CSS pixels (W, H), so the drawing is stretched to its box by little, if at all. A stroke keeps its width at any angle, and its joins stay round. usvg has no vector-effect: non-scaling-stroke, and a viewBox far from the box's shape draws steep segments thin. Take W and H from the box's cells (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
   - The \<svg> is absolutely positioned in its .chart-box (CSS), which has the size: as a grid or flex item, an \<svg> is sized by its aspect ratio in some engines (Blitz) instead of stretched.
 
 Values that change over time go best in buckets fixed in time (Xs), so that what was drawn stays put and a tick's delta moves the line along rather than reshaping it.
@@ -59,14 +59,16 @@ rpsA d=M0,54L0,35.1L36,37.8L72,21.6L108,10.8L108,54Z
   - [`func (c Line) AreaID() string`](#Line.AreaID)
   - [`func (c Line) AreaPath(values []float64) string`](#Line.AreaPath)
   - [`func (c Line) BoxID() string`](#Line.BoxID)
-  - [`func (c Line) Delta(surface string, values []float64) []string`](#Line.Delta)
-  - [`func (c Line) DeltaShapes(surface string, values []float64) []string`](#Line.DeltaShapes)
+  - [`func (c Line) Delta(surface string, values []float64) string`](#Line.Delta)
+  - [`func (c Line) DeltaShapes(surface string, values []float64) string`](#Line.DeltaShapes)
   - [`func (c Line) GridID() string`](#Line.GridID)
   - [`func (c Line) GridPath() string`](#Line.GridPath)
   - [`func (c Line) LineID() string`](#Line.LineID)
+  - [`func (c Line) Ops(values []float64) []hotty.Op`](#Line.Ops)
   - [`func (c Line) Path(values []float64) string`](#Line.Path)
   - [`func (c Line) Rules() string`](#Line.Rules)
   - [`func (c Line) SVG(values []float64) string`](#Line.SVG)
+  - [`func (c Line) ShapeOps(values []float64) []hotty.Op`](#Line.ShapeOps)
   - [`func (c Line) Shapes(values []float64) string`](#Line.Shapes)
 
 ### <a id="pkg-examples"></a>Examples
@@ -248,10 +250,10 @@ BoxID is the id of the chart's \<svg>, which SVG draws: its viewBox is the chart
 ### <a id="Line.Delta"></a>func (Line) Delta
 
 ```go
-func (c Line) Delta(surface string, values []float64) []string
+func (c Line) Delta(surface string, values []float64) string
 ```
 
-Delta is the commands that bring a chart drawn by SVG to values, and to its size, colour and grid now: for a chart whose box changed, or whose colour says something (a state). Send them as they are (hotty.Sync for several charts at once).
+Delta is the command that brings a chart drawn by SVG to values, and to its size, colour and grid now: for a chart whose box changed, or whose colour says something (a state). It is one delta; send it as it is, or put the ops of several charts in one hotty.Delta.
 
 #### <a id="example-Line.Delta"></a>Example
 
@@ -277,10 +279,10 @@ p99L stroke=#f07a7a
 ### <a id="Line.DeltaShapes"></a>func (Line) DeltaShapes
 
 ```go
-func (c Line) DeltaShapes(surface string, values []float64) []string
+func (c Line) DeltaShapes(surface string, values []float64) string
 ```
 
-DeltaShapes is the commands that move the line, and the area if there is one, to values, and nothing else: the cheap delta of every tick, for a chart whose box and colour stay as they were.
+DeltaShapes is the command that moves the line, and the area if there is one, to values, and nothing else: the cheap delta of every tick, for a chart whose box and colour stay as they were.
 
 ### <a id="Line.GridID"></a>func (Line) GridID
 
@@ -305,6 +307,14 @@ func (c Line) LineID() string
 ```
 
 LineID is the id of the line, a \<path>.
+
+### <a id="Line.Ops"></a>func (Line) Ops
+
+```go
+func (c Line) Ops(values []float64) []hotty.Op
+```
+
+Ops are the ops of Delta: for a program that puts several charts, or a chart and other changes, in one delta.
 
 ### <a id="Line.Path"></a>func (Line) Path
 
@@ -359,6 +369,14 @@ func (c Line) SVG(values []float64) string
 ```
 
 SVG is the chart in a box of its own (Box), its grid below its area and line.
+
+### <a id="Line.ShapeOps"></a>func (Line) ShapeOps
+
+```go
+func (c Line) ShapeOps(values []float64) []hotty.Op
+```
+
+ShapeOps are the ops of DeltaShapes.
 
 ### <a id="Line.Shapes"></a>func (Line) Shapes
 

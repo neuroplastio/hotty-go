@@ -22,7 +22,7 @@ var hottySession = []string{
 	hotty.PlaceAt("card", 2, 1, hotty.Placement{Cols: 10, Rows: 3}),
 	"\x1b[5;1Hbelow",
 	hotty.SetText("card", "st", "done"),
-	hotty.Delta("card", hotty.OpAppend, "st", "", []byte(`<i id="n">1</i>`)),
+	hotty.Delta("card", []hotty.Op{hotty.OpAppend("st", `<i id="n">1</i>`)}),
 	hotty.SetVar("card", "st", "w", "40%"),
 	hotty.SetAttr("card", "st", "title", "the state"),
 	// Scrolled: the card's top row out of view, through a window.
@@ -30,7 +30,7 @@ var hottySession = []string{
 	hotty.Hide("card"),
 	hotty.Doc("plan", `<ol id="steps"><li>one</li></ol>`),
 	hotty.PlaceAt("plan", 0, 2, hotty.Placement{Cols: 12, Rows: 2, Z: 1}),
-	hotty.Delta("plan", hotty.OpInner, "steps", "", []byte(`<li>one</li><li id="two">two</li>`)),
+	hotty.Delta("plan", []hotty.Op{hotty.OpInner("steps", `<li>one</li><li id="two">two</li>`)}),
 	hotty.PlaceAt("card", 1, 1, hotty.Placement{Cols: 10, Rows: 3}),
 	hotty.Doc("card", `<p id="st">again</p>`),
 	hotty.MorphTo("plan", "", `<li id="two">two!</li>`),
@@ -123,13 +123,13 @@ func TestSurfacePlacements(t *testing.T) {
 	for i, st := range steps {
 		_, _ = s.WriteString(st.write)
 		var box string
-		for _, m := range decode(s.Delta("vt")) {
+		for _, o := range opsOf(t, s.Delta("vt")) {
 			switch {
-			case hotty.Get(m.Control, "op") == "attr" && hotty.Get(m.Control, "t") == "vt-p1":
-				box = string(m.Payload)
-			case hotty.Get(m.Control, "op") == "append" && strings.Contains(string(m.Payload), `style="display:none"`):
-			case hotty.Get(m.Control, "a") == "delta" && !strings.HasPrefix(hotty.Get(m.Control, "t"), "vt-r"):
-				t.Errorf("step %d: %v %q", i, m.Control, m.Payload)
+			case o.Op == "attr" && o.Target == "vt-p1":
+				box = val(o)
+			case o.Op == "append" && strings.Contains(val(o), `style="display:none"`):
+			case !strings.HasPrefix(o.Target, "vt-r"):
+				t.Errorf("step %d: %+v", i, o)
 			}
 		}
 		if box != st.box {
@@ -137,8 +137,8 @@ func TestSurfacePlacements(t *testing.T) {
 		}
 	}
 	_, _ = s.WriteString(hotty.Del("card"))
-	if ms := decode(s.Delta("vt")); len(ms) != 1 || hotty.Get(ms[0].Control, "op") != "remove" || hotty.Get(ms[0].Control, "t") != "vt-p1" {
-		t.Errorf("a delete: %v", ms)
+	if ops := opsOf(t, s.Delta("vt")); len(ops) != 1 || ops[0].Op != "remove" || ops[0].Target != "vt-p1" {
+		t.Errorf("a delete: %v", ops)
 	}
 }
 
@@ -151,9 +151,9 @@ func TestSurfaceScrollsWithItsLine(t *testing.T) {
 		hotty.Place("doc", hotty.Placement{Cols: 10, Rows: 2}) + "$ ")
 	style := func() string {
 		var st string
-		for _, m := range decode(s.Delta("vt")) {
-			if hotty.Get(m.Control, "op") == "attr" && hotty.Get(m.Control, "t") == "vt-p1" {
-				st = string(m.Payload)
+		for _, o := range opsOf(t, s.Delta("vt")) {
+			if o.Op == "attr" && o.Target == "vt-p1" {
+				st = val(o)
 			}
 		}
 		return st
@@ -238,8 +238,8 @@ func TestSurfaceIsShownNotUsed(t *testing.T) {
 		}
 	}
 	_, _ = s.WriteString(hotty.SetAttr("d", "go", "href", "/other"))
-	if ms := decode(s.Delta("vt")); len(ms) != 1 || hotty.Get(ms[0].Control, "op") != "unattr" || hotty.Get(ms[0].Control, "k") != "href" {
-		t.Errorf("a link's href set: %v", ms)
+	if ops := opsOf(t, s.Delta("vt")); len(ops) != 1 || ops[0].Op != "unattr" || ops[0].Key != "href" {
+		t.Errorf("a link's href set: %v", ops)
 	}
 }
 
@@ -262,12 +262,12 @@ func TestSurfaceDeltasNobodyAskedFor(t *testing.T) {
 	send(t, h, hotty.Sync(s.Delta("vt")...))
 	big := strings.Repeat("x", 4096)
 	for i := range 200 {
-		_, _ = s.WriteString(hotty.Delta("d", hotty.OpInner, "n", "", []byte(big+strconv.Itoa(i))))
+		_, _ = s.WriteString(hotty.Delta("d", []hotty.Op{hotty.OpInner("n", big+strconv.Itoa(i))}))
 	}
 	cmds := s.Delta("vt")
-	ms := decode(cmds)
-	if len(ms) != 1 || hotty.Get(ms[0].Control, "t") != "vt" || hotty.Get(ms[0].Control, "op") != "morph" {
-		t.Fatalf("%d commands, the first %v", len(ms), ms[0].Control)
+	ops := opsOf(t, cmds)
+	if len(cmds) != 1 || len(ops) != 1 || ops[0].Target != "vt" || ops[0].Op != "morph" {
+		t.Fatalf("%d commands, ops %v", len(cmds), ops)
 	}
 	send(t, h, hotty.Sync(cmds...))
 	if got := h.Surface("vt").TextOf("vt-d1-n"); got != big+"199" {

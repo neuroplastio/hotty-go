@@ -169,6 +169,23 @@ func command(h *hottytest.Host, keys ...string) (hotty.Message, bool) {
 	return hotty.Message{}, false
 }
 
+// first is the first command with the keys.
+func first(h *hottytest.Host, keys ...string) hotty.Message {
+	for _, m := range h.Commands() {
+		match := true
+		for j := 0; j+1 < len(keys); j += 2 {
+			if hotty.Get(m.Control, keys[j]) != keys[j+1] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return m
+		}
+	}
+	return hotty.Message{}
+}
+
 func count(h *hottytest.Host, keys ...string) int {
 	n := 0
 	for _, m := range h.Commands() {
@@ -206,7 +223,7 @@ func TestAProgramOnAHost(t *testing.T) {
 		t.Errorf("document: %s", doc.Payload)
 	}
 	// At column 2, row 1, keeping the cursor, asking for presses.
-	place, _ := command(h, "a", "place", "s", cardName)
+	place := first(h, "a", "place", "s", cardName)
 	if m := place; hotty.Get(m.Control, "c") != "20" || hotty.Get(m.Control, "r") != "3" || hotty.Get(m.Control, "p") != "1" || hotty.Get(m.Control, "C") != "1" {
 		t.Errorf("placement: %v", m.Control)
 	}
@@ -229,8 +246,15 @@ func TestAProgramOnAHost(t *testing.T) {
 		}
 	}
 	eventually(t, "the status is changed by a delta", func() bool {
-		m, ok := command(h, "a", "delta", "s", cardName, "op", "text", "t", "status")
-		return ok && string(m.Payload) == "clicked"
+		for _, m := range h.Commands() {
+			ops, _ := hotty.DeltaOf(m)
+			for _, op := range ops {
+				if hotty.Get(m.Control, "s") == cardName && op.Op == "text" && op.Target == "status" && op.Value != nil && *op.Value == "clicked" {
+					return true
+				}
+			}
+		}
+		return false
 	})
 
 	// The renderer erases the screen: the card is placed again, and its

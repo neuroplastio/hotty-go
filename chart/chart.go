@@ -19,7 +19,7 @@
 //     any angle, and its joins stay round. usvg has no
 //     vector-effect: non-scaling-stroke, and a viewBox far from the box's
 //     shape draws steep segments thin. Take W and H from the box's cells
-//     (hotty.CellCSS), and send new ones with Delta when it changes.
+//     (hotty.Caps.CellCSS), and send new ones with Delta when it changes.
 //   - The <svg> is absolutely positioned in its .chart-box (CSS), which has
 //     the size: as a grid or flex item, an <svg> is sized by its aspect
 //     ratio in some engines (Blitz) instead of stretched.
@@ -197,35 +197,46 @@ func Box(id string, w, h float64, shapes string) string {
 		`" preserveAspectRatio="none">` + shapes + `</svg></div>`
 }
 
-// Delta is the commands that bring a chart drawn by SVG to values, and to
+// Delta is the command that brings a chart drawn by SVG to values, and to
 // its size, colour and grid now: for a chart whose box changed, or whose
-// colour says something (a state). Send them as they are (hotty.Sync for
-// several charts at once).
-func (c Line) Delta(surface string, values []float64) []string {
+// colour says something (a state). It is one delta; send it as it is, or
+// put the ops of several charts in one hotty.Delta.
+func (c Line) Delta(surface string, values []float64) string {
+	return hotty.Delta(surface, c.Ops(values))
+}
+
+// Ops are the ops of Delta: for a program that puts several charts, or a
+// chart and other changes, in one delta.
+func (c Line) Ops(values []float64) []hotty.Op {
 	w, h := c.size()
 	col := c.color()
-	out := []string{hotty.SetAttr(surface, c.BoxID(), "viewBox", "0 0 "+num(w)+" "+num(h))}
+	out := []hotty.Op{hotty.OpAttr(c.BoxID(), "viewBox", "0 0 "+num(w)+" "+num(h))}
 	if len(c.Grid) > 0 {
-		out = append(out, hotty.SetAttr(surface, c.GridID(), "d", c.GridPath()))
+		out = append(out, hotty.OpAttr(c.GridID(), "d", c.GridPath()))
 	}
 	out = append(out,
-		hotty.SetAttr(surface, c.LineID(), "d", c.Path(values)),
-		hotty.SetAttr(surface, c.LineID(), "stroke", col))
+		hotty.OpAttr(c.LineID(), "d", c.Path(values)),
+		hotty.OpAttr(c.LineID(), "stroke", col))
 	if c.Fill > 0 {
 		out = append(out,
-			hotty.SetAttr(surface, c.AreaID(), "d", c.AreaPath(values)),
-			hotty.SetAttr(surface, c.AreaID(), "fill", col))
+			hotty.OpAttr(c.AreaID(), "d", c.AreaPath(values)),
+			hotty.OpAttr(c.AreaID(), "fill", col))
 	}
 	return out
 }
 
-// DeltaShapes is the commands that move the line, and the area if there is
+// DeltaShapes is the command that moves the line, and the area if there is
 // one, to values, and nothing else: the cheap delta of every tick, for a
 // chart whose box and colour stay as they were.
-func (c Line) DeltaShapes(surface string, values []float64) []string {
-	out := []string{hotty.SetAttr(surface, c.LineID(), "d", c.Path(values))}
+func (c Line) DeltaShapes(surface string, values []float64) string {
+	return hotty.Delta(surface, c.ShapeOps(values))
+}
+
+// ShapeOps are the ops of DeltaShapes.
+func (c Line) ShapeOps(values []float64) []hotty.Op {
+	out := []hotty.Op{hotty.OpAttr(c.LineID(), "d", c.Path(values))}
 	if c.Fill > 0 {
-		out = append(out, hotty.SetAttr(surface, c.AreaID(), "d", c.AreaPath(values)))
+		out = append(out, hotty.OpAttr(c.AreaID(), "d", c.AreaPath(values)))
 	}
 	return out
 }

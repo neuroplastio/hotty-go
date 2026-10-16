@@ -78,7 +78,7 @@ func TestAScrollingSurfaceAsksTheHostWithItsDocument(t *testing.T) {
 	want := []Surface{{Name: "x", Rect: Rect{0, 1, 40, 10}, Scroll: hotty.ScrollVertical,
 		Doc: func() string { docs++; return "<p>x</p>" }}}
 	h.Layout(want)
-	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1:scroll=1;") || !strings.Contains(out, "a=place:s=x") {
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:scroll=1;") || !strings.Contains(out, "a=place:s=x") {
 		t.Fatalf("first layout sent %q", out)
 	}
 	h.Layout(want)
@@ -90,7 +90,7 @@ func TestAScrollingSurfaceAsksTheHostWithItsDocument(t *testing.T) {
 	// (SPEC §5.1).
 	want[0].Scroll = 0
 	h.Layout(want)
-	if out := flushed(h); !strings.Contains(out, "a=doc:s=x:q=1;") || strings.Contains(out, "scroll=") || strings.Contains(out, "a=place") {
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=x;") || strings.Contains(out, "scroll=") || strings.Contains(out, "a=place") {
 		t.Fatalf("dropping Scroll sent %q", out)
 	}
 	if h.Count.Docs != 2 || h.Count.Places != 1 {

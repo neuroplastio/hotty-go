@@ -137,8 +137,8 @@ func TestDetector(t *testing.T) {
 	if q := d.Start(at(0)); q != Query(1) || d.Deadline != at(1500) {
 		t.Fatalf("Start: %q, deadline %v", q, d.Deadline)
 	}
-	if !d.Reply(reply(`{"v":"0.2","host":"h","version":"0.0.10","passthrough":true}`), at(10)) ||
-		d.State != Native || !d.Decided || d.Done || d.Caps.Version != "0.0.10" || !d.Caps.Passthrough {
+	if !d.Reply(reply(`{"v":"0.3","host":"h","version":"0.0.10","features":["passthrough"]}`), at(10)) ||
+		d.State != Native || !d.Decided || d.Done || d.Caps.Version != "0.0.10" || !HasFeature(d.Caps, FeaturePassthrough) {
 		t.Fatalf("the host's reply: %+v", d)
 	}
 	if !d.DA1(at(20)) || !d.Done || !d.Deadline.IsZero() {
@@ -152,7 +152,7 @@ func TestDetector(t *testing.T) {
 	var late Detector
 	late.Start(at(0))
 	late.Tick(at(1500))
-	if !late.Reply(reply(`{"v":"0.2"}`), at(1600)) || late.State != Text {
+	if !late.Reply(reply(`{"v":"0.3"}`), at(1600)) || late.State != Text {
 		t.Errorf("a late reply: %+v", late)
 	}
 	other, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`))
@@ -164,7 +164,7 @@ func TestDetector(t *testing.T) {
 	// and an error, answer the query: a host this program cannot use.
 	for name, r := range map[string]Reply{
 		"caps that do not decode": reply(`[`),
-		"another version":         reply(`{"v":"0.3"}`),
+		"another version":         reply(`{"v":"0.2"}`),
 		"no capabilities":         reply(``),
 		"EVERSION": func() Reply {
 			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.3"}`))
@@ -182,20 +182,13 @@ func TestDetector(t *testing.T) {
 	}
 	var native Detector
 	native.Start(at(0))
-	native.Reply(reply(`{"v":"0.2"}`), at(5))
+	native.Reply(reply(`{"v":"0.3"}`), at(5))
 	native.End(at(6))
 	if !native.Done || native.State != Native {
 		t.Errorf("End after native: %+v", native)
 	}
 	if Detecting.String() != "detecting" || Text.String() != "text" || DetectState(9).String() != "DetectState(9)" {
 		t.Error("DetectState.String")
-	}
-}
-
-func TestSendsDrags(t *testing.T) {
-	drags := Caps{Events: []string{EventClick, EventDrag}}
-	if !Sends(drags, EventDragStart) || !Sends(drags, EventDragEnd) || Sends((Caps{Events: []string{EventClick}}), EventDragEnd) {
-		t.Error("Sends for dragstart and dragend")
 	}
 }
 

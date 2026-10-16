@@ -92,7 +92,7 @@ func TestKeys(t *testing.T) {
 	send(h, hotty.Focus("k", "name"))
 	h.Key("Enter")
 	expect(t, sent(h), `ev change t=notes {"value":"h\ni"}`,
-		`ev submit t=f {"name":"Ad A","notes":"h\ni","ok":"yes","size":"small"}`)
+		`ev submit t=f {"fields":[["name","Ad A"],["notes","h\ni"],["ok","yes"],["size","small"]]}`)
 
 	// Escape is never the surface's.
 	if h.Key("Escape") {

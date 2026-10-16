@@ -315,7 +315,9 @@ func (t *Term) Native() bool {
 	return t.native
 }
 
-// Caps is what the host said about itself, when Native.
+// Caps is what the host said about itself, when Native, kept current by the
+// caps events it has sent since (SPEC §4, hotty.Merge): the events still
+// reach Events, for a program that acts on a change.
 func (t *Term) Caps() hotty.Caps {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -742,12 +744,22 @@ func (t *Term) start() {
 					continue
 				case hotty.Complete:
 					ev = Message{m}
+					t.mergeCaps(m)
 				}
 			}
 			t.route(ev)
 		}
 		close(t.ended)
 	}()
+}
+
+// mergeCaps folds a caps event into the capabilities (SPEC §4).
+func (t *Term) mergeCaps(m hotty.Message) {
+	if e, ok := hotty.EventOf(m); ok && e.Kind == hotty.EventCaps && e.Changed != nil {
+		t.mu.Lock()
+		t.caps = hotty.Merge(t.caps, *e.Changed)
+		t.mu.Unlock()
+	}
 }
 
 // route gives an event to the first tap that takes it, or queues it for

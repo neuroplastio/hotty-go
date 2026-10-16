@@ -108,22 +108,23 @@ func TestWellFormed(t *testing.T) {
 // What this package writes is a body a host may send: empty or full, no
 // field is nil.
 func TestEncodedBodiesWellFormed(t *testing.T) {
-	href, yes, one := "#a", true, 1
+	href, yes, one, v := "#a", true, 1, "x"
 	area := &Area{Col: -1, Row: 2, W: 3, H: 4}
 	for _, v := range []interface {
 		EncodeMsg(*msgp.Writer) error
 	}{
-		&Caps{}, &Caps{V: Version, Ops: []string{"text"}, Cell: &Cell{W: 9, H: 18}, Scale: 2,
-			Limits: map[string]int{"surfaces": 8}, Net: map[string][]string{"img-src": nil}, Scroll: true},
+		&Caps{}, &Caps{V: Version, Features: []string{FeatureHover}, CellCSS: Size{W: 9, H: 18}, Scale: 2,
+			Limits: map[string]int{"surfaces": 8}, Net: map[string][]string{"img-src": nil}},
 		&errorBody{}, &errorBody{Code: EINVAL, Detail: "x"},
-		&clickDetail{}, &clickDetail{Value: "v", Href: &href, URL: "u", Area: area},
-		&pressDetail{}, &pressDetail{Area: area},
+		&clickDetail{}, &clickDetail{Value: "v", Href: &href, URL: "u", Area: area, Mods: ModShift},
+		&pressDetail{}, &pressDetail{Area: area, Mods: ModAlt},
 		&changeDetail{}, &changeDetail{Checked: &yes, Value: "on"},
 		&inputDetail{}, &fitDetail{R: 3},
-		&dragDetail{}, &dragDetail{C: 1, R: 2, Keys: []string{"shift"}, X: &one, Y: &one},
+		&dragDetail{}, &dragDetail{C: 1, R: 2, Mods: ModMeta, X: &one, Y: &one},
 		&hoverDetail{}, &hoverDetail{C: &one, R: &one}, &hoverDetail{Out: true},
-		&submitDetail{}, &submitDetail{"name": "Ada"},
+		&submitDetail{}, &submitDetail{Fields: []FormField{{"name", "Ada"}, {"name", ""}}},
 		&Size{}, &Size{W: 720, H: 36},
+		&deltaBody{}, &deltaBody{Ops: []Op{OpText("a", ""), OpRemove("b"), OpReveal("c", ""), {Op: "morph", Value: &v}}},
 	} {
 		if b := encodeBody(v); !wellFormed(b) {
 			t.Errorf("%T: % x is not a body a host sends", v, b)

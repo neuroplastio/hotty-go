@@ -55,13 +55,17 @@ type Problem struct {
 // Read reads a submit event's fields (hotty.Event.Fields) into answers, and
 // reports the fields that stop the form: required ones left empty, and
 // values that are not what their type asks for.
-func (s *Spec) Read(fields map[string]string) (Answers, []Problem) {
+func (s *Spec) Read(fields []hotty.FormField) (Answers, []Problem) {
+	sent := make(map[string]string, len(fields))
+	for _, f := range fields {
+		sent[f.Name] = f.Value
+	}
 	a := Answers{values: map[string]any{}}
 	var problems []Problem
 	for i, f := range s.Fields {
 		a.names = append(a.names, f.Name)
-		v, sent := fields[f.Name]
-		value, msg := f.read(v, sent)
+		v, ok := sent[f.Name]
+		value, msg := f.read(v, ok)
 		a.values[f.Name] = value
 		if msg != "" {
 			problems = append(problems, Problem{Field: i, Message: msg})
@@ -137,8 +141,8 @@ func decimal(v string) (float64, bool) {
 }
 
 // Show returns the commands that show problems in the form placed as
-// surface, clear the ones fixed since, and give the keyboard to the first
-// field with a problem. The values typed stay as they are. Problems for
+// surface, clear the ones fixed since, in one delta, and give the keyboard
+// to the first field with a problem. The values typed stay as they are. Problems for
 // fields the spec does not have are left out.
 func (s *Spec) Show(surface string, problems []Problem) []string {
 	msg := map[int]string{}
@@ -154,7 +158,7 @@ func (s *Spec) Show(surface string, problems []Problem) []string {
 			first = p.Field
 		}
 	}
-	var cmds []string
+	var ops []hotty.Op
 	for i, f := range s.Fields {
 		class := "field k-" + f.kind()
 		if i > 0 {
@@ -165,8 +169,9 @@ func (s *Spec) Show(surface string, problems []Problem) []string {
 			class += " bad"
 			text = "! " + m
 		}
-		cmds = append(cmds, hotty.SetText(surface, ProblemID(i), text), hotty.SetAttr(surface, FieldID(i), "class", class))
+		ops = append(ops, hotty.OpText(ProblemID(i), text), hotty.OpAttr(FieldID(i), "class", class))
 	}
+	cmds := []string{hotty.Delta(surface, ops)}
 	if first >= 0 {
 		target := ControlID(first)
 		if k := s.Fields[first].kind(); k == Select || k == Radio {
@@ -233,12 +238,14 @@ func (st *State) Apply(e hotty.Event) bool {
 	return false
 }
 
-// Fields is the form's fields as a submit event would carry them: unchecked
-// checkboxes and unchosen choices are missing.
-func (st *State) Fields() map[string]string {
-	out := make(map[string]string, len(st.fields))
-	for k, v := range st.fields {
-		out[k] = v
+// Fields is the form's fields as a submit event would carry them, in the
+// spec's order: unchecked checkboxes and unchosen choices are missing.
+func (st *State) Fields() []hotty.FormField {
+	var out []hotty.FormField
+	for _, f := range st.spec.Fields {
+		if v, ok := st.fields[f.Name]; ok {
+			out = append(out, hotty.FormField{Name: f.Name, Value: v})
+		}
 	}
 	return out
 }

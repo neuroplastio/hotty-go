@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -83,24 +84,16 @@ func TestCommandsRoundTrip(t *testing.T) {
 		control map[string]string
 		payload string
 	}{
-		{"doc", Doc("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card", "q": "1"}, "<p>hello</p>"},
-		{"doc detached", Doc("card", "<p>hello</p>", Detached()), map[string]string{"a": "doc", "s": "card", "d": "1", "q": "1"}, "<p>hello</p>"},
-		{"doc detached, numbered", Doc("card", "<p>hello</p>", Detached(), N(3)), map[string]string{"a": "doc", "s": "card", "d": "1", "n": "3", "q": "0"}, "<p>hello</p>"},
-		{"doc scrolls both ways", Doc("log", "<pre></pre>", Scroll(ScrollVertical|ScrollHorizontal)), map[string]string{"a": "doc", "s": "log", "scroll": "3", "q": "1"}, "<pre></pre>"},
-		{"doc scroll 0", Doc("log", "<pre></pre>", Scroll(0)), map[string]string{"a": "doc", "s": "log", "q": "1"}, "<pre></pre>"},
-		{"doc scroll as given", Doc("log", "<pre></pre>", Scroll(4)), map[string]string{"a": "doc", "s": "log", "scroll": "4", "q": "1"}, "<pre></pre>"},
-		{"place auto", Place("card", Placement{Cols: 40}), map[string]string{"a": "place", "s": "card", "c": "40", "r": "auto", "q": "1"}, ""},
-		{"place", Place("card", Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}),
-			map[string]string{"a": "place", "s": "card", "c": "40", "r": "3", "z": "-2", "p": "1", "C": "1", "q": "1"}, ""},
+		{"doc", Doc("card", "<p>hello</p>"), map[string]string{"a": "doc", "s": "card"}, "<p>hello</p>"},
+		{"doc detached", Doc("card", "<p>hello</p>", Detached()), map[string]string{"a": "doc", "s": "card", "d": "1"}, "<p>hello</p>"},
+		{"doc detached, numbered", Doc("card", "<p>hello</p>", Detached(), N(3)), map[string]string{"a": "doc", "s": "card", "d": "1", "n": "3"}, "<p>hello</p>"},
+		{"doc scrolls both ways", Doc("log", "<pre></pre>", Scroll(ScrollVertical|ScrollHorizontal)), map[string]string{"a": "doc", "s": "log", "scroll": "3"}, "<pre></pre>"},
+		{"doc scroll 0", Doc("log", "<pre></pre>", Scroll(0)), map[string]string{"a": "doc", "s": "log"}, "<pre></pre>"},
+		{"doc scroll as given", Doc("log", "<pre></pre>", Scroll(4)), map[string]string{"a": "doc", "s": "log", "scroll": "4"}, "<pre></pre>"},
+		{"place auto", Place("card", Placement{Cols: 40}), map[string]string{"a": "place", "s": "card", "c": "40", "r": "auto"}, ""},
+		{"place", Place("card", Placement{Cols: 40, Rows: 3, Z: -2, Press: On, Fit: Off, KeepCursor: true}),
+			map[string]string{"a": "place", "s": "card", "c": "40", "r": "3", "z": "-2", "p": "1", "f": "0", "C": "1"}, ""},
 		{"hide", Hide("card"), map[string]string{"a": "hide", "s": "card", "q": "2"}, ""},
-		{"text", SetText("card", "clock", "12:00"), map[string]string{"a": "delta", "s": "card", "op": "text", "t": "clock", "q": "2"}, "12:00"},
-		{"var", SetVar("dash", "cpu", "p", "42"), map[string]string{"a": "delta", "s": "dash", "op": "var", "t": "cpu", "k": "p", "q": "2"}, "42"},
-		{"attr", SetAttr("dash", "cpu", "class", "hot"), map[string]string{"a": "delta", "s": "dash", "op": "attr", "t": "cpu", "k": "class", "q": "2"}, "hot"},
-		{"unattr", RemoveAttr("dash", "cpu", "class"), map[string]string{"a": "delta", "s": "dash", "op": "unattr", "t": "cpu", "k": "class", "q": "2"}, ""},
-		{"reveal", Reveal("doc", "usage", RevealStart), map[string]string{"a": "delta", "s": "doc", "op": "reveal", "t": "usage", "q": "2"}, "start"},
-		{"reveal nearest", Reveal("doc", "usage", RevealNearest), map[string]string{"a": "delta", "s": "doc", "op": "reveal", "t": "usage", "q": "2"}, ""},
-		{"morph by ids", MorphTo("dash", "", "<b id=x>1</b>"), map[string]string{"a": "delta", "s": "dash", "op": "morph", "q": "2"}, "<b id=x>1</b>"},
-		{"append", Delta("log", OpAppend, "lines", "", []byte("<li>x</li>")), map[string]string{"a": "delta", "s": "log", "op": "append", "t": "lines", "q": "2"}, "<li>x</li>"},
 		{"res", Res("logo", "image/svg+xml", []byte("<svg/>")), map[string]string{"a": "res", "id": "logo", "type": "image/svg+xml", "q": "2"}, "<svg/>"},
 		{"del res", DelRes("logo"), map[string]string{"a": "del", "id": "logo", "q": "2"}, ""},
 		{"del", Del("card"), map[string]string{"a": "del", "s": "card", "q": "2"}, ""},
@@ -120,33 +113,120 @@ func TestCommandsRoundTrip(t *testing.T) {
 	}
 }
 
+// A delta is one list of ops in a msgpack body (SPEC §6.1); an op has a
+// value when it takes one, even empty, and none otherwise.
+func TestDelta(t *testing.T) {
+	str := func(s string) *string { return &s }
+	for _, c := range []struct {
+		name string
+		cmd  string
+		ops  []Op
+	}{
+		{"text", SetText("card", "clock", "12:00"), []Op{{Op: "text", Target: "clock", Value: str("12:00")}}},
+		{"text, empty", SetText("card", "clock", ""), []Op{{Op: "text", Target: "clock", Value: str("")}}},
+		{"var", SetVar("dash", "cpu", "p", "42"), []Op{{Op: "var", Target: "cpu", Key: "p", Value: str("42")}}},
+		{"attr", SetAttr("dash", "cpu", "class", "hot"), []Op{{Op: "attr", Target: "cpu", Key: "class", Value: str("hot")}}},
+		{"unattr", RemoveAttr("dash", "cpu", "class"), []Op{{Op: "unattr", Target: "cpu", Key: "class"}}},
+		{"reveal", Reveal("doc", "usage", RevealStart), []Op{{Op: "reveal", Target: "usage", Value: str("start")}}},
+		{"reveal nearest", Reveal("doc", "usage", RevealNearest), []Op{{Op: "reveal", Target: "usage"}}},
+		{"morph by ids", MorphTo("dash", "", "<b id=x>1</b>"), []Op{{Op: "morph", Value: str("<b id=x>1</b>")}}},
+		{"ops in order", Delta("log", []Op{OpAppend("lines", "<li>x</li>"), OpRemove("old"), OpPrepend("lines", ""), OpInner("a", "<i></i>"),
+			OpReplace("b", "<p></p>"), OpBefore("c", "1"), OpAfter("c", "2"), OpMorph("d", "<d></d>")}),
+			[]Op{{Op: "append", Target: "lines", Value: str("<li>x</li>")}, {Op: "remove", Target: "old"}, {Op: "prepend", Target: "lines", Value: str("")},
+				{Op: "inner", Target: "a", Value: str("<i></i>")}, {Op: "replace", Target: "b", Value: str("<p></p>")},
+				{Op: "before", Target: "c", Value: str("1")}, {Op: "after", Target: "c", Value: str("2")}, {Op: "morph", Target: "d", Value: str("<d></d>")}}},
+		{"no ops", Delta("log", nil), []Op{}},
+		{"an id outside ASCII, as it is", SetText("card", "café:é", "x"), []Op{{Op: "text", Target: "café:é", Value: str("x")}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := decodeOne(t, c.cmd)
+			var d deltaBody
+			if !decodeBody(m.Payload, &d) || len(d.Ops) != len(c.ops) || len(c.ops) > 0 && !reflect.DeepEqual(d.Ops, c.ops) {
+				t.Errorf("ops %+v, want %+v", d.Ops, c.ops)
+			}
+			if got := ctlMap(m.Control); got["a"] != "delta" || got["q"] != "2" || len(got) != 3 {
+				t.Errorf("control %v", m.Control)
+			}
+		})
+	}
+	// The bytes: {"ops": [{"op": "remove", "t": "a"}]}.
+	if got := decodeOne(t, Delta("x", []Op{OpRemove("a")})).Payload; fmt.Sprintf("%x", got) != "81a36f70739182a26f70a672656d6f7665a174a161" {
+		t.Errorf("body % x", got)
+	}
+}
+
+// DeltaOf checks a delta whole, and names the first op at fault (SPEC
+// §6.1).
+func TestDeltaOf(t *testing.T) {
+	delta := func(js string) Message {
+		return host(Control{{"a", "delta"}, {"s", "x"}}, js)
+	}
+	ops, err := DeltaOf(delta(`{"ops":[{"op":"text","t":"a","v":"x"},{"op":"remove","t":"a","v":"ignored","x-vendor":1},{"op":"morph","v":"<p id=a></p>"},{"op":"reveal","t":"a"}]}`))
+	if err != nil || len(ops) != 4 || ops[1].Op != "remove" || ops[3].Value != nil {
+		t.Errorf("ops %+v, %v", ops, err)
+	}
+	for js, at := range map[string]int{
+		`{"ops":[{"op":"text","t":"a","v":"x"},{"op":"frob","t":"a"}]}`:  1,
+		`{"ops":[{"op":"text","t":"a","v":"x"},{"op":"attr","t":"a"}]}`:  1,
+		`{"ops":[{"op":"var","t":"a","k":"w"},{"op":"unattr","k":"c"}]}`: 1,
+		`{"ops":[{"op":"text","t":"a","v":"x"},{"op":"text","v":"y"}]}`:  1,
+		`{"ops":[{"op":"reveal","t":"a","v":"middle"}]}`:                 0,
+		`{"ops":[{"op":"text","t":"a","v":"x"},"text"]}`:                 1,
+		`{"ops":[3]}`:                                      0,
+		`{"ops":[]}`:                                       -1,
+		`{"op":"text","t":"a","v":"x"}`:                    -1,
+		`["text","a","x"]`:                                 -1,
+		`{"ops":{"op":"text"}}`:                            -1,
+		`{"ops":[{"op":"text","t":3,"v":"x"}]}`:            -1,
+		`{"ops":[{"op":"text","t":"a","v":"x"}],"ops":[]}`: -1,
+	} {
+		_, err := DeltaOf(delta(js))
+		var e *Error
+		if !errors.As(err, &e) || e.Code != EINVAL || e.HasOp != (at >= 0) || at >= 0 && e.Op != at {
+			t.Errorf("%s: %v (op %d, %v), want EINVAL at %d", js, err, e.Op, e.HasOp, at)
+		}
+	}
+	if _, err := DeltaOf(host(Control{{"a", "hide"}}, "")); err == nil {
+		t.Error("not a delta")
+	}
+}
+
 func TestOptions(t *testing.T) {
 	// N numbers the command and asks for its reply.
-	if m := decodeOne(t, Place("x", Placement{Cols: 10}, N(7))); Get(m.Control, "n") != "7" || Get(m.Control, "q") != "0" {
+	// q goes out only where the wire does not say it: not 1 without n, not
+	// 0 with it (SPEC §3.5).
+	if m := decodeOne(t, Place("x", Placement{Cols: 10}, N(7))); Get(m.Control, "n") != "7" || Has(m.Control, "q") {
 		t.Errorf("N: %v", m.Control)
 	}
-	// Q after N asks for less; the key is sent once.
-	cmd := SetText("x", "t", "v", N(3), Q(ReplyOnError))
-	if m := decodeOne(t, cmd); Get(m.Control, "n") != "3" || Get(m.Control, "q") != "1" || strings.Count(cmd, "q=") != 1 {
-		t.Errorf("N, Q: %q", cmd)
+	// Q after N asks for less; the key is sent once, and either order.
+	for _, cmd := range []string{SetText("x", "t", "v", N(3), Q(ReplyOnError)), SetText("x", "t", "v", Q(ReplyOnError), N(3))} {
+		if m := decodeOne(t, cmd); Get(m.Control, "n") != "3" || Get(m.Control, "q") != "1" || strings.Count(cmd, "q=") != 1 {
+			t.Errorf("N, Q: %q", cmd)
+		}
 	}
 	if m := decodeOne(t, Doc("x", "<p>", Q(NoReply))); Get(m.Control, "q") != "2" {
 		t.Errorf("Q: %v", m.Control)
+	}
+	if m := decodeOne(t, Doc("x", "<p>", Q(ReplyAlways))); Get(m.Control, "q") != "0" || Has(m.Control, "n") {
+		t.Errorf("Q 0 without n: %v", m.Control)
+	}
+	if m := decodeOne(t, Hide("x", Q(ReplyOnError))); Has(m.Control, "q") {
+		t.Errorf("Q 1 without n: %v", m.Control)
 	}
 }
 
 // A value can never end a command or add a key: what the grammar does not
 // allow becomes '_', a character at a time (SPEC §3.2).
 func TestValuesCannotInject(t *testing.T) {
-	cmd := SetText("card", "x:q=0;AAAA\x1b\\", "payload")
+	cmd := Focus("card", "x:q=0;AAAA\x1b\\")
 	if got := split(cmd); len(got) != 1 {
 		t.Fatalf("%d sequences: %q", len(got), cmd)
 	}
 	m := decodeOne(t, cmd)
-	if Get(m.Control, "t") != `x_q_0_AAAA_\` || Get(m.Control, "q") != "2" || string(m.Payload) != "payload" {
+	if Get(m.Control, "t") != `x_q_0_AAAA_\` || Get(m.Control, "q") != "2" {
 		t.Errorf("got %v %q", m.Control, m.Payload)
 	}
-	if m := decodeOne(t, SetAttr("s", "café", "data-x", "1")); Get(m.Control, "t") != "caf_" {
+	if m := decodeOne(t, Focus("s", "café")); Get(m.Control, "t") != "caf_" {
 		t.Errorf("non-ASCII: %q", Get(m.Control, "t"))
 	}
 	if got := Encode(Control{{"a", "q"}}, nil); got != "\x1b]7279;a=q\x1b\\" {
@@ -185,12 +265,14 @@ func TestPlacement(t *testing.T) {
 		{"window", Placement{Cols: 30, Rows: 10, Window: Window{0, 3, 30, 4}}, "c=30:r=10:x=0:y=3:w=30:h=4"},
 		// With auto rows nothing is whole, so a window is always sent.
 		{"window on auto", Placement{Cols: 30, Window: Window{0, 0, 1, 1}}, "c=30:r=auto:x=0:y=0:w=1:h=1"},
-		{"z, press, cursor", Placement{Cols: 5, Rows: 1, Z: 1, Press: true, KeepCursor: true}, "c=5:r=1:z=1:p=1:C=1"},
-		{"fit", Placement{Cols: 5, Press: true, Fit: true}, "c=5:r=auto:p=1:f=1"},
-		{"hover", Placement{Cols: 5, Fit: true, Hover: true}, "c=5:r=auto:f=1:v=1"},
+		{"z, press, cursor", Placement{Cols: 5, Rows: 1, Z: 1, Press: On, KeepCursor: true}, "c=5:r=1:z=1:p=1:C=1"},
+		{"fit", Placement{Cols: 5, Press: On, Fit: On}, "c=5:r=auto:p=1:f=1"},
+		{"hover", Placement{Cols: 5, Fit: On, Hover: On}, "c=5:r=auto:f=1:v=1"},
+		// Off turns an event off, and absent leaves it as it was.
+		{"off", Placement{Cols: 5, Press: Off, Fit: On, Hover: Off}, "c=5:r=auto:p=0:f=1:v=0"},
 	}
 	for _, c := range cases {
-		want := "\x1b]7279;a=place:s=x:" + c.want + ":q=1\x1b\\"
+		want := "\x1b]7279;a=place:s=x:" + c.want + "\x1b\\"
 		if got := Place("x", c.p); got != want {
 			t.Errorf("%s: %q, want %q", c.name, got, want)
 		}
@@ -199,17 +281,17 @@ func TestPlacement(t *testing.T) {
 
 func TestPlaceAtKeepsTheCursor(t *testing.T) {
 	got := PlaceAt("chart", 4, 2, Placement{Cols: 30, Rows: 10})
-	want := "\x1b7\x1b[3;5H\x1b]7279;a=place:s=chart:c=30:r=10:C=1:q=1\x1b\\\x1b8"
+	want := "\x1b7\x1b[3;5H\x1b]7279;a=place:s=chart:c=30:r=10:C=1\x1b\\\x1b8"
 	if got != want {
 		t.Errorf("PlaceAt = %q, want %q", got, want)
 	}
-	if got := PlaceAt("frame", 0, 0, Placement{Cols: 30, Rows: 10, Z: 1}, N(4)); !strings.Contains(got, "a=place:s=frame:c=30:r=10:z=1:C=1:q=0:n=4") {
+	if got := PlaceAt("frame", 0, 0, Placement{Cols: 30, Rows: 10, Z: 1}, N(4)); !strings.Contains(got, "a=place:s=frame:c=30:r=10:z=1:C=1:n=4") {
 		t.Errorf("PlaceAt with z and N = %q", got)
 	}
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.2\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.3\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }
@@ -232,12 +314,12 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 		if len(payload) > Chunk {
 			t.Errorf("chunk %d carries %d bytes", i, len(payload))
 		}
-		// Continuation chunks carry m, and q since the message has one.
-		if i > 0 && !strings.HasPrefix(s, "\x1b]7279;m=") || i > 0 && !strings.Contains(s, ":q=2;") {
+		// Continuation chunks carry only m (SPEC §3.4).
+		if i > 0 && !strings.HasPrefix(s, "\x1b]7279;m=1;") && !strings.HasPrefix(s, "\x1b]7279;m=0;") {
 			t.Errorf("continuation chunk %d: %q", i, s[:min(30, len(s))])
 		}
 	}
-	if last := seqs[len(seqs)-1]; !strings.HasPrefix(last, "\x1b]7279;m=0:q=2;") {
+	if last := seqs[len(seqs)-1]; !strings.HasPrefix(last, "\x1b]7279;m=0;") {
 		t.Errorf("the last chunk is not m=0: %q", last[:20])
 	}
 	m := decodeOne(t, cmd)
@@ -258,7 +340,7 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 		t.Error("compressed payload did not decode")
 	}
 	// Short payloads are not worth it.
-	if c := SetText("s", "t", "short"); strings.Contains(c, "o=z") {
+	if c := Doc("s", "short"); strings.Contains(c, "o=z") {
 		t.Errorf("a short payload was compressed: %q", c)
 	}
 }
@@ -302,7 +384,7 @@ func TestDecoder(t *testing.T) {
 		{"not base64", []string{"\x1b]7279;a=doc:s=x;!!!!\x1b\\"}, []Result{Invalid}},
 		{"not zlib", []string{"\x1b]7279;a=doc:s=x:o=z;" + b64("plain") + "\x1b\\"}, []Result{Invalid}},
 		{"a continuation with nothing to continue", []string{"\x1b]7279;m=0;eA==\x1b\\"}, []Result{Invalid}},
-		{"chunks", []string{"\x1b]7279;a=doc:s=x:m=1;PHA+\x1b\\", "\x1b]7279;m=1:q=2;aGk8\x1b\\", "\x1b]7279;m=0:q=2;L3A+\x1b\\"},
+		{"chunks", []string{"\x1b]7279;a=doc:s=x:m=1;PHA+\x1b\\", "\x1b]7279;m=1;aGk8\x1b\\", "\x1b]7279;m=0;L3A+\x1b\\"},
 			[]Result{Partial, Partial, Complete}},
 		// A bare a=del is a whole command, not a continuation: it aborts
 		// the chunked message and is decoded itself.
@@ -328,6 +410,13 @@ func TestDecoder(t *testing.T) {
 		t.Errorf("after the abort: %v %v, %d invalid", r, m.Control, d.Invalid)
 	}
 
+	// A further chunk that carries any key but m is another message, which
+	// aborts the one in progress (SPEC §3.4).
+	var e Decoder
+	e.Feed("\x1b]7279;a=doc:s=x:m=1;PHA+\x1b\\")
+	if _, r := e.Feed("\x1b]7279;m=0:q=2;L3A+\x1b\\"); r != Complete || e.Invalid != 1 {
+		t.Errorf("a chunk with a q: %v, %d invalid", r, e.Invalid)
+	}
 	// Base64 without padding and with whitespace.
 	if m, r := d.Feed("\x1b]7279;a=ev;aG\r\nk\x1b\\"); r != Complete || string(m.Payload) != "hi" {
 		t.Errorf("lenient base64: %v %q", r, m.Payload)
@@ -404,17 +493,21 @@ func typed(v any) any {
 }
 
 func TestEvents(t *testing.T) {
-	m := host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"name":"Ada","plan":"pro"}`)
+	m := host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"fields":[["name","Ada"],["plan","pro"],["plan","team"]]}`)
 	ev, ok := EventOf(m)
 	if !ok || ev.Kind != EventSubmit || ev.Surface != "form" || ev.Target != "f" {
 		t.Fatalf("event: %+v", ev)
 	}
-	if got, want := ev.Fields, map[string]string{"name": "Ada", "plan": "pro"}; !reflect.DeepEqual(got, want) {
+	// In tree order, two fields of one name two pairs.
+	if got, want := ev.Fields, []FormField{{"name", "Ada"}, {"plan", "pro"}, {"plan", "team"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Fields = %v", got)
 	}
-	// A field that is not a string: the detail does not decode.
-	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, `{"name":"Ada","n":3}`)); ev.Fields != nil {
-		t.Errorf("Fields with a number = %v", ev.Fields)
+	// A pair that is not two strings, or fields that are not pairs: the
+	// detail does not decode.
+	for _, bad := range []string{`{"fields":[["n",3]]}`, `{"fields":[["n"]]}`, `{"fields":[["n","a","b"]]}`, `{"fields":{"n":"a"}}`, `{"name":"Ada"}`} {
+		if ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "form"}, {"e", "submit"}, {"t", "f"}}, bad)); ev.Fields != nil {
+			t.Errorf("Fields from %s = %v", bad, ev.Fields)
+		}
 	}
 
 	change, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "change"}, {"t", "box"}}, `{"checked":true,"value":"on"}`))
@@ -434,14 +527,6 @@ func TestEvents(t *testing.T) {
 		t.Error("a button's click is not a link's")
 	}
 
-	resize, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "resize"}}, `{"w":360.0,"h":72.5}`))
-	if resize.Size == nil || *resize.Size != (Size{W: 360, H: 72.5}) {
-		t.Errorf("Size = %+v", resize.Size)
-	}
-	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "resize"}}, `{"w":360,"h":72.5}`)); ev.Size != nil {
-		t.Error("a size in an int is not a size")
-	}
-
 	fit, _ := EventOf(host(Control{{"a", "ev"}, {"s", "card"}, {"e", "fit"}, {"t", ""}}, `{"r":7}`))
 	if fit.FitRows != 7 {
 		t.Errorf("FitRows = %v", fit.FitRows)
@@ -451,8 +536,8 @@ func TestEvents(t *testing.T) {
 			t.Errorf("FitRows on %s", bad)
 		}
 	}
-	if resize.FitRows != 0 {
-		t.Error("a resize has no fit rows")
+	if fit.Mods != 0 || fit.Target != "" {
+		t.Error("a fit has no mods and no target")
 	}
 
 	over, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "hover"}, {"t", "row4"}}, `{"c":2,"r":4}`))
@@ -472,22 +557,22 @@ func TestEvents(t *testing.T) {
 		t.Error("a fit is no hover")
 	}
 
-	drag, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"keys":["shift","ctrl"]}`))
-	if d := drag.Drag; d == nil || d.Col != -2 || d.Row != 7 || !slices.Equal(d.Keys, []string{"shift", "ctrl"}) || d.HasX || d.HasY {
-		t.Errorf("Drag = %+v", d)
+	drag, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"mods":5}`))
+	if d := drag.Drag; d == nil || d.Col != -2 || d.Row != 7 || drag.Mods != ModShift|ModControl || d.HasX || d.HasY {
+		t.Errorf("Drag = %+v, mods %d", d, drag.Mods)
 	}
-	steps, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"keys":[],"x":0}`))
-	if d := steps.Drag; d == nil || d.Col != 0 || len(d.Keys) != 0 || !d.HasX || d.X != 0 || d.HasY {
+	steps, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"x":0}`))
+	if d := steps.Drag; d == nil || d.Col != 0 || steps.Mods != 0 || !d.HasX || d.X != 0 || d.HasY {
 		t.Errorf("a dragend with a step: %+v", d)
 	}
-	over2, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "drag"}, {"t", "row"}}, `{"c":1,"r":2,"keys":[],"x":3,"ty":1}`))
+	over2, _ := EventOf(host(Control{{"a", "ev"}, {"s", "list"}, {"e", "drag"}, {"t", "row"}}, `{"c":1,"r":2,"x":3,"ty":1}`))
 	if d := over2.Drag; d == nil || !d.HasX || d.X != 3 || d.HasTX || !d.HasTY || d.TY != 1 {
 		t.Errorf("a drag with a step in t: %+v", d)
 	}
 	if button.Drag != nil {
 		t.Error("a click is no drag")
 	}
-	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "drag"}}, `{"c":1,"r":0,"keys":[],"x":2.5}`)); ev.Drag != nil {
+	if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "drag"}}, `{"c":1,"r":0,"x":2.5}`)); ev.Drag != nil {
 		t.Error("a drag with a step that is not an int")
 	}
 
@@ -495,9 +580,16 @@ func TestEvents(t *testing.T) {
 	if env.Area == nil || *env.Area != (Area{Col: 2, Row: 0, W: 12, H: 1}) || env.Value != "staging" {
 		t.Errorf("Area = %+v", env.Area)
 	}
-	title, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}, {"t", "title"}}, `{"area":{"c":-1,"r":3,"w":5,"h":2}}`))
-	if a := title.Area; a == nil || a.Col != -1 || a.H != 2 {
-		t.Errorf("a press's Area = %+v", a)
+	title, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}, {"t", "title"}}, `{"area":{"c":-1,"r":3,"w":5,"h":2},"mods":2}`))
+	if a := title.Area; a == nil || a.Col != -1 || a.H != 2 || title.Mods != ModAlt {
+		t.Errorf("a press's Area = %+v, mods %d", a, title.Mods)
+	}
+	// A press with no element and a modifier has a detail of mods alone.
+	if p, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}}, `{"mods":8}`)); p.Mods != ModMeta || p.Area != nil || p.Target != "" {
+		t.Errorf("a press on nothing: %+v", p)
+	}
+	if env.Mods != 0 {
+		t.Error("a click with no mods has none")
 	}
 	for _, bad := range []string{`{}`, `{"area":null}`, `{"area":[2,0,12,1]}`, `{"area":{"c":2,"r":0,"w":12,"h":1.5}}`, `{"area":{"c":2,"r":0,"w":"12","h":1}}`, `[`} {
 		if ev, _ := EventOf(host(Control{{"a", "ev"}, {"e", "click"}}, bad)); ev.Area != nil {
@@ -517,24 +609,25 @@ func TestEvents(t *testing.T) {
 func TestEncodeEvent(t *testing.T) {
 	on, x := true, 3
 	for _, e := range []Event{
-		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 1},
+		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Mods: ModShift | ModMeta, Count: 1},
 		{Surface: "f", Kind: EventClick, Target: "go", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 2},
 		{Surface: "f", Kind: EventClick, Target: "", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}, Count: 1},
 		{Surface: "f", Kind: EventClick, Target: "plain", Count: 1},
-		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}},
+		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}, Mods: ModAlt},
+		{Surface: "f", Kind: EventPress, Mods: ModControl},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
 		{Surface: "f", Kind: EventInput, Target: "q", Value: "ab"},
-		{Surface: "f", Kind: EventSubmit, Target: "form", Fields: map[string]string{"name": "Ada"}},
-		{Surface: "f", Kind: EventResize, Size: &Size{W: 320, H: 48.5}},
+		{Surface: "f", Kind: EventSubmit, Target: "form", Fields: []FormField{{"name", "Ada"}, {"name", "Bo"}}},
 		{Surface: "f", Kind: EventFit, FitRows: 7},
-		{Surface: "g", Kind: EventDrag, Target: "c1", Drag: &Drag{Col: -2, Row: 5, Keys: []string{"shift"}, X: x, HasX: true}},
+		{Surface: "g", Kind: EventDrag, Target: "c1", Mods: ModShift, Drag: &Drag{Col: -2, Row: 5, X: x, HasX: true}},
 		{Surface: "g", Kind: EventDragEnd, Drag: &Drag{Col: 1, Row: 0}},
 		{Surface: "g", Kind: EventDrag, Target: "col", Drag: &Drag{Col: 1, Row: 2, TX: 0, HasTX: true, TY: 2, HasTY: true}},
 		{Surface: "g", Kind: EventHover, Target: "c1", Hover: &Hover{Col: 0, Row: 4}},
 		{Surface: "g", Kind: EventHover, Hover: &Hover{Out: true}},
 		{Surface: "d", Kind: EventView, View: &View{Areas: map[string]Area{"intro": {Col: 0, Row: -3, W: 40, H: 5}, "usage": {Col: 0, Row: 2, W: 40, H: 9}}}},
 		{Surface: "d", Kind: EventView, View: &View{Areas: map[string]Area{}, AtEnd: true}},
+		{Surface: "f", Kind: EventSubmit, Target: "form"},
 		{Surface: "g", Kind: EventFocus, Target: "name"},
 	} {
 		var d Decoder
@@ -557,8 +650,17 @@ func TestEncodeEvent(t *testing.T) {
 func TestReplies(t *testing.T) {
 	m := host(Control{{"a", "err"}, {"s", "x"}, {"re", "delta"}}, `{"code":"ENOTARGET","detail":"gone"}`)
 	r, ok := ReplyOf(m)
-	if !ok || r.OK || r.Code != ENOTARGET || r.Detail != "gone" || r.Re != "delta" || r.Surface != "x" {
+	if !ok || r.OK || r.Code != ENOTARGET || r.Detail != "gone" || r.Re != "delta" || r.Surface != "x" || r.HasOp {
 		t.Fatalf("error reply: %+v", r)
+	}
+	// i names the op at fault; 0 is an index.
+	for _, i := range []int{0, 3} {
+		if r, _ := ReplyOf(decodeOne(t, ReplyDeltaErr("2", "x", i, ENOTARGET, "gone"))); !r.HasOp || r.Op != i || r.Code != ENOTARGET || r.N != 2 {
+			t.Errorf("ReplyDeltaErr(%d) read back: %+v", i, r)
+		}
+	}
+	if r, _ := ReplyOf(host(Control{{"a", "err"}, {"re", "delta"}, {"i", "x"}}, "")); r.HasOp {
+		t.Error("an i that is no number")
 	}
 	err := Err(r)
 	var he *Error
@@ -591,7 +693,7 @@ func TestReplies(t *testing.T) {
 
 func TestCaps(t *testing.T) {
 	r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
-		`{"v":"0.2","ops":["text","var"],"events":["click"],"cell":{"w":20,"h":42},"scale":2.0,"scheme":"light",`+
+		`{"v":"0.3","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
 			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
 	caps := r.Caps
 	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
@@ -600,37 +702,17 @@ func TestCaps(t *testing.T) {
 	if !bytes.Equal(caps.Raw, r.Message.Payload) {
 		t.Error("Raw is not the body")
 	}
-	if w, h := CellCSS(*caps); w != 10 || h != 21 {
-		t.Errorf("CellCSS = %v×%v", w, h)
+	if caps.CellCSS != (Size{W: 10, H: 21}) {
+		t.Errorf("CellCSS = %+v", caps.CellCSS)
 	}
-	if !Supports(*caps, OpText) || Supports(*caps, OpMorph) || !Sends(*caps, EventClick) || Sends(*caps, EventPress) || !Light(*caps) {
-		t.Errorf("Supports, Sends, Light: %+v", caps)
+	if !HasFeature(*caps, FeatureHover) || !HasFeature(*caps, FeatureMenu) || HasFeature(*caps, FeatureCount) || HasFeature(*caps, FeaturePassthrough) || !Light(*caps) {
+		t.Errorf("HasFeature, Light: %+v", caps)
 	}
 	var none Caps
-	if w, h := CellCSS(none); w != 9 || h != 18 {
-		t.Errorf("CellCSS before a host said = %v×%v", w, h)
-	}
-	if !Supports(none, OpMorph) || !Sends(none, EventPress) || Light(none) {
+	if HasFeature(none, FeatureHover) || Light(none) {
 		t.Error("a host that lists nothing")
 	}
-	// Drags are only where a host lists them.
-	if Drags(*caps) || Drags(none) || !Drags((Caps{Events: []string{EventClick, EventDrag}})) {
-		t.Error("Drags")
-	}
-	// So is hover.
-	if Hovers(*caps) || Hovers(none) || !Hovers((Caps{Events: []string{EventHover}})) {
-		t.Error("Hovers")
-	}
-	// And view.
-	if Views(*caps) || Views(none) || !Views((Caps{Events: []string{EventView}})) || !Sends(none, EventView) {
-		t.Error("Views")
-	}
-	// Scroll only where a host says so.
-	scrolls, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, `{"v":"0.2","scroll":true}`))
-	if c := scrolls.Caps; c == nil || !c.Scroll || caps.Scroll {
-		t.Error("Scroll")
-	}
-	for _, bad := range []string{`{"v":`, `{"v":"0.2","scale":2}`, `{"v":"0.2","events":["click",3]}`, `["v"]`} {
+	for _, bad := range []string{`{"v":`, `{"v":"0.3","scale":2}`, `{"v":"0.3","features":["hover",3]}`, `{"v":"0.3","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
 		if r, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, bad)); r.Caps != nil {
 			t.Errorf("caps from %s", bad)
 		}
@@ -638,8 +720,8 @@ func TestCaps(t *testing.T) {
 	// What a host writes is what a program reads, and a relay passes on
 	// what it does not know.
 	var d Decoder
-	m, _ := d.Feed(ReplyCaps("1", Caps{V: Version, Cell: &Cell{W: 16, H: 32}, Scale: 2, Events: []string{EventClick}}))
-	if r, _ := ReplyOf(m); r.Caps == nil || r.Caps.Cell == nil || r.Caps.Cell.W != 16 || r.Caps.Scale != 2 || !Sends(*r.Caps, EventClick) {
+	m, _ := d.Feed(ReplyCaps("1", Caps{V: Version, CellCSS: Size{W: 8, H: 16}, Scale: 2, Features: []string{FeatureCount}}))
+	if r, _ := ReplyOf(m); r.Caps == nil || r.Caps.CellCSS.W != 8 || r.Caps.Scale != 2 || !HasFeature(*r.Caps, FeatureCount) {
 		t.Errorf("ReplyCaps read back: %+v", r.Caps)
 	}
 	m, _ = d.Feed(ReplyCaps("2", *caps))
@@ -753,10 +835,19 @@ func TestKeymapProgram(t *testing.T) {
 	if ParseKeymap(Platform{}, "ArrowDown=program Shift+ArrowDown=line-next").Program("Shift+ArrowDown") {
 		t.Error("Shift+ArrowDown, bound to line-next, went to the program")
 	}
+	// A key bound to prefix is the program's, and Prefix says it of it
+	// alone.
+	p := ParseKeymap(Platform{}, "g=prefix j=program")
+	if !p.Program("g") || !p.Prefix("g") || !p.Program("j") || p.Prefix("j") || p.Prefix("k") {
+		t.Error("prefix and program")
+	}
 	// In a field's keymap, Lookup says as much.
 	f := Resolve(Platform{}, false, "ArrowLeft=program")
 	if !f.Program("ArrowLeft") || f.Lookup("ArrowLeft") != "" || f.Program("ArrowRight") {
 		t.Error("a field's keymap: ArrowLeft is not the program's, or ArrowRight is")
+	}
+	if g := Resolve(Platform{}, false, "Control+k=prefix"); g.Lookup("Control+k") != "" || !g.Prefix("Control+k") {
+		t.Error("a field does not use a key bound to prefix")
 	}
 }
 
@@ -785,32 +876,69 @@ func TestPlatformReadKey(t *testing.T) {
 // A caps event's field that became absent comes empty, and Merge drops it
 // (SPEC §9).
 func TestMergeDropsWhatAnEventEmpties(t *testing.T) {
-	b := msgp.AppendMapHeader(nil, 3)
+	b := msgp.AppendMapHeader(nil, 4)
 	b = msgp.AppendString(msgp.AppendString(b, "mod"), "Control")
 	b = msgp.AppendMapHeader(msgp.AppendString(b, "edit"), 1)
 	b = msgp.AppendString(msgp.AppendArrayHeader(msgp.AppendString(b, "copy"), 1), "Control+c")
-	b = msgp.AppendMapHeader(msgp.AppendString(b, "keys"), 2)
-	b = msgp.AppendInt(msgp.AppendString(msgp.AppendString(msgp.AppendString(b, "leader"), "Space"), "timeout"), 2000)
+	b = msgp.AppendString(msgp.AppendArrayHeader(msgp.AppendString(b, "features"), 1), "menu")
+	b = msgp.AppendMapHeader(msgp.AppendString(b, "cellcss"), 2)
+	b = msgp.AppendFloat64(msgp.AppendString(msgp.AppendFloat64(msgp.AppendString(b, "w"), 9), "h"), 18)
 	c, ok := CapsOf(b)
-	if !ok || c.Keys == nil || len(c.Edit) != 1 {
+	if !ok || len(c.Features) != 1 || len(c.Edit) != 1 {
 		t.Fatalf("caps: %+v", c)
 	}
-	e := msgp.AppendMapHeader(nil, 2)
+	e := msgp.AppendMapHeader(nil, 3)
 	e = msgp.AppendMapHeader(msgp.AppendString(e, "edit"), 0)
-	e = msgp.AppendMapHeader(msgp.AppendString(e, "keys"), 0)
+	e = msgp.AppendArrayHeader(msgp.AppendString(e, "features"), 0)
+	e = msgp.AppendString(msgp.AppendString(e, "scheme"), "")
 	changed, ok := CapsOf(e)
 	if !ok {
 		t.Fatal("changed")
 	}
 	m := Merge(c, changed)
-	if m.Edit != nil || m.Keys != nil || m.Mod != "Control" {
-		t.Errorf("merged: edit %v, keys %v, mod %q", m.Edit, m.Keys, m.Mod)
+	if m.Edit != nil || m.Features != nil || m.Scheme != "" || m.Mod != "Control" || m.CellCSS.H != 18 {
+		t.Errorf("merged: %+v", m)
 	}
 	var keys []string
 	for _, f := range rawFields(m.Raw) {
 		keys = append(keys, f.key)
 	}
-	if !slices.Equal(keys, []string{"mod"}) {
-		t.Errorf("merged Raw has %v, want [mod]", keys)
+	if !slices.Equal(keys, []string{"mod", "cellcss"}) {
+		t.Errorf("merged Raw has %v, want [mod cellcss]", keys)
+	}
+	// What changed replaces, and the rest stays.
+	f := msgp.AppendMapHeader(nil, 1)
+	f = msgp.AppendFloat64(msgp.AppendString(msgp.AppendFloat64(msgp.AppendString(msgp.AppendMapHeader(msgp.AppendString(f, "cellcss"), 2), "w"), 10), "h"), 20)
+	changed, _ = CapsOf(f)
+	if m := Merge(m, changed); m.CellCSS != (Size{W: 10, H: 20}) || m.Mod != "Control" {
+		t.Errorf("merged: %+v", m)
+	}
+}
+
+func TestMenuOf(t *testing.T) {
+	var d Decoder
+	read := func(cmd string) Message {
+		m, r := d.Feed(cmd)
+		if r != Complete {
+			t.Fatalf("%q: %v", cmd, r)
+		}
+		return m
+	}
+	l, err := MenuOf(read(Menu(&MenuLevel{Seq: []string{"g"}, Label: "+go", Items: []MenuItem{{Key: "d", Label: "def"}}})))
+	if err != nil || l == nil || l.Label != "+go" || len(l.Items) != 1 || l.Items[0].Key != "d" {
+		t.Errorf("a menu: %+v, %v", l, err)
+	}
+	if l, err := MenuOf(read(Menu(nil))); l != nil || err != nil {
+		t.Errorf("no body: %+v, %v", l, err)
+	}
+	for name, m := range map[string]Message{
+		"not a menu":     read(Hide("s")),
+		"not a map":      host(Control{{"a", "menu"}}, `[1]`),
+		"does not parse": host(Control{{"a", "menu"}}, `{`),
+	} {
+		var e *Error
+		if _, err := MenuOf(m); !errors.As(err, &e) || e.Code != EINVAL {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

@@ -18,7 +18,6 @@ const (
 	EventPress  = "press"  // a press anywhere in a placement made with Press
 	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
 	EventBlur   = "blur"   // the surface gave the keyboard back
-	EventResize = "resize" // the surface's pixel size changed, its cells did not
 	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
 	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
 	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
@@ -26,7 +25,7 @@ const (
 	// The terminal's events, which belong to no surface: Surface and
 	// Target are empty.
 	EventCommand = "command" // an edit command the program takes, by its key or a menu (SPEC §10.6)
-	EventCaps    = "caps"    // the capabilities mod, edit or keys changed (SPEC §4)
+	EventCaps    = "caps"    // a capability changed (SPEC §4)
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
@@ -40,9 +39,10 @@ type Event struct {
 	Surface string
 	// Kind is one of the Event kinds, or one this package does not know.
 	Kind string
-	// Target is the id of the element that reported; empty for focus,
-	// blur and resize, for a link without one (its href is in the
-	// detail), and for a press on nothing with an id.
+	// Target is the id of the element that reported; empty where the host
+	// sends no t (SPEC §9): for blur, fit and view, for a link without an
+	// id (its href is in the detail), and for a press on nothing with an
+	// id.
 	Target string
 
 	// What the detail carries, read by the event's kind (SDK.md §3.9):
@@ -54,12 +54,15 @@ type Event struct {
 	Value string
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
-	// Fields are a submitted form's fields by name.
-	Fields map[string]string
+	// Fields are a submitted form's fields in tree order, each its name
+	// and its value: two fields of one name are two pairs.
+	Fields []FormField
+	// Mods are the modifier keys held (ModShift, …), as bits: in a click,
+	// a press and a drag's events. 0 when none is, and for any other
+	// kind.
+	Mods int
 	// Link is a clicked link's.
 	Link *Link
-	// Size is a resize's new size, in CSS pixels.
-	Size *Size
 	// FitRows is the rows a fit says the document needs now.
 	FitRows int
 	// Drag is a dragstart's, a drag's or a dragend's.
@@ -81,7 +84,8 @@ type Event struct {
 	// Command is a command's (SPEC §10.6).
 	Command *Command
 	// Changed is a caps's: the capabilities that changed, with only the
-	// fields the detail has (its Raw), for Merge.
+	// fields the detail has (its Raw), for Merge. A field that became
+	// absent is in it empty.
 	Changed *Caps
 
 	// Detail is the detail as it came, msgpack: nil when the event has
@@ -135,16 +139,13 @@ type View struct {
 	AtEnd bool
 }
 
-// Drag is where a drag's pointer is, and the modifier keys held
-// (SPEC §9.1).
+// Drag is where a drag's pointer is (SPEC §9.1); the modifier keys held
+// are the event's Mods.
 type Drag struct {
 	// Col and Row are the surface's cell under the pointer, from 0 at its
 	// top left (not its window's). They go on past its edges: negative
 	// above it and to its left, its size or more below and to its right.
 	Col, Row int
-	// Keys are the modifier keys held: "shift", "ctrl", "alt" and "meta",
-	// in that order.
-	Keys []string
 	// X and Y are where in the dragged element the pointer is, for an
 	// element with data-steps (SPEC §9.1): a step from 0 to its count,
 	// along its width and down its height, measured against the element
@@ -184,7 +185,7 @@ func readDetail(e *Event) {
 	case EventClick:
 		var d clickDetail
 		if decodeBody(b, &d) {
-			e.Value, e.Area, e.Count = d.Value, d.Area, d.Count
+			e.Value, e.Area, e.Mods, e.Count = d.Value, d.Area, d.Mods, d.Count
 			if d.Href != nil {
 				e.Link = &Link{Href: *d.Href, URL: d.URL}
 			}
@@ -192,7 +193,7 @@ func readDetail(e *Event) {
 	case EventPress:
 		var d pressDetail
 		if decodeBody(b, &d) {
-			e.Area = d.Area
+			e.Area, e.Mods = d.Area, d.Mods
 		}
 	case EventChange:
 		var d changeDetail
@@ -205,14 +206,9 @@ func readDetail(e *Event) {
 			e.Value = d.Value
 		}
 	case EventSubmit:
-		d := submitDetail{}
+		var d submitDetail
 		if decodeBody(b, &d) {
-			e.Fields = d
-		}
-	case EventResize:
-		var d Size
-		if decodeBody(b, &d) {
-			e.Size = &d
+			e.Fields = d.Fields
 		}
 	case EventFit:
 		var d fitDetail
@@ -222,7 +218,7 @@ func readDetail(e *Event) {
 	case EventDragStart, EventDrag, EventDragEnd:
 		var d dragDetail
 		if decodeBody(b, &d) {
-			e.Drag = &Drag{Col: d.C, Row: d.R, Keys: d.Keys}
+			e.Drag, e.Mods = &Drag{Col: d.C, Row: d.R}, d.Mods
 			if d.X != nil {
 				e.Drag.X, e.Drag.HasX = *d.X, true
 			}
@@ -283,7 +279,11 @@ func EncodeEvent(e Event) string {
 	if e.Kind == EventCommand || e.Kind == EventCaps {
 		return EncodePlain(Control{{"a", "ev"}, {"e", e.Kind}}, body)
 	}
-	return EncodePlain(Control{{"a", "ev"}, {"s", e.Surface}, {"e", e.Kind}, {"t", e.Target}}, body)
+	ctl := Control{{"a", "ev"}, {"s", e.Surface}, {"e", e.Kind}}
+	if e.Target != "" {
+		ctl = append(ctl, KV{"t", e.Target})
+	}
+	return EncodePlain(ctl, body)
 }
 
 // detailOf is the detail of what e carries for its kind; nil for none.
@@ -291,7 +291,7 @@ func detailOf(e Event) []byte {
 	var d msgp.Encodable
 	switch e.Kind {
 	case EventClick:
-		c := clickDetail{Value: e.Value, Area: e.Area}
+		c := clickDetail{Area: e.Area, Mods: e.Mods, Value: e.Value}
 		if e.Count > 1 {
 			c.Count = e.Count
 		}
@@ -303,21 +303,17 @@ func detailOf(e Event) []byte {
 		}
 		d = &c
 	case EventPress:
-		if e.Area == nil {
+		if e.Area == nil && e.Mods == 0 {
 			return nil
 		}
-		d = &pressDetail{Area: e.Area}
+		d = &pressDetail{Area: e.Area, Mods: e.Mods}
 	case EventChange:
 		d = &changeDetail{Checked: e.Checked, Value: e.Value}
 	case EventInput:
 		d = &inputDetail{Value: e.Value}
 	case EventSubmit:
-		d = submitDetail(e.Fields)
-	case EventResize:
-		if e.Size == nil {
-			return nil
-		}
-		d = e.Size
+		// A submit always has its fields, none included (SPEC §9).
+		d = &submitDetail{Fields: e.Fields}
 	case EventFit:
 		d = &fitDetail{R: e.FitRows}
 	case EventDragStart, EventDrag, EventDragEnd:
@@ -325,10 +321,7 @@ func detailOf(e Event) []byte {
 			return nil
 		}
 		g := e.Drag
-		dd := dragDetail{C: g.Col, R: g.Row, Keys: g.Keys}
-		if dd.Keys == nil {
-			dd.Keys = []string{}
-		}
+		dd := dragDetail{C: g.Col, R: g.Row, Mods: e.Mods}
 		if g.HasX {
 			dd.X = &g.X
 		}
@@ -403,6 +396,11 @@ type Reply struct {
 	// Cols and Rows are a placement's size, in a reply to place: with
 	// Placement.Rows 0, the rows the host chose.
 	Cols, Rows int
+	// Op is the index of the op at fault, from 0, in an error answering a
+	// delta (the control key i, SPEC §6.1); HasOp says whether the reply
+	// has one, since 0 is an index like any other.
+	Op    int
+	HasOp bool
 	// Code and Detail say what went wrong, when not OK: empty when the
 	// error's body does not decode.
 	Code, Detail string
@@ -422,7 +420,9 @@ func ReplyOf(m Message) (Reply, bool) {
 	n, _ := strconv.Atoi(Get(m.Control, "n"))
 	c, _ := strconv.Atoi(Get(m.Control, "c"))
 	rows, _ := strconv.Atoi(Get(m.Control, "r"))
-	r := Reply{OK: a == "ok", Re: Get(m.Control, "re"), N: n, Surface: Get(m.Control, "s"), Cols: c, Rows: rows, Message: m}
+	i, hasOp := Lookup(m.Control, "i")
+	op, err := strconv.Atoi(i)
+	r := Reply{HasOp: hasOp && err == nil && op >= 0, Op: max(op, 0), OK: a == "ok", Re: Get(m.Control, "re"), N: n, Surface: Get(m.Control, "s"), Cols: c, Rows: rows, Message: m}
 	switch {
 	case !r.OK:
 		var e errorBody
@@ -499,6 +499,12 @@ func ReplyCaps(n string, caps Caps) string {
 	return ReplyOK(n, "", "q", nil, body)
 }
 
+// ReplyDeltaErr is a host's error reply to a delta (SPEC §6.1): as
+// ReplyErr, with i, the index of the first op at fault.
+func ReplyDeltaErr(n, surface string, op int, code, detail string) string {
+	return EncodePlain(replyControl("err", n, surface, "delta", Control{{"i", strconv.Itoa(op)}}), encodeBody(&errorBody{Code: code, Detail: detail}))
+}
+
 func replyControl(a, n, surface, re string, extra Control) Control {
 	ctl := Control{{"a", a}}
 	if n != "" {
@@ -516,7 +522,7 @@ func Err(r Reply) error {
 	if r.OK {
 		return nil
 	}
-	return &Error{Code: r.Code, Detail: r.Detail, Re: r.Re, Surface: r.Surface}
+	return &Error{Code: r.Code, Detail: r.Detail, Re: r.Re, Surface: r.Surface, Op: r.Op, HasOp: r.HasOp}
 }
 
 // Error is an error reply (SPEC §3.6).
@@ -525,6 +531,10 @@ type Error struct {
 	Detail  string
 	Re      string // the action answered
 	Surface string
+	// Op is the index of the op at fault, in an error answering a delta,
+	// and HasOp whether it names one (Reply.Op).
+	Op    int
+	HasOp bool
 }
 
 // Error says what was refused and why: "hotty: delta card: ENOTARGET (go)".
@@ -540,143 +550,53 @@ func (e *Error) Error() string {
 	return s
 }
 
-// CellCSS is a cell's size in CSS pixels: what a document's layout and an
-// SVG's viewBox are measured in. Before a host has said, or if it said
-// nothing, it is a usual 9×18.
-func CellCSS(c Caps) (w, h float64) {
-	if c.Cell == nil || c.Cell.W <= 0 || c.Cell.H <= 0 {
-		return 9, 18
-	}
-	scale := c.Scale
-	if scale <= 0 {
-		scale = 1
-	}
-	return float64(c.Cell.W) / scale, float64(c.Cell.H) / scale
-}
-
-// Supports reports whether the host supports a delta op. A host that lists
-// no ops is taken to support them all.
-func Supports(c Caps, op Op) bool {
-	if len(c.Ops) == 0 {
-		return true
-	}
-	for _, o := range c.Ops {
-		if o == string(op) {
-			return true
-		}
-	}
-	return false
-}
-
-// Sends reports whether the host sends an event kind. A host that lists no
-// kinds is taken to send them all. Drag in its events stands for
-// dragstart, drag and dragend (SPEC §4).
-func Sends(c Caps, kind string) bool {
-	if len(c.Events) == 0 {
-		return true
-	}
-	if kind == EventDragStart || kind == EventDragEnd {
-		kind = EventDrag
-	}
-	for _, k := range c.Events {
-		if k == kind {
-			return true
-		}
-	}
-	return false
-}
-
-// Drags reports whether the host sends drags (SPEC §9.1): drag in its
-// events, which stands for dragstart, drag and dragend. Unlike Sends, a
-// host that lists no kinds is taken not to, since drags came after the
-// first hosts: a program offers another way to do what its drags do.
-func Drags(c Caps) bool {
-	for _, k := range c.Events {
-		if k == EventDrag {
-			return true
-		}
-	}
-	return false
-}
-
-// Hovers reports whether the host sends hover (SPEC §9.4). Like Drags, a
-// host that lists no kinds is taken not to: without it a program never
-// hears the pointer leave for a surface, and clears what it lit on the
-// next key or press instead.
-func Hovers(c Caps) bool {
-	for _, k := range c.Events {
-		if k == EventHover {
-			return true
-		}
-	}
-	return false
-}
-
-// Views reports whether the host sends view (SPEC §9.5). Like Drags, a
-// host that lists no kinds is taken not to: without it a program that
-// needs to know what is shown draws that part in cells, or takes the
-// element it last revealed as the one shown.
-func Views(c Caps) bool {
-	for _, k := range c.Events {
-		if k == EventView {
-			return true
-		}
-	}
-	return false
-}
+// HasFeature reports whether the host has an optional feature (SPEC §4):
+// FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything
+// else a 0.3 host does, it does.
+func HasFeature(c Caps, feature string) bool { return slices.Contains(c.Features, feature) }
 
 // Light reports whether the terminal's colour scheme is light.
 func Light(c Caps) bool { return c.Scheme == "light" }
 
 // Merge is c with the fields a caps event changed (Event.Changed) in place
 // of its own (SPEC §4): those whose keys changed's Raw has. A field the
-// event empties ({}) became absent (SPEC §9), and Merge drops it. Its Raw
-// is c's with those fields replaced, so a relay announces the capabilities
-// as they are now.
+// event empties ({}, [] or "") became absent (SPEC §9), and Merge drops
+// it. Its Raw is c's with those fields replaced, so a relay announces the
+// capabilities as they are now.
 func Merge(c, changed Caps) Caps {
 	out := c
 	for _, e := range rawFields(changed.Raw) {
 		switch e.key {
 		case "v":
 			out.V = changed.V
-		case "ops":
-			out.Ops = changed.Ops
-		case "events":
-			out.Events = changed.Events
-		case "cell":
-			out.Cell = changed.Cell
+		case "cellcss":
+			out.CellCSS = changed.CellCSS
 		case "scale":
 			out.Scale = changed.Scale
 		case "scheme":
 			out.Scheme = changed.Scheme
-		case "limits":
-			out.Limits = changed.Limits
-		case "net":
-			out.Net = changed.Net
-		case "scroll":
-			out.Scroll = changed.Scroll
-		case "passthrough":
-			out.Passthrough = changed.Passthrough
-		case "steps":
-			out.Steps = changed.Steps
-		case "drop":
-			out.Drop = changed.Drop
-		case "count":
-			out.Count = changed.Count
 		case "mod":
 			out.Mod = changed.Mod
+		case "features":
+			out.Features = changed.Features
+			if emptied(e) {
+				out.Features = nil
+			}
+		case "limits":
+			out.Limits = changed.Limits
+			if emptied(e) {
+				out.Limits = nil
+			}
+		case "net":
+			out.Net = changed.Net
+			if emptied(e) {
+				out.Net = nil
+			}
 		case "edit":
 			out.Edit = changed.Edit
 			if emptied(e) {
 				out.Edit = nil
 			}
-		case "keys":
-			out.Keys = changed.Keys
-			if emptied(e) {
-				out.Keys = nil
-			}
-		case "menu":
-			out.Menu = changed.Menu
 		case "host":
 			out.Host = changed.Host
 		case "version":
@@ -708,11 +628,21 @@ func Merge(c, changed Caps) Caps {
 	return out
 }
 
-// emptied reports whether a field of a caps event is an empty map: the
-// field became absent (SPEC §9).
+// emptied reports whether a field of a caps event is its type's empty
+// value, an empty map, array or string: the field became absent (SPEC §9).
 func emptied(f rawField) bool {
-	n, _, err := msgp.ReadMapHeaderBytes(f.value)
-	return err == nil && n == 0
+	switch msgp.NextType(f.value) {
+	case msgp.MapType:
+		n, _, err := msgp.ReadMapHeaderBytes(f.value)
+		return err == nil && n == 0
+	case msgp.ArrayType:
+		n, _, err := msgp.ReadArrayHeaderBytes(f.value)
+		return err == nil && n == 0
+	case msgp.StrType:
+		s, _, err := msgp.ReadStringBytes(f.value)
+		return err == nil && s == ""
+	}
+	return false
 }
 
 // rawField is one field of a msgpack map: its key, and its value as it

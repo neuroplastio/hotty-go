@@ -148,6 +148,13 @@ type Surface struct {
 	// (SPEC §5.2). Surfaces at the same Z stack in the order they were
 	// first sent, the later above.
 	Z int
+	// Press, Fit and Hover are what the program wants of the surface now;
+	// they belong to the surface on the host (SPEC §5.2), so the Session
+	// sends each only when it differs from what the surface last had: on
+	// when it turns on, off when it turns off, nothing when it is as it
+	// was. A surface the host lost, or the Session deleted, starts again
+	// from none.
+	//
 	// Press asks for an EventMsg of kind press wherever the user presses
 	// in the surface, on text and empty space too: for a program that moves
 	// its selection to the card pressed.
@@ -167,9 +174,7 @@ type Surface struct {
 	// wheel, a touchpad, touch and the scrolling keys move it, and the
 	// program hears nothing of it. Rect is the box it scrolls in. It goes
 	// out with the document, so a change sends the document again, which
-	// starts at the top. A host whose Caps.Scroll is false clips the
-	// document as before: a program that must show the rest there scrolls
-	// it by Clip, or by documents of its own.
+	// starts at the top.
 	Scroll hotty.Axes
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the
@@ -187,6 +192,21 @@ type placement struct {
 	hover      bool
 }
 
+// flags are a surface's p, f and v as the host has them (SPEC §5.2).
+type flags struct{ press, fit, hover bool }
+
+// changed is the Flag that takes a surface's p, f or v from was to now:
+// absent when it is as it was.
+func changed(was, now bool) hotty.Flag {
+	switch {
+	case was == now:
+		return 0
+	case now:
+		return hotty.On
+	}
+	return hotty.Off
+}
+
 // DefaultLimit is how many surfaces a Session keeps at most, shown and
 // hidden, unless its Limit or the terminal says fewer: a hidden surface
 // keeps its memory in the terminal (a document, and pixels in a terminal
@@ -200,7 +220,9 @@ const DefaultLimit = 48
 type Session struct {
 	// Mode is what detection found.
 	Mode Mode
-	// Caps is what the host said about itself, when Mode is Native.
+	// Caps is what the host said about itself, when Mode is Native, kept
+	// current by the caps events it has sent since (hotty.Merge); the events
+	// still come back as EventMsg.
 	Caps hotty.Caps
 	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
 	// program that draws either rendition whenever Mode says: one that may
@@ -224,6 +246,7 @@ type Session struct {
 
 	dec     hotty.Decoder
 	placed  map[string]placement  // on screen
+	flags   map[string]flags      // the host's p, f and v for each surface sent
 	hasDoc  map[string]bool       // sent: on screen or hidden
 	scroll  map[string]hotty.Axes // the axes each document went out with
 	keep    map[string]bool
@@ -251,7 +274,7 @@ type Session struct {
 
 // New returns a Session that has not detected the terminal yet.
 func New() *Session {
-	return &Session{placed: map[string]placement{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
+	return &Session{placed: map[string]placement{}, flags: map[string]flags{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
 		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}}
 }
 
@@ -312,6 +335,9 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 			return h.reply(r)
 		}
 		if ev, ok := hotty.EventOf(hm); ok {
+			if ev.Kind == hotty.EventCaps && ev.Changed != nil && h.Mode == Native {
+				h.Caps = hotty.Merge(h.Caps, *ev.Changed) // kept current (SPEC §4)
+			}
 			return EventMsg{ev}, nil
 		}
 		return nil, nil
@@ -387,6 +413,7 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		}
 		delete(h.hasDoc, r.Surface)
 		delete(h.placed, r.Surface)
+		delete(h.flags, r.Surface)
 		h.refused[r.Surface] = true
 		return RelayoutMsg{}, nil
 	case r.Re == "place" && r.Code == hotty.ENOENT && h.refused[r.Surface]:
@@ -396,6 +423,7 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		// The host dropped the document with its placement: send both.
 		delete(h.hasDoc, r.Surface)
 		delete(h.placed, r.Surface)
+		delete(h.flags, r.Surface)
 		return RelayoutMsg{}, nil
 	}
 	return ErrorMsg{r}, nil
@@ -473,10 +501,12 @@ func (h *Session) Layout(want []Surface) {
 		p := placement{at: at, cols: s.Rect.W, rows: s.Rect.H,
 			win: hotty.Window{X: at.X - s.Rect.X, Y: at.Y - s.Rect.Y, W: at.W, H: at.H}, z: s.Z, press: s.Press, fit: s.Fit, hover: s.Hover}
 		if old, ok := h.placed[s.Name]; !ok || old != p {
-			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y,
-				hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z, Press: p.press, Fit: p.fit, Hover: p.hover}))
+			have, now := h.flags[s.Name], flags{p.press, p.fit, p.hover}
+			h.Send(hotty.PlaceAt(s.Name, at.X, at.Y, hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z,
+				Press: changed(have.press, now.press), Fit: changed(have.fit, now.fit), Hover: changed(have.hover, now.hover)}))
 			h.Count.Places++
 			h.placed[s.Name] = p
+			h.flags[s.Name] = now
 		}
 	}
 	for _, name := range h.names() {
@@ -556,6 +586,7 @@ func (h *Session) Delete(name string) {
 	}
 	delete(h.hasDoc, name)
 	delete(h.placed, name)
+	delete(h.flags, name)
 	delete(h.keep, name)
 	delete(h.seen, name)
 	delete(h.scroll, name)

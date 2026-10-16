@@ -206,7 +206,7 @@ Open opens the process's terminal, /dev/tty, whatever its standard streams are: 
 func (t *Term) Caps() hotty.Caps
 ```
 
-Caps is what the host said about itself, when Native.
+Caps is what the host said about itself, when Native, kept current by the caps events it has sent since (SPEC §4, hotty.Merge): the events still reach Events, for a program that acts on a change.
 
 ### <a id="Term.Close"></a>func (*Term) Close
 

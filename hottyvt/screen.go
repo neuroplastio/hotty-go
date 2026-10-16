@@ -340,9 +340,10 @@ func (s *Screen) vars() string {
 
 // Delta is the commands that bring surface, whose document holds the
 // screen's element as HTML or Delta last left it, to the screen as it is
-// now: one per row that changed, and the program's surfaces' changes
-// (Surfaces, in the package's documentation); none when nothing changed.
-// After a Resize, it is the whole element, and so it is when the surfaces
+// now: the resources that arrived, then one delta of the program's
+// surfaces' changes (Surfaces, in the package's documentation) and of the
+// rows that changed; none when nothing changed. After a Resize, it is the
+// whole element, and so it is when the surfaces
 // did more since the last Delta than the screen keeps (a program that does
 // not show the screen for a while need not ask). Before HTML, it is nothing:
 // there is no element to change. Send a frame's commands together, in
@@ -357,7 +358,7 @@ func (s *Screen) Delta(surface string) []string {
 		s.resOut = nil
 		return append(res, hotty.MorphTo(surface, s.id, s.HTML()))
 	}
-	out := s.surfaceDelta(surface)
+	out, ops := s.surfaceDelta()
 	for y := range rows {
 		r := s.row(y)
 		if r == s.sent[y] {
@@ -365,10 +366,13 @@ func (s *Screen) Delta(surface string) []string {
 		}
 		s.sent[y] = r
 		if plain(r) {
-			out = append(out, hotty.SetText(surface, s.RowID(y), html.UnescapeString(r)))
+			ops = append(ops, hotty.OpText(s.RowID(y), html.UnescapeString(r)))
 		} else {
-			out = append(out, hotty.Delta(surface, hotty.OpInner, s.RowID(y), "", []byte(r)))
+			ops = append(ops, hotty.OpInner(s.RowID(y), r))
 		}
+	}
+	if len(ops) > 0 {
+		out = append(out, hotty.Delta(surface, ops))
 	}
 	return out
 }

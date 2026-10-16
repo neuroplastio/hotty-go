@@ -22,7 +22,7 @@ h.Click("tool-card", "retry")                 // what the user does
 h.Key("Tab")                                  // keys, as SPEC §10.2 has a host take them
 ```
 
-The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors. It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows).
+The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors that need no layout: it skips the ones marked scroll, steps, drop and view, and those for features it lacks (SDK.md §4.4). It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows), nothing in it scrolls, and a test says where in an element a pointer is (DragStartStep).
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
@@ -44,14 +44,15 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) BecomeHost()`](#Host.BecomeHost)
   - [`func (h *Host) Blur(surface string) error`](#Host.Blur)
   - [`func (h *Host) Buffered() int`](#Host.Buffered)
+  - [`func (h *Host) Change(f func(c *hotty.Caps))`](#Host.Change)
   - [`func (h *Host) Check(surface, id string, on bool) error`](#Host.Check)
   - [`func (h *Host) Choose(surface, id, value string) error`](#Host.Choose)
-  - [`func (h *Host) Click(surface, id string) error`](#Host.Click)
-  - [`func (h *Host) ClickLink(surface, href string) error`](#Host.ClickLink)
+  - [`func (h *Host) Click(surface, id string, keys ...string) error`](#Host.Click)
+  - [`func (h *Host) ClickLink(surface, href string, keys ...string) error`](#Host.ClickLink)
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
-  - [`func (h *Host) DoubleClick(surface, id string) error`](#Host.DoubleClick)
+  - [`func (h *Host) DoubleClick(surface, id string, keys ...string) error`](#Host.DoubleClick)
   - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
   - [`func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error`](#Host.DragEndOver)
   - [`func (h *Host) DragEndStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragEndStep)
@@ -69,9 +70,11 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
   - [`func (h *Host) Key(key string) (used bool)`](#Host.Key)
   - [`func (h *Host) Lines() []string`](#Host.Lines)
+  - [`func (h *Host) Menu() *hotty.MenuLevel`](#Host.Menu)
   - [`func (h *Host) Opened() []string`](#Host.Opened)
   - [`func (h *Host) Output() string`](#Host.Output)
-  - [`func (h *Host) Press(surface, id string) error`](#Host.Press)
+  - [`func (h *Host) Prefix() string`](#Host.Prefix)
+  - [`func (h *Host) Press(surface, id string, keys ...string) error`](#Host.Press)
   - [`func (h *Host) Read(p []byte) (int, error)`](#Host.Read)
   - [`func (h *Host) Replies() []hotty.Message`](#Host.Replies)
   - [`func (h *Host) Resource(id string) (mime string, data []byte, ok bool)`](#Host.Resource)
@@ -95,11 +98,14 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (s *Surface) Attr(id, name string) (string, bool)`](#Surface.Attr)
   - [`func (s *Surface) Detached() bool`](#Surface.Detached)
   - [`func (s *Surface) Element(id string) (e Element, ok bool)`](#Surface.Element)
+  - [`func (s *Surface) Fit() bool`](#Surface.Fit)
   - [`func (s *Surface) Focused() string`](#Surface.Focused)
   - [`func (s *Surface) HTML() string`](#Surface.HTML)
+  - [`func (s *Surface) Hover() bool`](#Surface.Hover)
   - [`func (s *Surface) Name() string`](#Surface.Name)
   - [`func (s *Surface) Placed() bool`](#Surface.Placed)
   - [`func (s *Surface) Placement() hotty.Placement`](#Surface.Placement)
+  - [`func (s *Surface) Press() bool`](#Surface.Press)
   - [`func (s *Surface) Text() string`](#Surface.Text)
   - [`func (s *Surface) TextOf(id string) string`](#Surface.TextOf)
   - [`func (s *Surface) Value(id string) (string, bool)`](#Surface.Value)
@@ -116,7 +122,7 @@ var (
 	ErrNoElement  = errors.New("hottytest: no such element")
 	ErrDetached   = errors.New("hottytest: the surface is detached, and reports nothing")
 	ErrNotPlaced  = errors.New("hottytest: the surface is not placed")
-	ErrNoPress    = errors.New("hottytest: the placement did not ask for presses (Placement.Press)")
+	ErrNoPress    = errors.New("hottytest: the surface did not ask for presses (Placement.Press)")
 	ErrNotControl = errors.New("hottytest: the element is not a control that takes this")
 	ErrNoReport   = errors.New("hottytest: nothing with an id reports this click")
 	ErrNoDrag     = errors.New("hottytest: no drag is in progress")
@@ -132,7 +138,7 @@ Errors of the user's actions.
 func Body(js string) []byte
 ```
 
-Body is a body written as JSON, as the msgpack a host sends (SPEC §3.3): a number with a fraction or an exponent is a float, any other an int, as the conformance vectors write them. It is for a test that makes up what a host says, such as Body(\`{"code":"ENOENT"}\`) in an error reply. It panics when js is not JSON.
+Body is a body written as JSON, as the msgpack a host sends (SPEC §3.3): a number with a fraction or an exponent is a float, any other an int, as the conformance vectors write them, and a map keeps its keys in the order written. It is for a test that makes up what a host says, such as Body(\`{"code":"ENOENT"}\`) in an error reply, or what a program says, such as a delta's ops. It panics when js is not JSON.
 
 ## <a id="DefaultCaps"></a>func DefaultCaps
 
@@ -140,7 +146,7 @@ Body is a body written as JSON, as the msgpack a host sends (SPEC §3.3): a numb
 func DefaultCaps() hotty.Caps
 ```
 
-DefaultCaps are the capabilities a Host reports unless Caps says otherwise.
+DefaultCaps are the capabilities a Host reports unless Caps says otherwise. Its features are the ones it can honour: it lays nothing out, so it has no passthrough, but it hears where the pointer is (hover), counts clicks (count, DoubleClick) and records the menu a program shows (menu, Menu).
 
 ## <a id="Child"></a>type Child
 
@@ -213,6 +219,14 @@ func (h *Host) Buffered() int
 
 Buffered is how many bytes the host has sent that the program has not read: a test that hands a program its input itself, a Bubble Tea model's Update say, reads that much without blocking.
 
+### <a id="Host.Change"></a>func (*Host) Change
+
+```go
+func (h *Host) Change(f func(c *hotty.Caps))
+```
+
+Change changes the capabilities the host reports, as the terminal does when the user changes its font, theme or settings, or when a multiplexer's program moves to another viewer's host (SPEC §4): f is given a copy to change. The program, if it asked, then hears caps with every field that differs from what it last heard (SPEC §9), the empty value for one that became absent. A new scale alone says nothing: a zoom is not told (SPEC §4). A new cell size lays the documents out again, so a surface that asked for fit may hear it.
+
 ### <a id="Host.Check"></a>func (*Host) Check
 
 ```go
@@ -232,17 +246,19 @@ Choose picks an option of a select by its value, as from its list: input (with d
 ### <a id="Host.Click"></a>func (*Host) Click
 
 ```go
-func (h *Host) Click(surface, id string) error
+func (h *Host) Click(surface, id string, keys ...string) error
 ```
 
 Click clicks the element with an id, as the user does (SPEC §9): a press first, if the placement asks for presses; the keyboard, if the element takes focus, or else back to the terminal from the surface that had it (blur, SPEC §10.1); then click, reported by the nearest element from it outward that reports clicks, if that has an id. A link reports its href, and a hyperlink (target=\_blank) is opened by the terminal and reports nothing (Opened). A submit button then submits its form.
+
+keys are the modifier keys held ("shift", "ctrl", "alt", "meta"); the click carries those held at its release (SPEC §9). A press with Alt is the program's own gesture (SPEC §9.2): the surface hears nothing of it, and the pointer is out of its window.
 
 On a detached surface the click does what is local and reports nothing: ErrDetached.
 
 ### <a id="Host.ClickLink"></a>func (*Host) ClickLink
 
 ```go
-func (h *Host) ClickLink(surface, href string) error
+func (h *Host) ClickLink(surface, href string, keys ...string) error
 ```
 
 ClickLink clicks the first link in a surface whose href is href, as written in the document: for links with no id, such as a manual page's references. It is Click on that link.
@@ -274,7 +290,7 @@ Cursor is where the cursor is, and whether it is on show (DECTCEM: ESC \[ ?25 l 
 ### <a id="Host.DoubleClick"></a>func (*Host) DoubleClick
 
 ```go
-func (h *Host) DoubleClick(surface, id string) error
+func (h *Host) DoubleClick(surface, id string, keys ...string) error
 ```
 
 DoubleClick clicks an element twice, as a double click does: Click, then a click that says it is the second of its run (Event.Count 2, SPEC §9).
@@ -309,7 +325,7 @@ DragEndStep is DragEnd with the pointer at step x, y of the element the drag beg
 func (h *Host) DragMove(id string, c, r int, keys ...string) error
 ```
 
-DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: t, the nearest one with an id and drag in its data-on (or drop, when the capabilities say Drop), from it outward, or empty; while that is empty, when the cell changes instead. In a t with data-steps the pointer stays at the step it was at in t, or 0 in a new one (DragOver).
+DragMove moves the pointer of the drag in progress onto the element with an id in the drag's surface, or onto none ("": a gap, another surface, the cells, outside the window), at the surface's cell c, r (SPEC §9.1). It reports drag when the element under the pointer changes: t, the nearest one with an id and drag in its data-on (or drop), from it outward, or empty; while that is empty, when the cell changes instead. In a t with data-steps the pointer stays at the step it was at in t, or 0 in a new one (DragOver).
 
 ### <a id="Host.DragMoveStep"></a>func (*Host) DragMoveStep
 
@@ -325,7 +341,7 @@ DragMoveStep is DragMove with the pointer at step x, y of the element the drag b
 func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error
 ```
 
-DragOver is DragMove with the pointer at step tx, ty of t, for a t with drop in its data-on and data-steps (SPEC §9.1): a row with "0 1" is split in halves, a folder with "0 2" into before, into and after. The host lays nothing out, so the test says where in t the pointer is; a step past t's count is clamped to it, and one along an axis t does not count is ignored. It also reports drag when that step changes. The host reports it only when its capabilities say Drop (Caps).
+DragOver is DragMove with the pointer at step tx, ty of t, for a t with drop in its data-on and data-steps (SPEC §9.1): a row with "0 1" is split in halves, a folder with "0 2" into before, into and after. The host lays nothing out, so the test says where in t the pointer is; a step past t's count is clamped to it, and one along an axis t does not count is ignored. It also reports drag when that step changes.
 
 ### <a id="Host.DragStart"></a>func (*Host) DragStart
 
@@ -343,7 +359,7 @@ The host lays nothing out, so a test names what is under the pointer: DragMove f
 func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error
 ```
 
-DragStartStep is DragStart on an element with data-steps (SPEC §9.1), with the pointer at step x, y of it. The host lays nothing out, so the test says where in the element the pointer is; a step past the element's count is clamped to it, and one along an axis it does not count is ignored. The host reports steps only when its capabilities say Steps (Caps).
+DragStartStep is DragStart on an element with data-steps (SPEC §9.1), with the pointer at step x, y of it. The host lays nothing out, so the test says where in the element the pointer is; a step past the element's count is clamped to it, and one along an axis it does not count is ignored.
 
 ### <a id="Host.Dragging"></a>func (*Host) Dragging
 
@@ -432,6 +448,14 @@ func (h *Host) Lines() []string
 
 Lines is the screen's text as the program wrote its lines: Screen, with each row that a line went on to when it was wider than the terminal (autowrap) joined to the row before it. A row erased whole starts a line of its own.
 
+### <a id="Host.Menu"></a>func (*Host) Menu
+
+```go
+func (h *Host) Menu() *hotty.MenuLevel
+```
+
+Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it shows none: the program sent none or an empty a=menu, or the menu went with Escape, a key it does not list, a change of screen or a reset. A host without the feature menu shows none.
+
 ### <a id="Host.Opened"></a>func (*Host) Opened
 
 ```go
@@ -448,10 +472,18 @@ func (h *Host) Output() string
 
 Output is every byte the program wrote.
 
+### <a id="Host.Prefix"></a>func (*Host) Prefix
+
+```go
+func (h *Host) Prefix() string
+```
+
+Prefix is the surface whose keys all reach the program since a key its keymap binds to prefix (SPEC §10.5), until the program sends a=focus or a=blur, the surface loses the keyboard, or the user focuses an element of it with a press; "" when none.
+
 ### <a id="Host.Press"></a>func (*Host) Press
 
 ```go
-func (h *Host) Press(surface, id string) error
+func (h *Host) Press(surface, id string, keys ...string) error
 ```
 
 Press presses the element with an id, or empty space ("") (SPEC §9): reported only on a placement made with Placement.Press, as the id of the nearest element with one.
@@ -566,7 +598,7 @@ AutoRows sets how many rows a placement with auto rows gets, for its surface lai
 func Caps(c hotty.Caps) Option
 ```
 
-Caps sets the capabilities the host reports. Fields left zero keep the defaults (DefaultCaps).
+Caps sets the capabilities the host reports. Fields left zero keep the defaults (DefaultCaps). Features replace the default list: a test that wants a host without hover or menus names the ones it has.
 
 ### <a id="KittyGraphics"></a>func KittyGraphics
 
@@ -643,6 +675,14 @@ func (s *Surface) Element(id string) (e Element, ok bool)
 
 Element finds the element with an id. ok is false when there is none.
 
+### <a id="Surface.Fit"></a>func (*Surface) Fit
+
+```go
+func (s *Surface) Fit() bool
+```
+
+Fit reports whether the program asked for fit events (Placement.Fit).
+
 ### <a id="Surface.Focused"></a>func (*Surface) Focused
 
 ```go
@@ -658,6 +698,14 @@ func (s *Surface) HTML() string
 ```
 
 HTML is the document as it is now.
+
+### <a id="Surface.Hover"></a>func (*Surface) Hover
+
+```go
+func (s *Surface) Hover() bool
+```
+
+Hover reports whether the program asked for hover events (Placement.Hover).
 
 ### <a id="Surface.Name"></a>func (*Surface) Name
 
@@ -682,6 +730,14 @@ func (s *Surface) Placement() hotty.Placement
 ```
 
 Placement is the surface's last placement, as the program sent it; Rows is the rows the host chose when the program asked for auto.
+
+### <a id="Surface.Press"></a>func (*Surface) Press
+
+```go
+func (s *Surface) Press() bool
+```
+
+Press reports whether the program asked for presses (Placement.Press): the flag belongs to the surface, and holds across placements (SPEC §5.2).
 
 ### <a id="Surface.Text"></a>func (*Surface) Text
 

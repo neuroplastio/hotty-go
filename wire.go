@@ -4,65 +4,40 @@ package hotty
 // read and written by the codec msgp generates (wire_gen.go). They have no
 // other methods: what is done with them is a function beside them (gov P-3).
 
-//go:generate go run github.com/tinylib/msgp@v1.6.5 -file wire.go -o wire_gen.go -marshal=false -tests=false -unexported
+//go:generate msgp -file wire.go -o wire_gen.go -marshal=false -tests=false -unexported
 //msgp:newtime
 //msgp:limit arrays:65536 maps:65536
+//msgp:tuple FormField
 
-// Caps is what a host says about itself in its reply to a query (SPEC §4).
+// Caps is what a host says about itself in its reply to a query (SPEC §4),
+// and, with only the fields that changed, in a caps event (SPEC §9).
 type Caps struct {
-	// V is the protocol version the host implements: "0.2".
+	// V is the protocol version the host implements: "0.3".
 	V string `msg:"v"`
-	// Ops are the delta ops it supports.
-	Ops []string `msg:"ops,omitempty"`
-	// Events are the event kinds it sends.
-	Events []string `msg:"events,omitempty"`
-	// Cell is a cell's size in device pixels; nil when the host did not
-	// say.
-	Cell *Cell `msg:"cell,omitempty"`
-	// Scale is device pixels per CSS pixel.
+	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
+	// when the host did not say.
+	CellCSS Size `msg:"cellcss,omitempty"`
+	// Scale is device pixels per CSS pixel: a hint for the resolution of
+	// images.
 	Scale float64 `msg:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
 	Scheme string `msg:"scheme,omitempty"`
+	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
+	// (SPEC §10.4); "" when the host did not say, which is Control.
+	Mod string `msg:"mod,omitempty"`
+	// Features are the optional features the host has (SPEC §4): see
+	// HasFeature.
+	Features []string `msg:"features,omitempty"`
 	// Limits are the host's limits, such as "surfaces" (a count) and
 	// "resources" (bytes) (SPEC §13).
 	Limits map[string]int `msg:"limits,omitempty"`
 	// Net is the host's network policy, from directive to the sources it
 	// allows (SPEC §7.2): empty when it fetches nothing.
 	Net map[string][]string `msg:"net,omitempty"`
-	// Scroll is true when a document can ask to scroll (Scroll, SPEC §5.1);
-	// a host that does not says nothing, and clips.
-	Scroll bool `msg:"scroll,omitempty"`
-	// Passthrough is true when the pointer passes through the parts of a
-	// surface that take no pointer (SPEC §9.3); a host that does not says
-	// nothing, and every window takes the pointer wherever it is.
-	Passthrough bool `msg:"passthrough,omitempty"`
-	// Steps is true when a drag of an element with data-steps says where
-	// in the element the pointer is (Drag.X and Drag.Y, SPEC §9.1); a host
-	// that does not says nothing, and its drags carry cells only.
-	Steps bool `msg:"steps,omitempty"`
-	// Drop is true when an element with drop in its data-on can be a
-	// drag's t without being dragged, and a drag says where in it the
-	// pointer is when it has data-steps (Drag.TX and Drag.TY, SPEC §9.1); a host
-	// that does not says nothing, and only an element that opts in to
-	// drags is ever t.
-	Drop bool `msg:"drop,omitempty"`
-	// Count is true when a repeated click says its place in its run of
-	// clicks (Event.Count, SPEC §9); a host that does not says nothing, and
-	// every click reads as a single one.
-	Count bool `msg:"count,omitempty"`
-	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
-	// (SPEC §10.4); "" when the host did not say, which is Control.
-	Mod string `msg:"mod,omitempty"`
 	// Edit is the host's edit shortcuts, from each action to its keys
 	// (SPEC §10.2); a host that reports them takes edit commands (Edit,
 	// SPEC §10.6).
 	Edit map[string][]string `msg:"edit,omitempty"`
-	// Keys is the user's leader and sequence timeout (SPEC §10.5); nil
-	// when the host reads no key sequences.
-	Keys *Keys `msg:"keys,omitempty"`
-	// Menu is true when the host shows a program's which-key menus (Menu,
-	// SPEC §10.6).
-	Menu bool `msg:"menu,omitempty"`
 	// Host names the implementation, if it says.
 	Host string `msg:"host,omitempty"`
 	// Version is the implementation's version, with Host: dot-separated
@@ -75,17 +50,8 @@ type Caps struct {
 	Raw []byte `msg:"-"`
 }
 
-// Keys is how a host reads key sequences (SPEC §10.5).
-type Keys struct {
-	// Leader is the user's leader, a key sequence: what <leader> stands for.
-	Leader string `msg:"leader,omitempty"`
-	// Timeout is how long a sequence waits for its next key, in
-	// milliseconds.
-	Timeout int `msg:"timeout,omitempty"`
-}
-
 // MenuLevel is a which-key level a program shows while its key sequence
-// waits (Menu, SPEC §10.6), in myelin's names and order: a myelin Menu
+// waits (Menu, SPEC §10.5), in myelin's names and order: a myelin Menu
 // encodes as one.
 type MenuLevel struct {
 	// Seq is the keys typed so far, named as SPEC §10.4 names them.
@@ -108,12 +74,6 @@ type MenuItem struct {
 	Enabled bool `msg:"enabled"`
 }
 
-// Cell is a cell's size in device pixels.
-type Cell struct {
-	W int `msg:"w"`
-	H int `msg:"h"`
-}
-
 // Area is the cells an element covers (SPEC §9), counted as a drag's are:
 // Col and Row are the first column and row it touches, from 0 at the
 // surface's top left (not its window's), and W and H the columns and rows
@@ -126,7 +86,7 @@ type Area struct {
 	H   int `msg:"h"`
 }
 
-// Size is a surface's size in CSS pixels, in a resize event.
+// Size is a size in CSS pixels: a cell's, in the capabilities (SPEC §4).
 type Size struct {
 	W float64 `msg:"w"`
 	H float64 `msg:"h"`
@@ -141,15 +101,17 @@ type errorBody struct {
 // The detail of each event kind (SPEC §9), as the host sends it.
 
 type clickDetail struct {
-	Value string  `msg:"value,omitempty"`
+	Area  *Area   `msg:"area,omitempty"`
+	Mods  int     `msg:"mods,omitempty"`
 	Href  *string `msg:"href,omitempty"`
 	URL   string  `msg:"url,omitempty"`
-	Area  *Area   `msg:"area,omitempty"`
+	Value string  `msg:"value,omitempty"`
 	Count int     `msg:"count,omitempty"`
 }
 
 type pressDetail struct {
 	Area *Area `msg:"area,omitempty"`
+	Mods int   `msg:"mods,omitempty"`
 }
 
 type changeDetail struct {
@@ -166,13 +128,13 @@ type fitDetail struct {
 }
 
 type dragDetail struct {
-	C    int      `msg:"c"`
-	R    int      `msg:"r"`
-	Keys []string `msg:"keys"`
-	X    *int     `msg:"x,omitempty"`
-	Y    *int     `msg:"y,omitempty"`
-	TX   *int     `msg:"tx,omitempty"`
-	TY   *int     `msg:"ty,omitempty"`
+	C    int  `msg:"c"`
+	R    int  `msg:"r"`
+	Mods int  `msg:"mods,omitempty"`
+	X    *int `msg:"x,omitempty"`
+	Y    *int `msg:"y,omitempty"`
+	TX   *int `msg:"tx,omitempty"`
+	TY   *int `msg:"ty,omitempty"`
 }
 
 type hoverDetail struct {
@@ -201,5 +163,34 @@ type commandDetail struct {
 	Text *string `msg:"text,omitempty"`
 }
 
-// submitDetail is a form's fields by name.
-type submitDetail map[string]string
+// FormField is one field of a submitted form: its name and its value
+// (SPEC §9). On the wire it is the array [name, value].
+type FormField struct{ Name, Value string }
+
+// submitDetail is a form's fields, in tree order.
+type submitDetail struct {
+	Fields []FormField `msg:"fields"`
+}
+
+// Op is one change of a delta (SPEC §6.1): what to do, to which element,
+// with which name, and with which value. The builders OpMorph, OpAttr and
+// the rest make them. Value has presence, not just content: it is absent
+// for an op that takes none, and present, even empty, for one that does
+// (SDK.md §3.4.3).
+type Op struct {
+	// Op names what it does: "morph", "text", ….
+	Op string `msg:"op"`
+	// Target is the id of the element, as the document has it; empty for
+	// a morph of the whole tree, and sent only when not.
+	Target string `msg:"t,omitempty"`
+	// Key is the name of the attribute or the custom property, for attr,
+	// unattr and var.
+	Key string `msg:"k,omitempty"`
+	// Value is the HTML, the text or the value; nil when the op has none.
+	Value *string `msg:"v,omitempty"`
+}
+
+// deltaBody is a delta's body: its ops, in the order they apply.
+type deltaBody struct {
+	Ops []Op `msg:"ops"`
+}

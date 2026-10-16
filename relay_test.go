@@ -92,21 +92,21 @@ func TestHostReplies(t *testing.T) {
 	}
 	// The capabilities go as they came, fields this package does not know
 	// included, and uncompressed however long.
-	raw := body(`{"v":"0.2","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
+	raw := body(`{"v":"0.3","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
 	enc := ReplyCaps("1", Caps{Raw: raw})
 	if strings.Contains(enc, "o=z") {
 		t.Error("a caps reply compressed")
 	}
 	r, _ = ReplyOf(decodeOne(t, enc))
-	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.2" {
+	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.3" {
 		t.Errorf("ReplyCaps: %+v", caps)
 	}
 	// Written, Caps has only what it has.
-	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.2", Host: "h"})))
-	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e32a4686f7374a168" { // {"v":"0.2","host":"h"}
+	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.3", Host: "h"})))
+	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e33a4686f7374a168" { // {"v":"0.3","host":"h"}
 		t.Errorf("written: %x", r.Message.Payload)
 	}
-	if caps, ok := CapsOf(raw); !ok || caps.V != "0.2" || !bytes.Equal(caps.Raw, raw) {
+	if caps, ok := CapsOf(raw); !ok || caps.V != "0.3" || !bytes.Equal(caps.Raw, raw) {
 		t.Errorf("CapsOf: %+v", caps)
 	}
 	if _, ok := CapsOf(body(`{"v":2}`)); ok {
@@ -117,8 +117,8 @@ func TestHostReplies(t *testing.T) {
 func TestReplyQuery(t *testing.T) {
 	caps := Caps{V: Version, Host: "h"}
 	for v, speaks := range map[string]bool{
-		"0.2": true, "0.1,0.2": true, "99.0,0.2": true,
-		"": false, "0.1": false, "0.20": false, "00.2": false, "0.2.0": false,
+		"0.3": true, "0.2,0.3": true, "99.0,0.3": true,
+		"": false, "0.2": false, "0.30": false, "00.3": false, "0.3.0": false,
 	} {
 		q := Control{{"a", "q"}, {"n", "4"}}
 		if v != "" {
@@ -144,7 +144,7 @@ func TestMessagePlacement(t *testing.T) {
 		return PlacementOf(decodeOne(t, "\x1b]7279;"+ctl+"\x1b\\"))
 	}
 	p, err := place("a=place:s=card:c=40:r=3:z=-2:p=1:C=1")
-	if want := (Placement{Cols: 40, Rows: 3, Z: -2, Press: true, KeepCursor: true}); err != nil || p != want {
+	if want := (Placement{Cols: 40, Rows: 3, Z: -2, Press: On, KeepCursor: true}); err != nil || p != want {
 		t.Errorf("%+v %v", p, err)
 	}
 	// Defaults: to the right edge, and to the bottom, which with auto rows

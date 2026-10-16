@@ -21,22 +21,9 @@ import (
 // A vector that requires anything else is skipped: what is missing here is
 // SDK.md's list of this package's gaps.
 var features = map[string]bool{
-	"place.hover":         true,
-	"event.hover":         true,
-	"doc.scroll":          true,
-	"event.area":          true,
-	"event.view":          true,
-	"caps.views":          true,
-	"reveal":              true,
-	"caps.scroll":         true,
-	"caps.passthrough":    true,
-	"caps.version":        true,
-	"caps.drag-kinds":     true,
 	"options.unordered":   true,
 	"decode.abort-count":  true,
 	"decode.max":          true,
-	"event.count":         true,
-	"event.drop":          true,
 	"decode.unterminated": true,
 	"scanner.da1":         true,
 	"graphemes":           true,
@@ -165,7 +152,7 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 	case "hide":
 		return Hide(str("surface"), opts...)
 	case "delta":
-		return Delta(str("surface"), Op(str("op")), str("target"), str("key"), []byte(str("payload")), opts...)
+		return Delta(str("surface"), opsOf(args["ops"]), opts...)
 	case "set_text":
 		return SetText(str("surface"), str("target"), str("text"), opts...)
 	case "set_var":
@@ -234,13 +221,40 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 	return ""
 }
 
+// opsOf reads a delta vector's ops: an op has a value only if the vector
+// gives one, even an empty one.
+func opsOf(v any) []Op {
+	var ops []Op
+	for _, o := range asSlice(v) {
+		m := asMap(o)
+		op := Op{}
+		op.Op, _ = m["op"].(string)
+		op.Target, _ = m["target"].(string)
+		op.Key, _ = m["key"].(string)
+		if s, ok := m["value"].(string); ok {
+			op.Value = &s
+		}
+		ops = append(ops, op)
+	}
+	return ops
+}
+
 func placement(v any) Placement {
 	m, _ := v.(map[string]any)
 	num := func(m map[string]any, k string) int { f, _ := m[k].(float64); return int(f) }
-	flag := func(k string) bool { b, _ := m[k].(bool); return b }
+	flag := func(k string) Flag {
+		switch b, ok := m[k].(bool); {
+		case !ok:
+			return 0
+		case b:
+			return On
+		}
+		return Off
+	}
+	keep, _ := m["keep_cursor"].(bool)
 	p := Placement{
 		Cols: num(m, "cols"), Rows: num(m, "rows"), Z: num(m, "z"),
-		Press: flag("press"), Fit: flag("fit"), Hover: flag("hover"), KeepCursor: flag("keep_cursor"),
+		Press: flag("press"), Fit: flag("fit"), Hover: flag("hover"), KeepCursor: keep,
 	}
 	if w, ok := m["window"].(map[string]any); ok {
 		p.Window = Window{X: num(w, "x"), Y: num(w, "y"), W: num(w, "w"), H: num(w, "h")}
@@ -464,16 +478,27 @@ func TestDecodeVectors(t *testing.T) {
 }
 
 func replyView(r Reply) map[string]any {
+	var op any // null: the reply names no op
+	if r.HasOp {
+		op = r.Op
+	}
 	return map[string]any{
 		"ok": r.OK, "re": r.Re, "n": r.N, "surface": r.Surface,
-		"cols": r.Cols, "rows": r.Rows, "code": r.Code, "detail": r.Detail,
+		"cols": r.Cols, "rows": r.Rows, "code": r.Code, "detail": r.Detail, "op": op,
 	}
 }
 
 func eventView(e Event) map[string]any {
 	view := map[string]any{
 		"surface": e.Surface, "kind": e.Kind, "target": e.Target,
-		"value": e.Value, "fields": e.Fields,
+		"value": e.Value, "mods": e.Mods,
+	}
+	if e.Fields != nil {
+		pairs := [][2]string{}
+		for _, f := range e.Fields {
+			pairs = append(pairs, [2]string{f.Name, f.Value})
+		}
+		view["fields"] = pairs
 	}
 	if e.Checked != nil {
 		view["checked"] = *e.Checked
@@ -481,14 +506,11 @@ func eventView(e Event) map[string]any {
 	if l := e.Link; l != nil {
 		view["link"] = map[string]any{"href": l.Href, "url": l.URL}
 	}
-	if s := e.Size; s != nil {
-		view["size"] = map[string]any{"w": s.W, "h": s.H}
-	}
 	if e.FitRows > 0 {
 		view["fit_rows"] = e.FitRows
 	}
 	if d := e.Drag; d != nil {
-		drag := map[string]any{"c": d.Col, "r": d.Row, "keys": d.Keys}
+		drag := map[string]any{"c": d.Col, "r": d.Row}
 		if d.HasX {
 			drag["x"] = d.X
 		}
@@ -526,28 +548,17 @@ func eventView(e Event) map[string]any {
 }
 
 func capsView(c Caps, want map[string]any) map[string]any {
-	w, h := CellCSS(c)
 	view := map[string]any{
-		"v": c.V, "ops": c.Ops, "events": c.Events,
-		"cell":  nil,
-		"scale": c.Scale, "scheme": c.Scheme, "limits": c.Limits, "net": c.Net,
-		"passthrough": c.Passthrough, "scroll": c.Scroll, "steps": c.Steps, "drop": c.Drop, "count": c.Count, "mod": c.Mod, "edit": c.Edit, "menu": c.Menu, "host": c.Host, "version": c.Version, "drags": Drags(c), "hovers": Hovers(c), "views": Views(c), "light": Light(c),
-		"cell_css": map[string]any{"w": w, "h": h},
+		"v": c.V, "cell_css": map[string]any{"w": c.CellCSS.W, "h": c.CellCSS.H},
+		"scale": c.Scale, "scheme": c.Scheme, "mod": c.Mod, "features": c.Features,
+		"limits": c.Limits, "net": c.Net, "edit": c.Edit, "host": c.Host, "version": c.Version,
+		"light": Light(c),
 	}
-	if c.Cell != nil {
-		view["cell"] = map[string]any{"w": c.Cell.W, "h": c.Cell.H}
+	has := map[string]any{}
+	for feature := range asMap(want["has"]) {
+		has[feature] = HasFeature(c, feature)
 	}
-	if c.Keys != nil {
-		view["keys"] = map[string]any{"leader": c.Keys.Leader, "timeout": c.Keys.Timeout}
-	}
-	supports, sends := map[string]any{}, map[string]any{}
-	for op := range asMap(want["supports"]) {
-		supports[op] = Supports(c, Op(op))
-	}
-	for kind := range asMap(want["sends"]) {
-		sends[kind] = Sends(c, kind)
-	}
-	view["supports"], view["sends"] = supports, sends
+	view["has"] = has
 	return view
 }
 
@@ -907,6 +918,7 @@ type keymapVector struct {
 	Lookup       map[string]*string `json:"lookup"`
 	Selects      map[string]bool    `json:"selects"`
 	Program      map[string]bool    `json:"program"`
+	Prefix       map[string]bool    `json:"prefix"`
 	Scroll       map[string]*string `json:"scroll"`
 	Platform     struct {
 		Mod  string              `json:"mod"`
@@ -916,16 +928,22 @@ type keymapVector struct {
 
 // TestKeymapVectors formats keymaps, looks keys up in resolved ones and
 // asks which select, and asks an element's keymap, with no default, which
-// keys it gives the program and which scroll actions it binds them to.
+// keys it gives the program, which start a prefix and which scroll actions
+// it binds them to.
 func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
-			if v.Program != nil || v.Scroll != nil {
+			if v.Program != nil || v.Prefix != nil || v.Scroll != nil {
 				m := ParseKeymap(Platform(v.Platform), strings.Join(v.Keys, " "))
 				for k, want := range v.Program {
 					if got := m.Program(k); got != want {
 						t.Errorf("Program(%q) = %v, want %v", k, got, want)
+					}
+				}
+				for k, want := range v.Prefix {
+					if got := m.Prefix(k); got != want {
+						t.Errorf("Prefix(%q) = %v, want %v", k, got, want)
 					}
 				}
 				for k, want := range v.Scroll {

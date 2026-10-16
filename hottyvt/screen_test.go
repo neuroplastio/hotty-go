@@ -36,6 +36,31 @@ func decode(cmds []string) []hotty.Message {
 	return out
 }
 
+// opsOf is the ops of the deltas among commands, in order.
+func opsOf(t *testing.T, cmds []string) []hotty.Op {
+	t.Helper()
+	var out []hotty.Op
+	for _, m := range decode(cmds) {
+		if hotty.Get(m.Control, "a") != "delta" {
+			continue
+		}
+		ops, err := hotty.DeltaOf(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, ops...)
+	}
+	return out
+}
+
+// val is an op's value, "" when it has none.
+func val(o hotty.Op) string {
+	if o.Value == nil {
+		return ""
+	}
+	return *o.Value
+}
+
 func screen(t *testing.T, cols, rows int, opts ...hottyvt.Option) *hottyvt.Screen {
 	t.Helper()
 	s := hottyvt.New(cols, rows, opts...)
@@ -108,21 +133,20 @@ func TestDeltaIsTheRowsThatChanged(t *testing.T) {
 		t.Fatalf("nothing changed, got %d commands", len(d))
 	}
 	_, _ = s.WriteString("\x1b[2;1Htwo!") // row 1, and the cursor leaves row 2 for it
-	ms := decode(s.Delta("vt"))
-	if len(ms) != 2 {
-		t.Fatalf("got %d commands, want 2: %v", len(ms), ms)
+	cmds := s.Delta("vt")
+	if len(cmds) != 1 {
+		t.Fatalf("got %d commands, want 1 delta", len(cmds))
 	}
-	for _, m := range ms {
-		if hotty.Get(m.Control, "a") != "delta" {
-			t.Fatalf("not a delta: %v", m)
-		}
+	ops := opsOf(t, cmds)
+	if len(ops) != 2 {
+		t.Fatalf("got %d ops, want 2: %v", len(ops), ops)
 	}
-	if m := ms[0]; hotty.Get(m.Control, "t") != "vt-r1" || hotty.Get(m.Control, "op") != "inner" ||
-		!strings.Contains(string(m.Payload), `<span class="vt-t" style="--vt-n:4">two!</span><span class="vt-cur">`) {
-		t.Errorf("row 1: %v %s", m.Control, m.Payload)
+	if o := ops[0]; o.Target != "vt-r1" || o.Op != "inner" ||
+		!strings.Contains(val(o), `<span class="vt-t" style="--vt-n:4">two!</span><span class="vt-cur">`) {
+		t.Errorf("row 1: %+v", o)
 	}
-	if m := ms[1]; hotty.Get(m.Control, "t") != "vt-r2" || hotty.Get(m.Control, "op") != "text" || string(m.Payload) != "three" {
-		t.Errorf("row 2: %v %q", m.Control, m.Payload)
+	if o := ops[1]; o.Target != "vt-r2" || o.Op != "text" || val(o) != "three" {
+		t.Errorf("row 2: %+v", o)
 	}
 }
 
@@ -230,13 +254,13 @@ func TestResizeSendsTheElement(t *testing.T) {
 	if c, r := s.Size(); c != 5 || r != 3 {
 		t.Fatalf("size %d×%d", c, r)
 	}
-	ms := decode(s.Delta("vt"))
-	if len(ms) != 1 || hotty.Get(ms[0].Control, "op") != "morph" || hotty.Get(ms[0].Control, "t") != "vt" {
-		t.Fatalf("got %v", ms)
+	ops := opsOf(t, s.Delta("vt"))
+	if len(ops) != 1 || ops[0].Op != "morph" || ops[0].Target != "vt" {
+		t.Fatalf("got %v", ops)
 	}
 	send(t, h, s.Delta("vt")...) // nothing more
 	_, _ = s.WriteString("\x1b[3;1Hnew")
-	send(t, h, hotty.MorphTo("vt", "vt", string(ms[0].Payload)))
+	send(t, h, hotty.MorphTo("vt", "vt", val(ops[0])))
 	send(t, h, s.Delta("vt")...)
 	if got := h.Surface("vt").TextOf("vt-r2"); got != "new" {
 		t.Errorf("row 2 after the resize: %q", got)
@@ -254,9 +278,9 @@ func TestScale(t *testing.T) {
 	if got := s.HTML(); !strings.Contains(got, `style="--vt-cols:4;--vt-scale:0.25"`) {
 		t.Errorf("html %s", got)
 	}
-	m := decode([]string{s.SetScale("vt", 2.0/3)})[0]
-	if hotty.Get(m.Control, "op") != "var" || hotty.Get(m.Control, "t") != "vt" || hotty.Get(m.Control, "k") != "vt-scale" || string(m.Payload) != "0.667" {
-		t.Errorf("SetScale: %v %q", m.Control, m.Payload)
+	ops := opsOf(t, []string{s.SetScale("vt", 2.0/3)})
+	if len(ops) != 1 || ops[0].Op != "var" || ops[0].Target != "vt" || ops[0].Key != "vt-scale" || val(ops[0]) != "0.667" {
+		t.Errorf("SetScale: %+v", ops)
 	}
 	if got := s.HTML(); !strings.Contains(got, "--vt-scale:0.667") {
 		t.Errorf("html after SetScale %s", got)

@@ -143,7 +143,10 @@ func main() {
 		case "doc":
 			fmt.Println("doc", hotty.Get(c.Control, "s"))
 		case "delta":
-			fmt.Println("delta", hotty.Get(c.Control, "s"), "#"+hotty.Get(c.Control, "t"), string(c.Payload))
+			ops, _ := hotty.DeltaOf(c)
+			for _, op := range ops {
+				fmt.Println("delta", hotty.Get(c.Control, "s"), op.Op, "#"+op.Target, *op.Value)
+			}
 		case "del":
 			fmt.Println("del", hotty.Get(c.Control, "s"))
 		}
@@ -156,8 +159,8 @@ Output:
 ```
 ready: native
 doc counter
-delta counter #count 1
-delta counter #count 2
+delta counter text #count 1
+delta counter text #count 2
 del counter
 ```
 
@@ -375,7 +378,9 @@ RelayoutMsg asks the program to lay its surfaces out again: the screen was erase
 type Session struct {
 	// Mode is what detection found.
 	Mode Mode
-	// Caps is what the host said about itself, when Mode is Native.
+	// Caps is what the host said about itself, when Mode is Native, kept
+	// current by the caps events it has sent since (hotty.Merge); the events
+	// still come back as EventMsg.
 	Caps hotty.Caps
 	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
 	// program that draws either rendition whenever Mode says: one that may
@@ -567,6 +572,13 @@ type Surface struct {
 	// (SPEC §5.2). Surfaces at the same Z stack in the order they were
 	// first sent, the later above.
 	Z int
+	// Press, Fit and Hover are what the program wants of the surface now;
+	// they belong to the surface on the host (SPEC §5.2), so the Session
+	// sends each only when it differs from what the surface last had: on
+	// when it turns on, off when it turns off, nothing when it is as it
+	// was. A surface the host lost, or the Session deleted, starts again
+	// from none.
+	//
 	// Press asks for an EventMsg of kind press wherever the user presses
 	// in the surface, on text and empty space too: for a program that moves
 	// its selection to the card pressed.
@@ -586,9 +598,7 @@ type Surface struct {
 	// wheel, a touchpad, touch and the scrolling keys move it, and the
 	// program hears nothing of it. Rect is the box it scrolls in. It goes
 	// out with the document, so a change sends the document again, which
-	// starts at the top. A host whose Caps.Scroll is false clips the
-	// document as before: a program that must show the rest there scrolls
-	// it by Clip, or by documents of its own.
+	// starts at the top.
 	Scroll hotty.Axes
 	// Doc returns the document, and must not be nil. It is called only
 	// when the document must be sent: the first time, and again after the

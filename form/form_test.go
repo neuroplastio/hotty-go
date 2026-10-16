@@ -2,6 +2,7 @@ package form
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -124,7 +125,7 @@ func TestParseErrors(t *testing.T) {
 func TestRead(t *testing.T) {
 	s := parse(t, deploy)
 	// A submit leaves out an unchecked checkbox.
-	a, problems := s.Read(map[string]string{"env": "production", "version": "v1.4.2", "notes": "first\nsecond"})
+	a, problems := s.Read(fields("env", "production", "version", "v1.4.2", "notes", "first\nsecond"))
 	if len(problems) > 0 {
 		t.Fatalf("problems %v", problems)
 	}
@@ -132,7 +133,7 @@ func TestRead(t *testing.T) {
 	if got, want := string(b), `{"env":"production","version":"v1.4.2","notify":false,"notes":"first\nsecond"}`; got != want {
 		t.Errorf("answers %s, want %s", got, want)
 	}
-	a, _ = s.Read(map[string]string{"env": "staging", "version": "v1", "notify": "true"})
+	a, _ = s.Read(fields("env", "staging", "version", "v1", "notify", "true"))
 	b, _ = json.Marshal(a)
 	if got, want := string(b), `{"env":"staging","version":"v1","notify":true,"notes":""}`; got != want {
 		t.Errorf("answers %s, want %s", got, want)
@@ -148,7 +149,7 @@ func TestRead(t *testing.T) {
 		{Name: "s", Type: Radio, Options: []string{"a", "b"}},
 		{Name: "t", Required: true},
 	}}
-	a, problems = typed.Read(map[string]string{"n": "1.50", "m": "", "e": "ada", "d": "2026-13-01", "s": "c", "t": "  "})
+	a, problems = typed.Read(fields("n", "1.50", "m", "", "e", "ada", "d", "2026-13-01", "s", "c", "t", "  "))
 	want := map[int]string{1: "required", 2: "not an email address", 3: "not a date (YYYY-MM-DD)", 4: "required", 5: "not an option", 6: "required"}
 	if len(problems) != len(want) {
 		t.Errorf("problems %v, want %v", problems, want)
@@ -161,7 +162,7 @@ func TestRead(t *testing.T) {
 	if n := a.Get("n"); n != json.Number("1.5") {
 		t.Errorf("a number is %#v, want json.Number 1.5", n)
 	}
-	a, problems = typed.Read(map[string]string{"n": "", "m": "-2e3", "e": "ada@example.com", "d": "2026-10-01", "ok": "true", "s": "b", "t": "x"})
+	a, problems = typed.Read(fields("n", "", "m", "-2e3", "e", "ada@example.com", "d", "2026-10-01", "ok", "true", "s", "b", "t", "x"))
 	if len(problems) > 0 {
 		t.Errorf("problems %v", problems)
 	}
@@ -191,13 +192,20 @@ func decode(t *testing.T, cmds []string) []hotty.Message {
 func TestShow(t *testing.T) {
 	s := parse(t, deploy)
 	msgs := decode(t, s.Show("form-1", []Problem{{Field: 1, Message: "required"}}))
+	if len(msgs) != 2 {
+		t.Fatalf("%d commands, want a delta and a focus", len(msgs))
+	}
+	ops, err := hotty.DeltaOf(msgs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	var texts, classes []string
-	for _, m := range msgs {
-		switch hotty.Get(m.Control, "op") {
+	for _, o := range ops {
+		switch o.Op {
 		case "text":
-			texts = append(texts, hotty.Get(m.Control, "t")+"="+string(m.Payload))
+			texts = append(texts, o.Target+"="+*o.Value)
 		case "attr":
-			classes = append(classes, hotty.Get(m.Control, "t")+"="+string(m.Payload))
+			classes = append(classes, o.Target+"="+*o.Value)
 		}
 	}
 	if got, want := strings.Join(texts, ","), "e0=,e1=! required,e2=,e3="; got != want {
@@ -206,7 +214,7 @@ func TestShow(t *testing.T) {
 	if got, want := strings.Join(classes, ","), "w0=field k-select,w1=field k-text gap bad,w2=field k-checkbox gap,w3=field k-textarea gap"; got != want {
 		t.Errorf("classes %s, want %s", got, want)
 	}
-	last := msgs[len(msgs)-1]
+	last := msgs[1]
 	if hotty.Get(last.Control, "a") != "focus" || hotty.Get(last.Control, "t") != "f1" || hotty.Get(last.Control, "s") != "form-1" {
 		t.Errorf("last command %v: want the keyboard at the field", last.Control)
 	}
@@ -221,7 +229,7 @@ func TestShow(t *testing.T) {
 func TestState(t *testing.T) {
 	s := parse(t, deploy)
 	st := s.NewState()
-	if got := st.Fields(); got["env"] != "staging" || got["notify"] != "true" || len(got) != 2 {
+	if got := st.Fields(); !reflect.DeepEqual(got, fields("env", "staging", "notify", "true")) {
 		t.Errorf("defaults %v", got)
 	}
 	// What a host sends, read as a program reads it.
@@ -264,7 +272,7 @@ func TestNumberIsDecimal(t *testing.T) {
 		if msg := s.Fields[0].Check(v); msg != "not a number" {
 			t.Errorf("Check(%q) = %q, want not a number", v, msg)
 		}
-		a, problems := s.Read(map[string]string{"n": v})
+		a, problems := s.Read(fields("n", v))
 		if len(problems) != 1 {
 			t.Errorf("Read(%q): problems %v", v, problems)
 		}
@@ -273,7 +281,7 @@ func TestNumberIsDecimal(t *testing.T) {
 		}
 	}
 	for v, want := range map[string]string{" 12 ": "12", "-3.50": "-3.5", "1e3": "1000", ".5": "0.5"} {
-		a, problems := s.Read(map[string]string{"n": v})
+		a, problems := s.Read(fields("n", v))
 		if b, _ := json.Marshal(a); len(problems) > 0 || string(b) != `{"n":`+want+`}` {
 			t.Errorf("Read(%q) = %s, %v", v, b, problems)
 		}
@@ -326,7 +334,7 @@ func TestFieldStartAndKind(t *testing.T) {
 
 func TestAnswers(t *testing.T) {
 	s := parse(t, deploy)
-	a, _ := s.Read(map[string]string{"env": "staging", "version": "v1"})
+	a, _ := s.Read(fields("env", "staging", "version", "v1"))
 	if got := strings.Join(a.Names(), ","); got != "env,version,notify,notes" {
 		t.Errorf("Names %s: the spec's order", got)
 	}
@@ -338,4 +346,13 @@ func TestAnswers(t *testing.T) {
 	if s2.First() != "f0-0" {
 		t.Errorf("First = %q", s2.First())
 	}
+}
+
+// fields makes a submit's fields from names and values, alternately.
+func fields(nv ...string) []hotty.FormField {
+	var out []hotty.FormField
+	for i := 0; i+1 < len(nv); i += 2 {
+		out = append(out, hotty.FormField{Name: nv[i], Value: nv[i+1]})
+	}
+	return out
 }

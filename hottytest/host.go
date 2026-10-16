@@ -12,8 +12,11 @@
 // The host keeps every surface's document as the program's commands leave
 // it, with the delta operations and the morph of SPEC §6, and answers each
 // command as SPEC §3.6 has hosts do. It passes the HOTTY conformance
-// vectors. It lays nothing out and draws no pixels: a placement with auto
-// rows gets an estimate (AutoRows).
+// vectors that need no layout: it skips the ones marked scroll, steps, drop
+// and view, and those for features it lacks (SDK.md §4.4). It lays nothing
+// out and draws no pixels: a placement with auto rows gets an estimate
+// (AutoRows), nothing in it scrolls, and a test says where in an element a
+// pointer is (DragStartStep).
 //
 // A placement made on the alternate screen goes with it, and so does its
 // surface (SPEC §5.4). A full reset (RIS) deletes every surface.
@@ -60,7 +63,7 @@ var (
 	ErrNoElement  = errors.New("hottytest: no such element")
 	ErrDetached   = errors.New("hottytest: the surface is detached, and reports nothing")
 	ErrNotPlaced  = errors.New("hottytest: the surface is not placed")
-	ErrNoPress    = errors.New("hottytest: the placement did not ask for presses (Placement.Press)")
+	ErrNoPress    = errors.New("hottytest: the surface did not ask for presses (Placement.Press)")
 	ErrNotControl = errors.New("hottytest: the element is not a control that takes this")
 	ErrNoReport   = errors.New("hottytest: nothing with an id reports this click")
 	ErrNoDrag     = errors.New("hottytest: no drag is in progress")
@@ -71,27 +74,32 @@ var (
 type Option func(*Host)
 
 // Caps sets the capabilities the host reports. Fields left zero keep the
-// defaults (DefaultCaps).
+// defaults (DefaultCaps). Features replace the default list: a test that
+// wants a host without hover or menus names the ones it has.
 func Caps(c hotty.Caps) Option {
 	return func(h *Host) {
 		d := &h.caps
 		if c.V != "" {
 			d.V = c.V
 		}
-		if c.Ops != nil {
-			d.Ops = c.Ops
-		}
-		if c.Events != nil {
-			d.Events = c.Events
-		}
-		if c.Cell != nil && c.Cell.W > 0 && c.Cell.H > 0 {
-			d.Cell = c.Cell
+		if c.CellCSS.W > 0 && c.CellCSS.H > 0 {
+			d.CellCSS = c.CellCSS
 		}
 		if c.Scale > 0 {
 			d.Scale = c.Scale
 		}
 		if c.Scheme != "" {
 			d.Scheme = c.Scheme
+		}
+		// The platform its keymaps are read on (PlatformOf), and the keys.
+		if c.Mod != "" {
+			d.Mod = c.Mod
+		}
+		if c.Edit != nil {
+			d.Edit = c.Edit
+		}
+		if c.Features != nil {
+			d.Features = c.Features
 		}
 		if c.Limits != nil {
 			d.Limits = c.Limits
@@ -102,24 +110,8 @@ func Caps(c hotty.Caps) Option {
 		if c.Host != "" {
 			d.Host = c.Host
 		}
-		if c.Steps {
-			d.Steps = true
-		}
-		if c.Drop {
-			d.Drop = true
-		}
-		// The platform its keymaps are read on (PlatformOf), and the keys.
-		if c.Mod != "" {
-			d.Mod = c.Mod
-		}
-		if c.Edit != nil {
-			d.Edit = c.Edit
-		}
-		if c.Keys != nil {
-			d.Keys = c.Keys
-		}
-		if c.Menu {
-			d.Menu = true
+		if c.Version != "" {
+			d.Version = c.Version
 		}
 	}
 }
@@ -160,17 +152,14 @@ func Size(cols, rows int) Option { return func(h *Host) { h.cols, h.rows = cols,
 func AutoRows(f func(s *Surface, cols int) int) Option { return func(h *Host) { h.autoRows = f } }
 
 // DefaultCaps are the capabilities a Host reports unless Caps says
-// otherwise.
+// otherwise. Its features are the ones it can honour: it lays nothing out,
+// so it has no passthrough, but it hears where the pointer is (hover),
+// counts clicks (count, DoubleClick) and records the menu a program shows
+// (menu, Menu).
 func DefaultCaps() hotty.Caps {
-	c := hotty.Caps{V: hotty.Version, Cell: &hotty.Cell{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
-		Limits: map[string]int{"surfaces": 64, "message": hotty.DefaultMax}, Count: true}
-	for _, op := range []hotty.Op{hotty.OpMorph, hotty.OpInner, hotty.OpReplace, hotty.OpAppend, hotty.OpPrepend,
-		hotty.OpBefore, hotty.OpAfter, hotty.OpRemove, hotty.OpAttr, hotty.OpUnattr, hotty.OpText, hotty.OpVar, hotty.OpReveal} {
-		c.Ops = append(c.Ops, string(op))
-	}
-	c.Events = []string{hotty.EventClick, hotty.EventChange, hotty.EventInput, hotty.EventSubmit,
-		hotty.EventPress, hotty.EventFocus, hotty.EventBlur, hotty.EventResize, hotty.EventDrag, hotty.EventFit, hotty.EventHover}
-	return c
+	return hotty.Caps{V: hotty.Version, CellCSS: hotty.Size{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
+		Features: []string{hotty.FeatureHover, hotty.FeatureCount, hotty.FeatureMenu},
+		Limits:   map[string]int{"surfaces": 64, "message": hotty.DefaultMax}}
 }
 
 // Host is a HOTTY host for a test: a terminal the program reads (Read) and
@@ -200,10 +189,15 @@ type Host struct {
 	surfaces map[string]*Surface
 	created  int
 	res      map[string]resource
-	keyboard *Surface // the surface that has the keyboard
-	drag     *drag    // the drag in progress, if any (SPEC §9.1)
-	hovered  *Surface // the surface the pointer is on (Hover), if any
-	alt      bool     // the alternate screen is on
+	keyboard *Surface         // the surface that has the keyboard
+	drag     *drag            // the drag in progress, if any (SPEC §9.1)
+	hovered  *Surface         // the surface the pointer is on (Hover), if any
+	menu     *hotty.MenuLevel // the menu the program shows (a=menu), if any
+	heard    hotty.Caps       // the capabilities the program last heard (SPEC §4)
+	queried  bool             // the program has asked, so it hears of changes
+	faultOp  int              // the index of the op a delta failed at, or -1
+	prefix   *Surface         // the surface whose keys all reach the program, while it has the keyboard (SPEC §10.5)
+	alt      bool             // the alternate screen is on
 	commands []hotty.Message
 	replies  []hotty.Message
 	events   []hotty.Event
@@ -309,7 +303,16 @@ func (h *Host) Close() error {
 
 // Type sends text to the program as keys typed: "q", "\r" for Enter,
 // "\x03" for Ctrl-C, "\x1b" for Escape.
-func (h *Host) Type(keys string) { h.in.write(keys) }
+func (h *Host) Type(keys string) {
+	h.mu.Lock()
+	for _, k := range hotty.DecodeKeys([]byte(keys)) {
+		if k != "" {
+			h.menuKey(k)
+		}
+	}
+	h.mu.Unlock()
+	h.in.write(keys)
+}
 
 // TermSize is the terminal's size (Size), as hottyterm.New takes it.
 func (h *Host) TermSize() (cols, rows int) { return h.cols, h.rows }
@@ -391,6 +394,9 @@ func (h *Host) byte(c byte) {
 // altScreen enters or leaves the alternate screen. A placement made there
 // belongs to it: leaving deletes its surface (SPEC §5.4, SHOULD).
 func (h *Host) altScreen(on bool) {
+	if on != h.alt {
+		h.menu = nil // the screen changed (SPEC §10.5)
+	}
 	if !on && h.alt {
 		for name, s := range h.surfaces {
 			if s.placed && s.alt {
@@ -416,6 +422,7 @@ func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
 	h.held = nil
+	h.menu = nil
 	h.scr, h.alt, h.hidden = screen{cols: h.cols, rows: h.rows}, false, false
 }
 
@@ -510,6 +517,7 @@ func (h *Host) protocol(format string, args ...any) {
 // command carries out one command and answers it (SPEC §3.6).
 func (h *Host) command(m hotty.Message) {
 	a := hotty.Get(m.Control, "a")
+	h.faultOp = -1
 	code, detail, extra := h.do(a, m)
 	if code == "" {
 		// After the reply: the host lays the document out on its next
@@ -519,15 +527,26 @@ func (h *Host) command(m hotty.Message) {
 	if code == hotty.EINVAL {
 		h.protocol("%s refused: EINVAL (%s): %v", a, detail, m.Control)
 	}
-	q := hotty.Get(m.Control, "q")
+	// Only errors, unless asked: a command with n, and a query, are
+	// answered whatever the outcome (SPEC §3.5).
+	q, ok := hotty.Lookup(m.Control, "q")
+	if !ok {
+		q = "1"
+		if hotty.Has(m.Control, "n") || a == "q" {
+			q = "0"
+		}
+	}
 	if q == "2" || q == "1" && code == "" {
 		return
 	}
 	n, s := hotty.Get(m.Control, "n"), hotty.Get(m.Control, "s")
 	switch {
+	case code != "" && h.faultOp >= 0:
+		h.send(hotty.ReplyDeltaErr(n, s, h.faultOp, code, detail))
 	case code != "":
 		h.send(hotty.ReplyErr(n, s, a, code, detail))
 	case a == "q":
+		h.heard, h.queried = h.caps, true
 		h.send(hotty.ReplyCaps(n, h.caps))
 	default:
 		h.send(hotty.ReplyOK(n, s, a, extra, nil))
@@ -580,6 +599,18 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			return "", "", nil
 		}
 	}
+	if a == "menu" {
+		// The menu a program shows, or none (SPEC §10.5). A host without
+		// the feature shows nothing.
+		l, err := hotty.MenuOf(m)
+		if e := (*hotty.Error)(nil); errors.As(err, &e) {
+			return e.Code, e.Detail, nil
+		}
+		if hotty.HasFeature(h.caps, hotty.FeatureMenu) {
+			h.menu = l
+		}
+		return "", "", nil
+	}
 	switch a {
 	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur":
 	default:
@@ -628,23 +659,21 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			h.blur(s)
 		}
 		s.placed = false
-		s.heard = nil
 	case "delta":
-		op := hotty.Op(hotty.Get(m.Control, "op"))
-		if op == "" {
-			op = hotty.OpMorph
+		// The whole body is checked before any op applies; a missing
+		// target fails its op alone, and the ops after it still apply.
+		ops, err := hotty.DeltaOf(m)
+		if e := (*hotty.Error)(nil); errors.As(err, &e) {
+			if e.HasOp {
+				h.faultOp = e.Op
+			}
+			return e.Code, e.Detail, nil
 		}
-		if !slices.Contains(DefaultCaps().Ops, string(op)) {
-			return hotty.EINVAL, "unknown op " + string(op), nil
+		for i, op := range ops {
+			if c, d := s.delta(op); c != "" && code == "" {
+				code, detail, h.faultOp = c, d, i
+			}
 		}
-		t, k := hotty.Get(m.Control, "t"), hotty.Get(m.Control, "k")
-		if t == "" && op != hotty.OpMorph {
-			return hotty.EINVAL, "missing t", nil
-		}
-		if k == "" && (op == hotty.OpAttr || op == hotty.OpUnattr || op == hotty.OpVar) {
-			return hotty.EINVAL, "missing k", nil
-		}
-		code, detail = s.delta(op, t, k, string(m.Payload))
 		if h.keyboard == s && !s.keyb {
 			h.keyboard = nil // the focused element went
 		}
@@ -719,10 +748,24 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 	p.Rows = r
 	s.placed = true
 	s.place = p
-	if !p.Hover {
-		s.heard = nil // v=1 again starts from out (SPEC §9.4)
+	// p, f and v belong to the surface: a placement without one leaves it
+	// as it was (SPEC §5.2).
+	flag := func(f hotty.Flag, on *bool) {
+		switch f {
+		case hotty.On:
+			*on = true
+		case hotty.Off:
+			*on = false
+		}
 	}
-	s.fitRows = r
+	wasHover := s.hover
+	flag(p.Press, &s.press)
+	flag(p.Fit, &s.fit)
+	flag(p.Hover, &s.hover)
+	if s.hover && !wasHover {
+		s.heard = nil // v=1 starts from out (SPEC §9.4)
+	}
+	s.fitRows = r // each placement counts from its own rows (SPEC §5.2)
 	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
 	if !p.KeepCursor {
 		for _, c := range []byte(hotty.CursorBelow(rows)) {
@@ -766,13 +809,19 @@ func (h *Host) refit(a string, m hotty.Message) {
 		}
 	}
 	for _, s := range check {
-		if !s.placed || !s.place.Fit || s.detached {
-			continue
-		}
-		if n := max(1, min(hotty.MaxSize, h.autoRows(s, s.place.Cols))); n != s.fitRows {
-			s.fitRows = n
-			h.event(s, hotty.EventFit, "", map[string]int{"r": n})
-		}
+		h.refitSurface(s)
+	}
+}
+
+// refitSurface sends fit if the rows the surface's document needs now
+// differ from the rows the program last heard.
+func (h *Host) refitSurface(s *Surface) {
+	if !s.placed || !s.fit || s.detached {
+		return
+	}
+	if n := max(1, min(hotty.MaxSize, h.autoRows(s, s.place.Cols))); n != s.fitRows {
+		s.fitRows = n
+		h.event(s, hotty.EventFit, "", map[string]int{"r": n})
 	}
 }
 
@@ -789,7 +838,11 @@ func (h *Host) event(s *Surface, kind, target string, detail any) {
 		}
 		payload = buf.Bytes()
 	}
-	h.send(hotty.EncodePlain(hotty.Control{{K: "a", V: "ev"}, {K: "s", V: s.name}, {K: "e", V: kind}, {K: "t", V: target}}, payload))
+	ctl := hotty.Control{{K: "a", V: "ev"}, {K: "s", V: s.name}, {K: "e", V: kind}}
+	if target != "" {
+		ctl = append(ctl, hotty.KV{K: "t", V: target})
+	}
+	h.send(hotty.EncodePlain(ctl, payload))
 }
 
 // takeKeyboard gives a surface the keyboard at el, taking it from another
@@ -806,6 +859,7 @@ func (h *Host) takeKeyboard(s *Surface, el *html.Node, report bool) {
 	had, was := s.keyb, s.focused
 	s.focused, s.keyb = el, true
 	h.keyboard = s
+	h.prefix = nil // a focus, the program's or the user's, ends a prefix (SPEC §10.5)
 	if report && (!had || was != el) {
 		target := ""
 		if n := closest(el, func(n *html.Node) bool { id, _ := attr(n, "id"); return id != "" }); n != nil {
@@ -835,6 +889,9 @@ func (h *Host) blur(s *Surface) {
 	s.keyb = false
 	if h.keyboard == s {
 		h.keyboard = nil
+	}
+	if h.prefix == s {
+		h.prefix = nil
 	}
 	h.event(s, hotty.EventBlur, "", nil)
 }
@@ -899,9 +956,14 @@ func (h *Host) element(s *Surface, id string) (*html.Node, error) {
 // and a hyperlink (target=_blank) is opened by the terminal and reports
 // nothing (Opened). A submit button then submits its form.
 //
+// keys are the modifier keys held ("shift", "ctrl", "alt", "meta"); the
+// click carries those held at its release (SPEC §9). A press with Alt is
+// the program's own gesture (SPEC §9.2): the surface hears nothing of it,
+// and the pointer is out of its window.
+//
 // On a detached surface the click does what is local and reports nothing:
 // ErrDetached.
-func (h *Host) Click(surface, id string) error {
+func (h *Host) Click(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -912,13 +974,16 @@ func (h *Host) Click(surface, id string) error {
 	if err != nil {
 		return err
 	}
-	return h.click(s, el, true, 1)
+	if h.alt1(s, keys) {
+		return nil
+	}
+	return h.click(s, el, true, 1, modBits(keys))
 }
 
 // DoubleClick clicks an element twice, as a double click does: Click,
 // then a click that says it is the second of its run (Event.Count 2,
 // SPEC §9).
-func (h *Host) DoubleClick(surface, id string) error {
+func (h *Host) DoubleClick(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -929,16 +994,19 @@ func (h *Host) DoubleClick(surface, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := h.click(s, el, true, 1); err != nil {
+	if h.alt1(s, keys) {
+		return nil
+	}
+	if err := h.click(s, el, true, 1, modBits(keys)); err != nil {
 		return err
 	}
-	return h.click(s, el, true, 2)
+	return h.click(s, el, true, 2, modBits(keys))
 }
 
 // ClickLink clicks the first link in a surface whose href is href, as
 // written in the document: for links with no id, such as a manual page's
 // references. It is Click on that link.
-func (h *Host) ClickLink(surface, href string) error {
+func (h *Host) ClickLink(surface, href string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -952,13 +1020,47 @@ func (h *Host) ClickLink(surface, href string) error {
 	if el == nil {
 		return fmt.Errorf("%w: a link to %s in %s", ErrNoElement, href, s.name)
 	}
-	return h.click(s, el, true, 1)
+	if h.alt1(s, keys) {
+		return nil
+	}
+	return h.click(s, el, true, 1, modBits(keys))
+}
+
+// modBits are the modifier keys held, as the bits of a detail's mods
+// (SPEC §9): "shift", "alt", "ctrl" and "meta".
+func modBits(keys []string) int {
+	bits := 0
+	for _, k := range keys {
+		switch k {
+		case "shift":
+			bits |= hotty.ModShift
+		case "alt":
+			bits |= hotty.ModAlt
+		case "ctrl":
+			bits |= hotty.ModControl
+		case "meta":
+			bits |= hotty.ModMeta
+		}
+	}
+	return bits
+}
+
+// alt1 reports whether a press is made with Alt held, which is the
+// program's gesture and not the surface's (SPEC §9.2): the pointer is then
+// out of the window (SPEC §9.4), and the surface hears nothing more.
+func (h *Host) alt1(s *Surface, keys []string) bool {
+	if modBits(keys)&hotty.ModAlt == 0 {
+		return false
+	}
+	h.leave(s)
+	return true
 }
 
 // click is a click on el: by the pointer, which presses first, or by
 // the keyboard (Key), which does not. count is its place in its run of
-// clicks, which its detail carries from 2 on (SPEC §9).
-func (h *Host) click(s *Surface, el *html.Node, pointer bool, count int) error {
+// clicks, which its detail carries from 2 on (SPEC §9), and mods the
+// modifier keys held, as bits.
+func (h *Host) click(s *Surface, el *html.Node, pointer bool, count, mods int) error {
 	if a := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.A }); a != nil {
 		if _, ok := attr(a, "href"); ok && hyperlink(a) {
 			if u := s.resolve(a); u != "" {
@@ -970,8 +1072,11 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count int) error {
 	if s.detached {
 		return ErrDetached
 	}
-	if pointer && s.place.Press {
-		h.pressAt(s, el)
+	if !h.hears(hotty.FeatureCount) {
+		count = 1
+	}
+	if pointer && s.press {
+		h.pressAt(s, el, mods)
 	}
 	if f := closest(el, focusable); f != nil {
 		h.takeKeyboard(s, f, true)
@@ -988,6 +1093,9 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count int) error {
 		if href, ok := attr(rep, "href"); ok {
 			// The href is the handle, and the id too when there is one.
 			detail := map[string]any{"href": href}
+			if mods != 0 {
+				detail["mods"] = mods
+			}
 			if u := s.resolve(rep); u != "" {
 				detail["url"] = u
 			}
@@ -1003,17 +1111,17 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count int) error {
 	if !ok {
 		return ErrNoReport
 	}
-	var detail map[string]any
+	detail := map[string]any{}
+	if mods != 0 {
+		detail["mods"] = mods
+	}
 	if v, ok := attr(rep, "value"); ok {
-		detail = map[string]any{"value": v}
+		detail["value"] = v
 	}
 	if count > 1 {
-		if detail == nil {
-			detail = map[string]any{}
-		}
 		detail["count"] = count
 	}
-	if detail == nil {
+	if len(detail) == 0 {
 		h.event(s, hotty.EventClick, rid, nil)
 	} else {
 		h.event(s, hotty.EventClick, rid, detail)
@@ -1061,8 +1169,7 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
 // with the pointer at step x, y of it. The host lays nothing out, so the
 // test says where in the element the pointer is; a step past the
 // element's count is clamped to it, and one along an axis it does not
-// count is ignored. The host reports steps only when its capabilities say
-// Steps (Caps).
+// count is ignored.
 func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error {
 	return h.dragStart(surface, id, c, r, x, y, keys)
 }
@@ -1084,15 +1191,16 @@ func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) erro
 	if h.drag != nil {
 		return ErrDragging
 	}
-	if s.place.Press {
-		h.pressAt(s, el)
+	if h.alt1(s, keys) {
+		return nil
+	}
+	if s.press {
+		h.pressAt(s, el, modBits(keys))
 	}
 	if on := closest(el, listens("drag")); on != nil {
 		if rid, ok := attr(on, "id"); ok {
 			d := &drag{s: s, start: on, id: rid, t: rid, c: c, r: r}
-			if h.caps.Steps {
-				d.n = steps(on)
-			}
+			d.n = steps(on)
 			d.x, d.y = d.clamp(x, y)
 			h.drag = d
 			h.event(s, hotty.EventDragStart, rid, d.detail(c, r, keys))
@@ -1113,8 +1221,7 @@ func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) erro
 // an id in the drag's surface, or onto none ("": a gap, another surface, the
 // cells, outside the window), at the surface's cell c, r (SPEC §9.1). It
 // reports drag when the element under the pointer changes: t, the nearest
-// one with an id and drag in its data-on (or drop, when the capabilities
-// say Drop), from it outward, or empty; while that is empty, when the cell
+// one with an id and drag in its data-on (or drop), from it outward, or empty; while that is empty, when the cell
 // changes instead. In a t with data-steps the pointer stays at the step it
 // was at in t, or 0 in a new one (DragOver).
 func (h *Host) DragMove(id string, c, r int, keys ...string) error {
@@ -1141,11 +1248,10 @@ func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error {
 
 // DragOver is DragMove with the pointer at step tx, ty of t, for a t with
 // drop in its data-on and data-steps (SPEC §9.1): a row with "0 1" is split
-// in halves, a folder with "0 2" into before, into and after. The host lays nothing out, so the test
-// says where in t the pointer is; a step past t's count is clamped to it,
-// and one along an axis t does not count is ignored. It also reports drag
-// when that step changes. The host reports it only when its capabilities
-// say Drop (Caps).
+// in halves, a folder with "0 2" into before, into and after. The host
+// lays nothing out, so the test says where in t the pointer is; a step past
+// t's count is clamped to it, and one along an axis t does not count is
+// ignored. It also reports drag when that step changes.
 func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1219,11 +1325,18 @@ func (h *Host) dragEnd(id string, c, r, x, y, tx, ty int, keys []string) error {
 	h.drag = nil
 	h.event(d.s, hotty.EventDragEnd, t, d.detail(c, r, keys))
 	if own == d.id && reportsClick(d.start) {
-		var detail any
-		if v, ok := attr(d.start, "value"); ok {
-			detail = map[string]string{"value": v}
+		detail := map[string]any{}
+		if m := modBits(keys); m != 0 {
+			detail["mods"] = m
 		}
-		h.event(d.s, hotty.EventClick, d.id, detail)
+		if v, ok := attr(d.start, "value"); ok {
+			detail["value"] = v
+		}
+		if len(detail) == 0 {
+			h.event(d.s, hotty.EventClick, d.id, nil)
+		} else {
+			h.event(d.s, hotty.EventClick, d.id, detail)
+		}
 	}
 	return nil
 }
@@ -1237,7 +1350,7 @@ func (h *Host) Dragging() bool {
 
 // dragOver finds what is under the pointer of the drag in progress, from
 // the element named outward: t, the nearest element with an id and drag in
-// its data-on, or drop when the capabilities say Drop; and own, the nearest
+// its data-on, or drop; and own, the nearest
 // with an id and drag, for whether the release is a click.
 func (h *Host) dragOver(id string) (d *drag, t, own string, err error) {
 	d = h.drag
@@ -1260,17 +1373,13 @@ func (h *Host) dragOver(id string) (d *drag, t, own string, err error) {
 		return v
 	}
 	own = withID(listens("drag"))
-	t = own
-	if h.caps.Drop {
-		t = withID(func(n *html.Node) bool { return listens("drag")(n) || listens("drop")(n) })
-	}
+	t = withID(func(n *html.Node) bool { return listens("drag")(n) || listens("drop")(n) })
 	return d, t, own, nil
 }
 
-// targetSteps is t's data-steps, when t has drop in its data-on and the
-// capabilities say Drop.
+// targetSteps is t's data-steps, when t has drop in its data-on.
 func (h *Host) targetSteps(d *drag, t string) [2]int {
-	if t == "" || !h.caps.Drop {
+	if t == "" {
 		return [2]int{}
 	}
 	el := d.s.byID(t)
@@ -1300,17 +1409,13 @@ func listens(kind string) func(*html.Node) bool {
 	}
 }
 
-// detail is a drag event's detail: the cell, the modifier keys in the
-// order SPEC §9.1 gives them, and the step along each axis the element
-// counts.
+// detail is a drag event's detail: the cell, the modifier keys held as bits
+// (left out when none is), and the step along each axis the element counts.
 func (d *drag) detail(c, r int, keys []string) map[string]any {
-	held := []string{}
-	for _, k := range []string{"shift", "ctrl", "alt", "meta"} {
-		if slices.Contains(keys, k) {
-			held = append(held, k)
-		}
+	m := map[string]any{"c": c, "r": r}
+	if mods := modBits(keys); mods != 0 {
+		m["mods"] = mods
 	}
-	m := map[string]any{"c": c, "r": r, "keys": held}
 	if d.n[0] > 0 {
 		m["x"] = d.x
 	}
@@ -1434,7 +1539,7 @@ func (h *Host) Opened() []string {
 // Press presses the element with an id, or empty space ("") (SPEC §9):
 // reported only on a placement made with Placement.Press, as the id of the
 // nearest element with one.
-func (h *Host) Press(surface, id string) error {
+func (h *Host) Press(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -1450,19 +1555,28 @@ func (h *Host) Press(surface, id string) error {
 	if s.detached {
 		return ErrDetached
 	}
-	if !s.place.Press {
+	if !s.press {
 		return ErrNoPress
 	}
-	h.pressAt(s, el)
+	if h.alt1(s, keys) {
+		return nil
+	}
+	h.pressAt(s, el, modBits(keys))
 	return nil
 }
 
-func (h *Host) pressAt(s *Surface, el *html.Node) {
+func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 	t := ""
 	if n := closest(el, func(n *html.Node) bool { _, ok := attr(n, "id"); return ok }); n != nil {
 		t, _ = attr(n, "id")
 	}
-	h.event(s, hotty.EventPress, t, nil)
+	// The detail is the element's cells, which this host cannot know, and
+	// the modifiers held; with neither, there is none (SPEC §9).
+	if mods == 0 {
+		h.event(s, hotty.EventPress, t, nil)
+		return
+	}
+	h.event(s, hotty.EventPress, t, map[string]int{"mods": mods})
 }
 
 // Fill types text into a text control, as the user does: the surface takes
@@ -1611,14 +1725,16 @@ func (h *Host) Submit(surface, id string) error {
 	return nil
 }
 
-// submit sends the form's fields as FormData has them: named controls that
-// are not disabled, boxes only when checked, and the submitter's own.
+// submit sends the form's fields as FormData has them, in tree order: named
+// controls that are not disabled, boxes only when checked, and the
+// submitter's own.
 func (h *Host) submit(s *Surface, form, submitter *html.Node) {
 	fid, ok := attr(form, "id")
 	if !ok {
 		return
 	}
-	fields := map[string]string{}
+	fields := []any{}
+	add := func(name, value string) { fields = append(fields, []any{name, value}) }
 	walk(form, func(n *html.Node) {
 		name, named := attr(n, "name")
 		if !named || name == "" {
@@ -1631,17 +1747,19 @@ func (h *Host) submit(s *Surface, form, submitter *html.Node) {
 		case n.DataAtom == atom.Button || n.DataAtom == atom.Input && reportsClick(n):
 			if n == submitter {
 				v, _ := attr(n, "value")
-				fields[name] = v
+				add(name, v)
 			}
 		case box(n):
 			if s.isChecked(n) {
-				fields[name] = s.valueOf(n)
+				add(name, s.valueOf(n))
 			}
 		case control(n):
-			fields[name] = s.valueOf(n)
+			add(name, s.valueOf(n))
 		}
 	})
-	h.event(s, hotty.EventSubmit, fid, fields)
+	// The fields in tree order, two of one name two pairs; a form with
+	// none still sends the list (SPEC §9).
+	h.event(s, hotty.EventSubmit, fid, map[string]any{"fields": fields})
 }
 
 // Blur takes the keyboard from a surface, as a click elsewhere does: the
@@ -1688,7 +1806,7 @@ func (h *Host) Hover(surface, id string, c, r int) error {
 		h.leave(h.hovered)
 	}
 	h.hovered = s
-	if s.place.Hover && !s.detached && (s.heard == nil || *s.heard != id) {
+	if s.hover && s.placed && !s.detached && h.hears(hotty.FeatureHover) && (s.heard == nil || *s.heard != id) {
 		s.heard = &id
 		h.event(s, hotty.EventHover, id, map[string]int{"c": c, "r": r})
 	}
@@ -1707,10 +1825,15 @@ func (h *Host) Unhover() {
 	}
 }
 
+// hears reports whether the host has a feature (SPEC §4): without hover it
+// never says where the pointer is, and without count every click reads as
+// the first of its run.
+func (h *Host) hears(feature string) bool { return hotty.HasFeature(h.caps, feature) }
+
 // leave tells a surface's program the pointer left it, if it asked and
 // had not heard so.
 func (h *Host) leave(s *Surface) {
-	if s.placed && s.place.Hover && !s.detached && s.heard != nil {
+	if s.placed && s.hover && !s.detached && h.hears(hotty.FeatureHover) && s.heard != nil {
 		s.heard = nil
 		h.event(s, hotty.EventHover, "", map[string]bool{"out": true})
 	}
@@ -1735,6 +1858,161 @@ func (h *Host) Emit(surface, kind, target string, detail any) error {
 	}
 	h.event(s, kind, target, detail)
 	return nil
+}
+
+// Change changes the capabilities the host reports, as the terminal does
+// when the user changes its font, theme or settings, or when a multiplexer's
+// program moves to another viewer's host (SPEC §4): f is given a copy to
+// change. The program, if it asked, then hears caps with every field that
+// differs from what it last heard (SPEC §9), the empty value for one that
+// became absent. A new scale alone says nothing: a zoom is not told (SPEC
+// §4). A new cell size lays the documents out again, so a surface that asked
+// for fit may hear it.
+func (h *Host) Change(f func(c *hotty.Caps)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	c := h.caps
+	f(&c)
+	cellChanged := c.CellCSS != h.caps.CellCSS
+	h.caps = c
+	if h.queried && !h.text {
+		h.tellCaps()
+	}
+	if cellChanged {
+		for _, name := range slices.Sorted(maps.Keys(h.surfaces)) {
+			h.refitSurface(h.surfaces[name])
+		}
+	}
+}
+
+// tellCaps sends caps with the fields that differ from what the program
+// last heard, if any besides the scale.
+func (h *Host) tellCaps() {
+	was, now := h.heard, h.caps
+	var buf bytes.Buffer
+	w := msgp.NewWriter(&buf)
+	var fields []func() error
+	add := func(changed bool, key string, write func() error) {
+		if changed {
+			fields = append(fields, func() error {
+				if err := w.WriteString(key); err != nil {
+					return err
+				}
+				return write()
+			})
+		}
+	}
+	strs := func(v []string) func() error {
+		return func() error {
+			if err := w.WriteArrayHeader(uint32(len(v))); err != nil {
+				return err
+			}
+			for _, x := range v {
+				if err := w.WriteString(x); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	lists := func(v map[string][]string) func() error {
+		return func() error {
+			if err := w.WriteMapHeader(uint32(len(v))); err != nil {
+				return err
+			}
+			for _, k := range slices.Sorted(maps.Keys(v)) {
+				if err := w.WriteString(k); err != nil {
+					return err
+				}
+				if err := strs(v[k])(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+	add(now.V != was.V, "v", func() error { return w.WriteString(now.V) })
+	add(now.CellCSS != was.CellCSS, "cellcss", func() error {
+		if err := w.WriteMapHeader(2); err != nil {
+			return err
+		}
+		for _, kv := range []struct {
+			k string
+			v float64
+		}{{"w", now.CellCSS.W}, {"h", now.CellCSS.H}} {
+			if err := w.WriteString(kv.k); err != nil {
+				return err
+			}
+			if err := w.WriteFloat64(kv.v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	add(now.Scale != was.Scale, "scale", func() error { return w.WriteFloat64(now.Scale) })
+	add(now.Scheme != was.Scheme, "scheme", func() error { return w.WriteString(now.Scheme) })
+	add(now.Mod != was.Mod, "mod", func() error { return w.WriteString(now.Mod) })
+	add(!slices.Equal(now.Features, was.Features), "features", strs(now.Features))
+	add(!maps.Equal(now.Limits, was.Limits), "limits", func() error {
+		if err := w.WriteMapHeader(uint32(len(now.Limits))); err != nil {
+			return err
+		}
+		for _, k := range slices.Sorted(maps.Keys(now.Limits)) {
+			if err := w.WriteString(k); err != nil {
+				return err
+			}
+			if err := w.WriteInt(now.Limits[k]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	add(!maps.EqualFunc(now.Net, was.Net, slices.Equal), "net", lists(now.Net))
+	add(!maps.EqualFunc(now.Edit, was.Edit, slices.Equal), "edit", lists(now.Edit))
+	add(now.Host != was.Host, "host", func() error { return w.WriteString(now.Host) })
+	add(now.Version != was.Version, "version", func() error { return w.WriteString(now.Version) })
+	// A zoom changes the scale alone, and says nothing (SPEC §4).
+	if len(fields) == 0 || len(fields) == 1 && now.Scale != was.Scale {
+		return
+	}
+	err := w.WriteMapHeader(uint32(len(fields)))
+	for _, f := range fields {
+		if err == nil {
+			err = f()
+		}
+	}
+	if err == nil {
+		err = w.Flush()
+	}
+	if err != nil {
+		h.protocol("a caps detail: %v", err)
+		return
+	}
+	h.heard = now
+	h.send(hotty.EncodePlain(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: hotty.EventCaps}}, buf.Bytes()))
+}
+
+// Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it
+// shows none: the program sent none or an empty a=menu, or the menu went
+// with Escape, a key it does not list, a change of screen or a reset. A
+// host without the feature menu shows none.
+func (h *Host) Menu() *hotty.MenuLevel {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.menu
+}
+
+// Prefix is the surface whose keys all reach the program since a key its
+// keymap binds to prefix (SPEC §10.5), until the program sends a=focus or
+// a=blur, the surface loses the keyboard, or the user focuses an element of
+// it with a press; "" when none.
+func (h *Host) Prefix() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.prefix != nil && h.prefix == h.keyboard {
+		return h.prefix.name
+	}
+	return ""
 }
 
 // --- inspection ---------------------------------------------------------------

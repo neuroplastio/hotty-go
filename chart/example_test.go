@@ -8,12 +8,13 @@ import (
 	"github.com/neuroplastio/hotty-go/chart"
 )
 
-// show prints what commands do: each delta's target, key and value.
-func show(cmds []string) {
+// show prints what a command does: each op's target, key and value.
+func show(cmd string) {
 	var d hotty.Decoder
-	for _, cmd := range cmds {
-		m, _ := d.Feed(cmd)
-		fmt.Printf("%s %s=%s\n", hotty.Get(m.Control, "t"), hotty.Get(m.Control, "k"), m.Payload)
+	m, _ := d.Feed(cmd)
+	ops, _ := hotty.DeltaOf(m)
+	for _, o := range ops {
+		fmt.Printf("%s %s=%s\n", o.Target, o.Key, *o.Value)
 	}
 }
 

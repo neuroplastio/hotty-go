@@ -54,12 +54,41 @@ type resource struct {
 	data []byte
 }
 
-// op is a delta for the screen's surface, made as the program changed a
-// surface, sent with the next Delta.
+// The delta ops (SPEC §6.1).
+const (
+	opMorph   = "morph"
+	opInner   = "inner"
+	opReplace = "replace"
+	opAppend  = "append"
+	opPrepend = "prepend"
+	opBefore  = "before"
+	opAfter   = "after"
+	opRemove  = "remove"
+	opAttr    = "attr"
+	opUnattr  = "unattr"
+	opText    = "text"
+	opVar     = "var"
+)
+
+// op is an op of a delta for the screen's surface, made as the program
+// changed a surface, sent with the next Delta.
 type op struct {
-	op          hotty.Op
+	op          string
 	target, key string
 	payload     []byte
+}
+
+// wire is the op as the delta carries it: with a value unless it is one of
+// the ops that take none.
+func (o op) wire() hotty.Op {
+	switch o.op {
+	case opRemove:
+		return hotty.OpRemove(o.target)
+	case opUnattr:
+		return hotty.OpUnattr(o.target, o.key)
+	}
+	v := string(o.payload)
+	return hotty.Op{Op: o.op, Target: o.target, Key: o.key, Value: &v}
 }
 
 // The longest HOTTY sequence the screen holds while waiting for its end: a
@@ -346,13 +375,13 @@ func (s *Screen) doc(name string, sf *surface, markup string) {
 		s.parse(sf, markup)
 		if s.sent != nil && !s.stale {
 			sf.sentStyle = s.boxStyle(sf)
-			s.queue(op{op: hotty.OpAppend, target: s.id, payload: []byte(s.box(sf))})
+			s.queue(op{op: opAppend, target: s.id, payload: []byte(s.box(sf))})
 		}
 		return
 	}
 	s.parse(sf, markup)
 	if s.sent != nil && sf.sentStyle != "" {
-		s.queue(op{op: hotty.OpMorph, target: s.rootID(sf), payload: []byte(render(sf.root))})
+		s.queue(op{op: opMorph, target: s.rootID(sf), payload: []byte(render(sf.root))})
 	}
 }
 
@@ -501,7 +530,7 @@ func (s *Screen) drop(sf *surface) {
 		}
 	}
 	if s.sent != nil && sf.sentStyle != "" {
-		s.queue(op{op: hotty.OpRemove, target: s.boxID(sf)})
+		s.queue(op{op: opRemove, target: s.boxID(sf)})
 	}
 }
 
@@ -557,20 +586,31 @@ func (s *Screen) Resources() []string {
 
 // --- deltas -------------------------------------------------------------------
 
-// delta applies a delta to a surface's document (SPEC §6), and makes it a
-// delta of the screen's surface. One the screen cannot apply, it leaves
-// out: the host would refuse it too.
+// delta applies a delta to a surface's document (SPEC §6), and makes its
+// ops ops of the screen's surface. A delta the host would refuse as a whole
+// is left out, and so is an op the screen cannot apply: the host would
+// refuse it too, and the ops after it still apply.
 func (s *Screen) delta(sf *surface, m hotty.Message) {
-	o := hotty.Op(hotty.Get(m.Control, "op"))
-	if o == "" {
-		o = hotty.OpMorph
+	ops, err := hotty.DeltaOf(m)
+	if err != nil {
+		return
 	}
-	key, payload := hotty.Get(m.Control, "k"), string(m.Payload)
-	if o == hotty.OpMorph && hotty.Get(m.Control, "t") == "" {
+	for _, o := range ops {
+		payload := ""
+		if o.Value != nil {
+			payload = *o.Value
+		}
+		s.apply(sf, o.Op, o.Target, o.Key, payload)
+	}
+}
+
+// apply applies one op to a surface's document.
+func (s *Screen) apply(sf *surface, o, t, key, payload string) {
+	if o == opMorph && t == "" {
 		s.morphByIDs(sf, payload)
 		return
 	}
-	tid := sf.sc.ids + hotty.Get(m.Control, "t")
+	tid := sf.sc.ids + t
 	target := sf.find(tid)
 	if target == nil {
 		return
@@ -582,21 +622,21 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 	}
 	out := op{op: o, target: outT, key: key}
 	switch o {
-	case hotty.OpMorph, hotty.OpReplace, hotty.OpBefore, hotty.OpAfter, hotty.OpRemove:
+	case opMorph, opReplace, opBefore, opAfter, opRemove:
 		if isRoot {
 			return // the screen keeps the element; its children may change
 		}
 		var nodes []*nethtml.Node
-		if o != hotty.OpRemove {
+		if o != opRemove {
 			nodes = sf.fragment(payload, target.Parent)
 			out.payload = []byte(renderAll(nodes))
 		}
 		switch o {
-		case hotty.OpBefore:
+		case opBefore:
 			for _, n := range nodes {
 				target.Parent.InsertBefore(n, target)
 			}
-		case hotty.OpAfter:
+		case opAfter:
 			next := target.NextSibling
 			for _, n := range nodes {
 				target.Parent.InsertBefore(n, next)
@@ -607,14 +647,14 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 			}
 			target.Parent.RemoveChild(target)
 		}
-	case hotty.OpInner:
+	case opInner:
 		nodes := sf.fragment(payload, target)
 		out.payload = []byte(renderAll(nodes))
 		removeChildren(target)
 		for _, n := range nodes {
 			target.AppendChild(n)
 		}
-	case hotty.OpAppend, hotty.OpPrepend:
+	case opAppend, opPrepend:
 		nodes := sf.fragment(payload, target)
 		out.payload = []byte(renderAll(nodes))
 		first := target.FirstChild
@@ -626,17 +666,17 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 					continue
 				}
 			}
-			if o == hotty.OpAppend || first == nil {
+			if o == opAppend || first == nil {
 				target.AppendChild(n)
 			} else {
 				target.InsertBefore(n, first)
 			}
 		}
-	case hotty.OpText:
+	case opText:
 		removeChildren(target)
 		target.AppendChild(&nethtml.Node{Type: nethtml.TextNode, Data: payload})
-		out.payload = m.Payload
-	case hotty.OpVar:
+		out.payload = []byte(payload)
+	case opVar:
 		v := sf.sc.values(payload)
 		name := key
 		if !strings.HasPrefix(name, "--") {
@@ -644,7 +684,7 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 		}
 		setAttr(target, "style", setStyleProp(attrOf(target, "style"), name, v))
 		out.payload = []byte(v)
-	case hotty.OpAttr:
+	case opAttr:
 		v, keep := sf.sc.attr(target, "", key, payload)
 		switch {
 		case isRoot && key == "id":
@@ -653,7 +693,7 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 			v = "vt-d " + payload
 		case !keep && key == "href":
 			delAttr(target, key)
-			out.op = hotty.OpUnattr
+			out.op = opUnattr
 			s.queue(out)
 			return
 		case !keep:
@@ -661,13 +701,13 @@ func (s *Screen) delta(sf *surface, m hotty.Message) {
 		}
 		setAttr(target, key, v)
 		out.payload = []byte(v)
-	case hotty.OpUnattr:
+	case opUnattr:
 		switch {
 		case key == "data-on" || key == "autofocus" || isRoot && key == "id":
 			return
 		case isRoot && key == "class":
 			setAttr(target, "class", "vt-d")
-			out = op{op: hotty.OpAttr, target: outT, key: "class", payload: []byte("vt-d")}
+			out = op{op: opAttr, target: outT, key: "class", payload: []byte("vt-d")}
 		default:
 			delAttr(target, key)
 		}
@@ -696,7 +736,7 @@ func (s *Screen) morphByIDs(sf *surface, payload string) {
 		old.Parent.RemoveChild(old)
 	}
 	if b.Len() > 0 {
-		s.queue(op{op: hotty.OpMorph, payload: []byte(b.String())})
+		s.queue(op{op: opMorph, payload: []byte(b.String())})
 	}
 }
 
@@ -898,25 +938,21 @@ func (s *Screen) surfacesHTML() string {
 	return b.String()
 }
 
-// surfaceDelta is the commands that bring the screen's surface up to the
-// surfaces: the resources that arrived, the deltas the program made, and
-// the boxes that moved.
-func (s *Screen) surfaceDelta(surface string) []string {
-	out := s.resOut
+// surfaceDelta is what brings the screen's surface up to the surfaces: the
+// commands for the resources that arrived, and the ops of the deltas the
+// program made and of the boxes that moved, in order, for the one delta.
+func (s *Screen) surfaceDelta() (res []string, ops []hotty.Op) {
+	res = s.resOut
 	s.resOut = nil
 	for _, o := range s.ops {
-		if o.op == hotty.OpMorph && o.target != "" {
-			out = append(out, hotty.MorphTo(surface, o.target, string(o.payload)))
-			continue
-		}
-		out = append(out, hotty.Delta(surface, o.op, o.target, o.key, o.payload))
+		ops = append(ops, o.wire())
 	}
 	s.ops, s.queued = nil, 0
 	for _, sf := range s.order {
 		if st := s.boxStyle(sf); sf.sentStyle != "" && st != sf.sentStyle {
 			sf.sentStyle = st
-			out = append(out, hotty.SetAttr(surface, s.boxID(sf), "style", st))
+			ops = append(ops, hotty.OpAttr(s.boxID(sf), "style", st))
 		}
 	}
-	return out
+	return res, ops
 }

@@ -9,10 +9,32 @@ import (
 	"github.com/neuroplastio/hotty-go"
 )
 
-// delta applies a delta to the surface's document (SPEC §6), and returns
-// the error code and detail when it cannot.
-func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, detail string) {
-	if op == hotty.OpMorph && target == "" {
+// The delta ops (SPEC §6.1), as DeltaOf has checked them.
+const (
+	opMorph   = "morph"
+	opInner   = "inner"
+	opReplace = "replace"
+	opAppend  = "append"
+	opPrepend = "prepend"
+	opBefore  = "before"
+	opAfter   = "after"
+	opRemove  = "remove"
+	opAttr    = "attr"
+	opUnattr  = "unattr"
+	opText    = "text"
+	opVar     = "var"
+	opReveal  = "reveal"
+)
+
+// delta applies one op of a delta to the surface's document (SPEC §6.1),
+// and returns the error code and detail when it cannot. A missing target
+// fails this op alone.
+func (s *Surface) delta(o hotty.Op) (code, detail string) {
+	op, target, key, payload := o.Op, o.Target, o.Key, ""
+	if o.Value != nil {
+		payload = *o.Value
+	}
+	if op == opMorph && target == "" {
 		return s.morphByIDs(payload)
 	}
 	t := s.byID(target)
@@ -20,18 +42,18 @@ func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, 
 		return hotty.ENOTARGET, target
 	}
 	switch op {
-	case hotty.OpMorph:
+	case opMorph:
 		nodes := s.fragment(payload, t.Parent)
 		if len(elements(nodes)) != 1 || len(nodes) != 1 {
 			s.replaceWith(t, nodes)
 			return "", ""
 		}
 		s.morph(t, nodes[0])
-	case hotty.OpInner:
+	case opInner:
 		s.morphChildren(t, s.fragment(payload, t))
-	case hotty.OpReplace:
+	case opReplace:
 		s.replaceWith(t, s.fragment(payload, t.Parent))
-	case hotty.OpAppend, hotty.OpPrepend:
+	case opAppend, opPrepend:
 		nodes := s.fragment(payload, t)
 		first := t.FirstChild
 		for _, n := range nodes {
@@ -41,35 +63,35 @@ func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, 
 					continue
 				}
 			}
-			if op == hotty.OpAppend || first == nil {
+			if op == opAppend || first == nil {
 				t.AppendChild(n)
 			} else {
 				t.InsertBefore(n, first)
 			}
 		}
-	case hotty.OpBefore, hotty.OpAfter:
+	case opBefore, opAfter:
 		if t.Parent == nil {
 			return hotty.EINVAL, "no parent"
 		}
 		ref := t
-		if op == hotty.OpAfter {
+		if op == opAfter {
 			ref = t.NextSibling
 		}
 		for _, n := range s.fragment(payload, t.Parent) {
 			t.Parent.InsertBefore(n, ref)
 		}
-	case hotty.OpRemove:
+	case opRemove:
 		s.drop(t)
 		if t.Parent != nil {
 			t.Parent.RemoveChild(t)
 		}
-	case hotty.OpAttr:
+	case opAttr:
 		setAttr(t, key, payload)
 		s.attrChanged(t, key)
-	case hotty.OpUnattr:
+	case opUnattr:
 		delAttr(t, key)
 		s.attrChanged(t, key)
-	case hotty.OpText:
+	case opText:
 		for c := t.FirstChild; c != nil; {
 			next := c.NextSibling
 			s.drop(c)
@@ -80,16 +102,13 @@ func (s *Surface) delta(op hotty.Op, target, key string, payload string) (code, 
 		if t.DataAtom == atom.Textarea {
 			s.attrChanged(t, "value")
 		}
-	case hotty.OpVar:
+	case opVar:
 		style, _ := attr(t, "style")
 		setAttr(t, "style", setStyleProp(style, varName(key), payload))
-	case hotty.OpReveal:
+	case opReveal:
 		// Nothing is laid out, so nothing scrolls (SPEC §6.1).
-		if payload != hotty.RevealNearest && payload != hotty.RevealStart && payload != hotty.RevealEnd {
-			return hotty.EINVAL, "reveal " + payload
-		}
 	default:
-		return hotty.EINVAL, "unknown op " + string(op)
+		return hotty.EINVAL, "unknown op " + op
 	}
 	return "", ""
 }

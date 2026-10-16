@@ -117,16 +117,23 @@ func TestNum(t *testing.T) {
 }
 
 // deltas decodes commands into "target key=value" lines.
-func deltas(t *testing.T, cmds []string) []string {
+func deltas(t *testing.T, cmd string) []string {
 	t.Helper()
-	var out []string
 	var d hotty.Decoder
-	for _, cmd := range cmds {
-		m, r := d.Feed(cmd)
-		if r != hotty.Complete || hotty.Get(m.Control, "a") != "delta" || hotty.Get(m.Control, "op") != "attr" || hotty.Get(m.Control, "s") != "dash" || hotty.Get(m.Control, "q") != "2" {
-			t.Fatalf("not an attr delta to dash: %v", m.Control)
+	m, r := d.Feed(cmd)
+	if r != hotty.Complete || hotty.Get(m.Control, "a") != "delta" || hotty.Get(m.Control, "s") != "dash" || hotty.Get(m.Control, "q") != "2" {
+		t.Fatalf("not a delta to dash: %v", m.Control)
+	}
+	ops, err := hotty.DeltaOf(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, o := range ops {
+		if o.Op != "attr" {
+			t.Fatalf("not an attr op: %+v", o)
 		}
-		out = append(out, hotty.Get(m.Control, "t")+" "+hotty.Get(m.Control, "k")+"="+string(m.Payload))
+		out = append(out, o.Target+" "+o.Key+"="+*o.Value)
 	}
 	return out
 }

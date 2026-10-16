@@ -2,9 +2,9 @@
 // its last state in the scrollback.
 //
 // It shows the cheap way to change a surface many times a second: a custom
-// property moves the bar (hotty.SetVar) and text deltas change the labels
-// (hotty.SetText), a few dozen bytes each, in synchronized output so the
-// host shows them together (SPEC §6). Where the terminal is not a HOTTY
+// property moves the bar (hotty.OpVar) and text ops change the labels
+// (hotty.OpText), a few dozen bytes each, in one delta so the host shows
+// them together (SPEC §6). Where the terminal is not a HOTTY
 // host, the line is redrawn with a carriage return; into a pipe, a line per
 // step.
 //
@@ -123,11 +123,11 @@ func newBar(ctx context.Context, t *hottyterm.Term) (*bar, error) {
 
 func (b *bar) step(done, total int, name string) {
 	pct := strconv.Itoa(done * 100 / total)
-	_ = b.t.Send(hotty.Sync(
-		hotty.SetVar(b.name, "fill", "p", pct),
-		hotty.SetText(b.name, "label", name),
-		hotty.SetText(b.name, "pct", pct+"%"),
-	))
+	_ = b.t.Send(hotty.Delta(b.name, []hotty.Op{
+		hotty.OpVar("fill", "p", pct),
+		hotty.OpText("label", name),
+		hotty.OpText("pct", pct+"%"),
+	}))
 }
 
 func (b *bar) end(done, total int, took time.Duration, cancelled bool) {
@@ -135,7 +135,7 @@ func (b *bar) end(done, total int, took time.Duration, cancelled bool) {
 	if cancelled {
 		label, class = fmt.Sprintf("stopped after %d of %d", done, total), "row stopped"
 	}
-	_ = b.t.Send(hotty.Sync(hotty.SetText(b.name, "label", label), hotty.SetAttr(b.name, "row", "class", class)))
+	_ = b.t.Send(hotty.Delta(b.name, []hotty.Op{hotty.OpText("label", label), hotty.OpAttr("row", "class", class)}))
 	// Read the host's replies before the shell does. A cancelled run
 	// still waits a moment for them.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(b.ctx), time.Second)

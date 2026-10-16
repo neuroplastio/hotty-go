@@ -58,12 +58,41 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.2"
+	Version = "0.3"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
 	// Payloads shorter than this are not worth compressing.
 	compressFrom = 256
+)
+
+// The modifier keys held during a click, a press or a drag, as the bits of
+// Event.Mods (SPEC §9).
+const (
+	ModShift   = 1
+	ModAlt     = 2
+	ModControl = 4
+	ModMeta    = 8
+)
+
+// The optional features a host may have (SPEC §4), as its capabilities
+// list them (HasFeature).
+const (
+	FeaturePassthrough = "passthrough" // the pointer passes through the parts of a surface that take none (SPEC §9.3)
+	FeatureHover       = "hover"       // it says where the pointer is, with hover events (SPEC §9.4)
+	FeatureCount       = "count"       // it says that a click repeats one before it (SPEC §9)
+	FeatureMenu        = "menu"        // it shows a program's menus (SPEC §10.5)
+)
+
+// Flag is a surface's p, f or v (SPEC §5.2): absent, On or Off. The zero
+// value is absent, which a placement does not send, and which leaves the
+// flag as it was.
+type Flag int
+
+// The values of a Flag besides the zero one, which is absent.
+const (
+	On  Flag = 1 // sent as 1: the surface turns the event on
+	Off Flag = 2 // sent as 0: the surface turns it off
 )
 
 // Quiet says which replies the host sends for a command (SPEC §3.5).
@@ -165,9 +194,17 @@ func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string 
 	if numbered && !given {
 		q = int(ReplyAlways)
 	}
-	set(&ctl, "q", strconv.Itoa(q))
 	if numbered {
 		set(&ctl, "n", strconv.Itoa(n))
+	}
+	// q goes out only where the wire does not say it: 0 with n, else 1
+	// (SPEC §3.5).
+	implied := int(ReplyOnError)
+	if numbered {
+		implied = int(ReplyAlways)
+	}
+	if q != implied {
+		set(&ctl, "q", strconv.Itoa(q))
 	}
 	return Encode(ctl, payload)
 }
@@ -189,7 +226,7 @@ func encode(ctl Control, payload []byte, compress bool) string {
 	var zipped bool
 	if compress && len(payload) >= compressFrom {
 		var z bytes.Buffer
-		w, _ := zlib.NewWriterLevel(&z, zlib.BestSpeed)
+		w := zlib.NewWriter(&z)
 		_, _ = w.Write(payload)
 		_ = w.Close()
 		if z.Len() < len(payload) {
@@ -199,7 +236,6 @@ func encode(ctl Control, payload []byte, compress bool) string {
 	b64 := base64.StdEncoding.EncodeToString(body)
 
 	var control strings.Builder
-	var quiet string
 	for _, kv := range ctl {
 		if kv.K == "o" || kv.K == "m" {
 			continue
@@ -208,9 +244,6 @@ func encode(ctl Control, payload []byte, compress bool) string {
 			control.WriteByte(':')
 		}
 		control.WriteString(kv.K + "=" + Sanitize(kv.V))
-		if kv.K == "q" {
-			quiet = Sanitize(kv.V)
-		}
 	}
 	if zipped {
 		if control.Len() > 0 {
@@ -239,11 +272,7 @@ func encode(ctl Control, payload []byte, compress bool) string {
 		if end == len(b64) {
 			more = "0"
 		}
-		b.WriteString(prefix + "m=" + more)
-		if quiet != "" {
-			b.WriteString(":q=" + quiet)
-		}
-		b.WriteString(";" + b64[i:end] + st)
+		b.WriteString(prefix + "m=" + more + ";" + b64[i:end] + st)
 	}
 	return b.String()
 }

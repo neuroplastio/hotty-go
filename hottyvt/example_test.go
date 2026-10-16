@@ -7,12 +7,20 @@ import (
 	"github.com/neuroplastio/hotty-go/hottyvt"
 )
 
-// show prints what commands do: each delta's operation, target and payload.
+// show prints what commands do: each op of a delta, its operation, target
+// and value.
 func show(cmds []string) {
 	var d hotty.Decoder
 	for _, cmd := range cmds {
 		m, _ := d.Feed(cmd)
-		fmt.Printf("%s %s %s\n", hotty.Get(m.Control, "op"), hotty.Get(m.Control, "t"), m.Payload)
+		ops, _ := hotty.DeltaOf(m)
+		for _, o := range ops {
+			v := ""
+			if o.Value != nil {
+				v = *o.Value
+			}
+			fmt.Printf("%s %s %s\n", o.Op, o.Target, v)
+		}
 	}
 }
 

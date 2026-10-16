@@ -24,18 +24,21 @@ func (h *Host) drain() string {
 	return s
 }
 
-// replies decodes what the host has sent the program since the last drain.
-func (h *Host) sentReplies() []hotty.Reply {
+// sentBoth decodes the replies and the events the host has sent the
+// program since the last drain.
+func (h *Host) sentBoth() (replies []hotty.Reply, events []hotty.Event) {
 	var d hotty.Decoder
-	var out []hotty.Reply
 	for _, seq := range oscs(h.drain()) {
 		if m, r := d.Feed(seq); r == hotty.Complete {
 			if rep, ok := hotty.ReplyOf(m); ok {
-				out = append(out, rep)
+				replies = append(replies, rep)
+			}
+			if e, ok := hotty.EventOf(m); ok {
+				events = append(events, e)
 			}
 		}
 	}
-	return out
+	return replies, events
 }
 
 // oscs cuts a stream into its OSC sequences.
@@ -64,6 +67,7 @@ func oscs(stream string) []string {
 type vectorStep struct {
 	Send    map[string]string `json:"send"`
 	Payload *string           `json:"payload"`
+	Body    json.RawMessage   `json:"body"`
 	Reply   json.RawMessage   `json:"reply"`
 	Inspect []string          `json:"inspect"`
 	Expect  json.RawMessage   `json:"expect"`
@@ -127,24 +131,30 @@ func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
 	if st.Term != nil && used == *st.Term {
 		t.Errorf("step %d (%s): reached the program %v, want %v", i, name, !used, *st.Term)
 	}
-	if !st.HasEvs {
+	if st.HasEvs {
+		_, got := h.sentBoth()
+		checkEvents(t, fmt.Sprintf("step %d (%s)", i, name), got, st.Events)
+	}
+}
+
+// checkEvents compares the events the host sent with a step's: kind,
+// surface, target (absent: none) and detail, each value of its type
+// (conformance/README.md, Numbers).
+func checkEvents(t *testing.T, at string, got []hotty.Event, want []vectorEvent) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("%s: %d events %v, want %d", at, len(got), got, len(want))
 		return
 	}
-	got := h.sentEvents()
-	if len(got) != len(st.Events) {
-		t.Errorf("step %d (%s): %d events %v, want %d", i, name, len(got), got, len(st.Events))
-		return
-	}
-	for j, w := range st.Events {
+	for j, w := range want {
 		g := got[j]
 		if g.Kind != w.E || g.Surface != w.S || g.Target != w.T {
-			t.Errorf("step %d (%s): event %d is %s s=%s t=%s, want %s s=%s t=%s", i, name, j, g.Kind, g.Surface, g.Target, w.E, w.S, w.T)
+			t.Errorf("%s: event %d is %s s=%s t=%s, want %s s=%s t=%s", at, j, g.Kind, g.Surface, g.Target, w.E, w.S, w.T)
 			continue
 		}
 		if w.Detail == nil {
 			continue
 		}
-		// Each value of its type (conformance/README.md, Numbers).
 		gd, wd := fromMsgpack(g.Detail), fromJSON(w.Detail)
 		// This host lays nothing out, so it knows no element's area.
 		if m, ok := wd.(map[string]any); ok {
@@ -154,7 +164,7 @@ func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
 			}
 		}
 		if !reflect.DeepEqual(gd, wd) {
-			t.Errorf("step %d (%s): event %d detail %#v, want %s", i, name, j, gd, w.Detail)
+			t.Errorf("%s: event %d detail %#v, want %s", at, j, gd, w.Detail)
 		}
 	}
 }
@@ -293,6 +303,25 @@ func vectorControl(m map[string]string) hotty.Control {
 	return c
 }
 
+// requirements is a vector's requires: one name, or a list of them.
+type requirements []string
+
+func (r *requirements) UnmarshalJSON(b []byte) error {
+	var one string
+	if json.Unmarshal(b, &one) == nil {
+		*r = requirements{one}
+		return nil
+	}
+	return json.Unmarshal(b, (*[]string)(r))
+}
+
+// implements is what a vector may require of this host (conformance/README.md,
+// SDK.md §4.4): the features it reports, whose pointer and key steps it
+// skips all the same, since it lays nothing out. A vector that requires
+// anything else, scroll, steps, drop, view, touch, undo, passthrough or
+// commands, is skipped.
+var implements = map[string]bool{"hover": true, "count": true, "menu": true}
+
 // The host passes the HOTTY conformance vectors, as hotty-blitz and
 // xterm-addon-hotty do.
 func TestConformanceVectors(t *testing.T) {
@@ -303,7 +332,7 @@ func TestConformanceVectors(t *testing.T) {
 	var v struct {
 		Vectors []struct {
 			Name     string            `json:"name"`
-			Requires json.RawMessage   `json:"requires"`
+			Requires requirements      `json:"requires"`
 			Steps    []json.RawMessage `json:"steps"`
 		} `json:"vectors"`
 	}
@@ -315,6 +344,11 @@ func TestConformanceVectors(t *testing.T) {
 	}
 	for _, vec := range v.Vectors {
 		t.Run(vec.Name, func(t *testing.T) {
+			for _, r := range vec.Requires {
+				if !implements[r] {
+					t.Skip("requires " + r)
+				}
+			}
 			h := New(t, Lenient())
 			steps := make([]vectorStep, len(vec.Steps))
 			// Keys are pressed only in vectors with no pointer, and that
@@ -322,6 +356,7 @@ func TestConformanceVectors(t *testing.T) {
 			// pointer is says nothing here, and it has no passthrough,
 			// hover or scroll.
 			keys := len(vec.Requires) == 0
+			pointer := false
 			for i, raw := range vec.Steps {
 				if err := json.Unmarshal(raw, &steps[i]); err != nil {
 					t.Fatal(err)
@@ -330,7 +365,7 @@ func TestConformanceVectors(t *testing.T) {
 				_ = json.Unmarshal(raw, &fields)
 				_, steps[i].HasEvs = fields["events"]
 				if steps[i].Pointer != "" {
-					keys = false
+					keys, pointer = false, true
 				}
 			}
 			for i, st := range steps {
@@ -351,8 +386,18 @@ func TestConformanceVectors(t *testing.T) {
 				if st.Payload != nil {
 					payload = *st.Payload
 				}
+				if st.Body != nil {
+					payload = string(Body(string(st.Body)))
+				}
 				_, _ = h.Write([]byte(hotty.Encode(vectorControl(st.Send), []byte(payload))))
-				replies := h.sentReplies()
+				replies, events := h.sentBoth()
+				// The events a command makes, in a vector with no pointer,
+				// whose events this host cannot make. The fit vectors size
+				// a document by the cell, which it does not lay out: it
+				// estimates the rows (AutoRows).
+				if st.HasEvs && !pointer && !fits(steps) {
+					checkEvents(t, fmt.Sprintf("step %d", i), events, st.Events)
+				}
 				switch {
 				case st.Reply == nil:
 				case string(st.Reply) == "null":
@@ -360,7 +405,7 @@ func TestConformanceVectors(t *testing.T) {
 						t.Errorf("step %d: a reply where none is due: %+v", i, replies[0].Message.Control)
 					}
 				default:
-					var want map[string]string
+					var want map[string]*string
 					var types struct {
 						Types json.RawMessage `json:"types"`
 						Body  json.RawMessage `json:"body"`
@@ -391,16 +436,21 @@ func TestConformanceVectors(t *testing.T) {
 					}
 					for k, val := range want {
 						var got string
+						has := true
 						switch k {
 						case "code":
 							got = r.Code
 						case "detail":
 							got = r.Detail
 						default:
-							got = hotty.Get(r.Message.Control, k)
+							got, has = hotty.Lookup(r.Message.Control, k)
 						}
-						if got != val {
-							t.Errorf("step %d: %s=%q, want %q (%v)", i, k, got, val, r.Message.Control)
+						// null: the reply must not have the key.
+						switch {
+						case val == nil && (has && got != "" || k == "i" && r.HasOp):
+							t.Errorf("step %d: %s=%q, want none (%v)", i, k, got, r.Message.Control)
+						case val != nil && got != *val:
+							t.Errorf("step %d: %s=%q, want %q (%v)", i, k, got, *val, r.Message.Control)
 						}
 					}
 					// The fields body names, equal as values, each of its
@@ -428,6 +478,16 @@ func TestConformanceVectors(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fits reports whether a vector asks for fit events.
+func fits(steps []vectorStep) bool {
+	for _, st := range steps {
+		if st.Send["f"] == "1" {
+			return true
+		}
+	}
+	return false
 }
 
 func checkInspect(t *testing.T, i int, h *Host, st vectorStep) {

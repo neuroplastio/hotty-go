@@ -32,6 +32,23 @@ const last = `~/acme main ❯ make test
 3 passed · 1 failed · 1.8s
 ~/acme main ❯`
 
+// deltaOps is the ops of every delta the host heard, in order.
+func deltaOps(t *testing.T, h *hottytest.Host) []hotty.Op {
+	t.Helper()
+	var out []hotty.Op
+	for _, cmd := range h.Commands() {
+		if hotty.Get(cmd.Control, "a") != "delta" {
+			continue
+		}
+		ops, err := hotty.DeltaOf(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, ops...)
+	}
+	return out
+}
+
 func TestSurface(t *testing.T) {
 	h := hottytest.New(t)
 	e, errs := on(h)
@@ -55,12 +72,12 @@ func TestSurface(t *testing.T) {
 	// named its window.
 	var lint []string
 	var titles []string
-	for _, cmd := range h.Commands() {
-		switch {
-		case hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "vt-r7":
-			lint = append(lint, hotty.Get(cmd.Control, "op"))
-		case hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "title":
-			titles = append(titles, string(cmd.Payload))
+	for _, o := range deltaOps(t, h) {
+		switch o.Target {
+		case "vt-r7":
+			lint = append(lint, o.Op)
+		case "title":
+			titles = append(titles, *o.Value)
 		}
 	}
 	if len(lint) < 13 {
@@ -146,9 +163,9 @@ func TestCast(t *testing.T) {
 		t.Errorf("rows %q", got)
 	}
 	var titles []string
-	for _, cmd := range h.Commands() {
-		if hotty.Get(cmd.Control, "a") == "delta" && hotty.Get(cmd.Control, "t") == "title" {
-			titles = append(titles, string(cmd.Payload))
+	for _, o := range deltaOps(t, h) {
+		if o.Target == "title" {
+			titles = append(titles, *o.Value)
 		}
 	}
 	if want := []string{"Type a command", "Done"}; strings.Join(titles, "|") != strings.Join(want, "|") {

@@ -33,19 +33,29 @@ func TestBar(t *testing.T) {
 	if class, _ := s.Attr("row", "class"); class != "row done" {
 		t.Errorf("class %q", class)
 	}
-	// Each step is one synchronized batch of three small deltas.
-	var steps int
+	// Each step is one delta of three small ops.
+	var steps, deltas int
 	for _, cmd := range h.Commands() {
-		if hotty.Get(cmd.Control, "op") == "var" {
-			steps++
+		if hotty.Get(cmd.Control, "a") != "delta" {
+			continue
+		}
+		deltas++
+		ops, err := hotty.DeltaOf(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, o := range ops {
+			if o.Op == "var" {
+				steps++
+			}
 		}
 	}
-	out := h.Output()
-	if steps != 8 || strings.Count(out, "\x1b[?2026h") != 9 {
-		t.Errorf("%d var deltas, %d batches", steps, strings.Count(out, "\x1b[?2026h"))
+	if steps != 8 || deltas != 9 {
+		t.Errorf("%d var ops, %d deltas", steps, deltas)
 	}
-	first := out[strings.Index(out, "\x1b[?2026h"):]
-	first = first[:strings.Index(first, "\x1b[?2026l")]
+	out := h.Output()
+	first := out[strings.Index(out, "\x1b]7279;a=delta"):]
+	first = first[:strings.Index(first, "\x1b\\")]
 	if len(first) > 200 {
 		t.Errorf("a step is %d bytes", len(first))
 	}

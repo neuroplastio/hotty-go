@@ -61,7 +61,10 @@ import (
 func (h *Host) Key(key string) (used bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if s := h.keyboard; s != nil && !s.detached && h.useKey(s, key) {
+	h.menuKey(key)
+	// After a prefix every key reaches the program, whatever is focused
+	// (SPEC §10.5).
+	if s := h.keyboard; s != nil && !s.detached && h.prefix != s && h.useKey(s, key) {
 		return true
 	}
 	if seq := keySequence(key); seq != "" {
@@ -82,12 +85,22 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		// No element focused, no keymap (SPEC §10.2).
 		return false
 	}
+	platform := hotty.PlatformOf(h.caps)
 	if textField(el) {
+		// A key bound to prefix is not the field's: it and every key after
+		// it reach the program (SPEC §10.2, §10.5).
+		if hotty.Resolve(platform, el.DataAtom == atom.Textarea || editingHost(el), keymaps(el)...).Prefix(key) {
+			h.prefix = s
+			return false
+		}
 		return h.fieldKey(s, el, key)
 	}
 	// Any other element's keymap gives keys to the program, and does
 	// nothing else.
-	if hotty.ParseKeymap(hotty.PlatformOf(h.caps), strings.Join(keymaps(el), " ")).Program(key) {
+	if km := hotty.ParseKeymap(platform, strings.Join(keymaps(el), " ")); km.Program(key) {
+		if km.Prefix(key) {
+			h.prefix = s
+		}
 		return false
 	}
 	if !shiftOnly {
@@ -120,10 +133,35 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		if name != " " && name != "Enter" {
 			return false
 		}
-		_ = h.click(s, el, false, 1)
+		bits := 0
+		if slices.Contains(mods, "Shift") {
+			bits = hotty.ModShift
+		}
+		_ = h.click(s, el, false, 1, bits)
 		return true
 	}
 	return false
+}
+
+// menuKey hides the menu a program shows (a=menu) when a key makes it
+// stale: Escape, or a key it does not list (SPEC §10.5). The key still
+// goes where it would without the menu.
+func (h *Host) menuKey(key string) {
+	if h.menu == nil {
+		return
+	}
+	p := hotty.PlatformOf(h.caps)
+	k, ok := p.ReadKey(key)
+	if !ok || k == "Escape" {
+		h.menu = nil
+		return
+	}
+	for _, it := range h.menu.Items {
+		if c, ok := p.ReadKey(it.Key); ok && c == k {
+			return
+		}
+	}
+	h.menu = nil
 }
 
 // fieldKey gives a key to a text field, which does what its keymap says

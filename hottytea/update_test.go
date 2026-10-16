@@ -29,7 +29,7 @@ func from(ctl hotty.Control, body string) tea.Msg {
 
 func caps(n string) tea.Msg {
 	return from(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: n}},
-		`{"v":"0.2","cell":{"w":9,"h":18},"limits":{"surfaces":64},"host":"test"}`)
+		`{"v":"0.3","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64},"host":"test"}`)
 }
 
 var da1 = uv.PrimaryDeviceAttributesEvent{62, 22}
@@ -305,11 +305,30 @@ func TestPressFitHoverAndZArePlaced(t *testing.T) {
 	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=-3:p=1:f=1:v=1:C=1") {
 		t.Fatalf("placement: %q", out)
 	}
-	// Asking for presses, fit and hover no more places it again.
-	c.Press, c.Fit, c.Hover = false, false, false
+	// They belong to the surface: one placement that moves it sends none.
+	c.Z = 4
 	s.Layout([]Surface{c})
-	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=-3:C=1") {
+	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=4:C=1") {
+		t.Fatalf("moved: %q", out)
+	}
+	// Asking for them no more turns them off, each when it turns off.
+	c.Press, c.Fit, c.Hover = false, true, false
+	s.Layout([]Surface{c})
+	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=4:p=0:v=0:C=1") {
 		t.Fatalf("without press: %q", out)
+	}
+	// A surface deleted starts again from none, and so does one the host lost.
+	s.Layout(nil)
+	flushed(s)
+	c.Press, c.Fit, c.Hover = false, false, true
+	s.Layout([]Surface{c})
+	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=4:v=1:C=1") {
+		t.Fatalf("a new surface: %q", out)
+	}
+	s.Update(from(hotty.Control{{K: "a", V: "err"}, {K: "re", V: "place"}, {K: "s", V: "a"}}, `{"code":"ENOENT"}`))
+	s.Layout([]Surface{c})
+	if out := flushed(s); !strings.Contains(out, "a=place:s=a:c=10:r=2:z=4:v=1:C=1") {
+		t.Fatalf("a surface the host lost: %q", out)
 	}
 }
 
@@ -508,5 +527,18 @@ func TestWatchFile(t *testing.T) {
 	n, _ := (&File{f: r, w: &s.watch}).Read(buf)
 	if string(buf[:n]) != "\x1b[2Jhi" {
 		t.Errorf("Read %q", buf[:n])
+	}
+}
+
+// A caps event changes Caps, and still comes back as an event (SPEC §4).
+func TestCapsEventsAreMerged(t *testing.T) {
+	s := native()
+	s.Caps = hotty.Caps{V: hotty.Version, Mod: "Control", Scheme: "dark"}
+	msg, _ := s.Update(from(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: "caps"}}, `{"mod":"Meta","cellcss":{"w":10.0,"h":20.0}}`))
+	if e, ok := msg.(EventMsg); !ok || e.Kind != hotty.EventCaps {
+		t.Fatalf("got %#v", msg)
+	}
+	if s.Caps.Mod != "Meta" || s.Caps.CellCSS.H != 20 || s.Caps.Scheme != "dark" {
+		t.Errorf("caps %+v", s.Caps)
 	}
 }

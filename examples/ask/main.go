@@ -174,7 +174,7 @@ func summary(a *form.Answers) string {
 // askCells asks a question a line, on a terminal that is not a host. It
 // checks each answer as the form would (Field.Check), and asks again.
 func askCells(t *hottyterm.Term, in *input) *form.Answers {
-	fields := map[string]string{}
+	var fields []hotty.FormField
 	for _, f := range deploy.Fields {
 		for {
 			prompt := f.Title()
@@ -213,7 +213,7 @@ func askCells(t *hottyterm.Term, in *input) *form.Answers {
 				continue
 			}
 			if v != "" {
-				fields[f.Name] = v
+				fields = append(fields, hotty.FormField{Name: f.Name, Value: v})
 			}
 			break
 		}

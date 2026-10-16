@@ -49,7 +49,7 @@ fmt.Println(len(cmds), "commands; the form takes", spec.Rows(), "rows; focus at"
 
 // What the host sends when the user presses Enter (SPEC §9).
 ev := hotty.Event{Surface: surface, Kind: hotty.EventSubmit, Target: form.FormID,
-	Fields: map[string]string{"env": "production", "version": "v1.4.2", "notify": "true"}}
+	Fields: []hotty.FormField{{Name: "env", Value: "production"}, {Name: "version", Value: "v1.4.2"}, {Name: "notify", Value: "true"}}}
 answers, problems := spec.Read(ev.Fields)
 out, _ := json.Marshal(answers)
 fmt.Println(string(out), len(problems), "problems")
@@ -86,13 +86,13 @@ Output:
   - [`func (s *Spec) First() string`](#Spec.First)
   - [`func (s *Spec) HTML(hint string) string`](#Spec.HTML)
   - [`func (s *Spec) NewState() *State`](#Spec.NewState)
-  - [`func (s *Spec) Read(fields map[string]string) (Answers, []Problem)`](#Spec.Read)
+  - [`func (s *Spec) Read(fields []hotty.FormField) (Answers, []Problem)`](#Spec.Read)
   - [`func (s *Spec) Rows() int`](#Spec.Rows)
   - [`func (s *Spec) Show(surface string, problems []Problem) []string`](#Spec.Show)
   - [`func (s *Spec) SubmitLabel() string`](#Spec.SubmitLabel)
 - [`type State`](#State)
   - [`func (st *State) Apply(e hotty.Event) bool`](#State.Apply)
-  - [`func (st *State) Fields() map[string]string`](#State.Fields)
+  - [`func (st *State) Fields() []hotty.FormField`](#State.Fields)
 
 ### <a id="pkg-examples"></a>Examples
 
@@ -416,7 +416,7 @@ NewState is the form as it starts: its defaults.
 ### <a id="Spec.Read"></a>func (*Spec) Read
 
 ```go
-func (s *Spec) Read(fields map[string]string) (Answers, []Problem)
+func (s *Spec) Read(fields []hotty.FormField) (Answers, []Problem)
 ```
 
 Read reads a submit event's fields (hotty.Event.Fields) into answers, and reports the fields that stop the form: required ones left empty, and values that are not what their type asks for.
@@ -435,7 +435,7 @@ Rows is how many rows of the terminal the form takes, whatever its width: place 
 func (s *Spec) Show(surface string, problems []Problem) []string
 ```
 
-Show returns the commands that show problems in the form placed as surface, clear the ones fixed since, and give the keyboard to the first field with a problem. The values typed stay as they are. Problems for fields the spec does not have are left out.
+Show returns the commands that show problems in the form placed as surface, clear the ones fixed since, in one delta, and give the keyboard to the first field with a problem. The values typed stay as they are. Problems for fields the spec does not have are left out.
 
 #### <a id="example-Spec.Show"></a>Example
 
@@ -452,8 +452,14 @@ for _, p := range problems {
 var d hotty.Decoder
 for _, cmd := range spec.Show("deploy-4121-form", problems) {
 	m, _ := d.Feed(cmd)
-	if hotty.Get(m.Control, "t") == form.ProblemID(1) || hotty.Get(m.Control, "a") == "focus" {
-		fmt.Printf("%s %s %s %q\n", hotty.Get(m.Control, "a"), hotty.Get(m.Control, "op"), hotty.Get(m.Control, "t"), m.Payload)
+	ops, _ := hotty.DeltaOf(m)
+	for _, o := range ops {
+		if o.Target == form.ProblemID(1) {
+			fmt.Printf("%s %s %s %q\n", hotty.Get(m.Control, "a"), o.Op, o.Target, *o.Value)
+		}
+	}
+	if hotty.Get(m.Control, "a") == "focus" {
+		fmt.Println("focus", hotty.Get(m.Control, "t"))
 	}
 }
 ```
@@ -463,7 +469,7 @@ Output:
 ```
 version: required
 delta text e1 "! required"
-focus  f1 ""
+focus f1
 ```
 
 ### <a id="Spec.SubmitLabel"></a>func (*Spec) SubmitLabel
@@ -515,7 +521,7 @@ Apply takes a change event from the form's surface, and reports whether it chang
 ### <a id="State.Fields"></a>func (*State) Fields
 
 ```go
-func (st *State) Fields() map[string]string
+func (st *State) Fields() []hotty.FormField
 ```
 
-Fields is the form's fields as a submit event would carry them: unchecked checkboxes and unchosen choices are missing.
+Fields is the form's fields as a submit event would carry them, in the spec's order: unchecked checkboxes and unchosen choices are missing.

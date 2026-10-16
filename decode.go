@@ -191,19 +191,9 @@ func (d *Decoder) finish(ctl Control, payload string) (Message, Result) {
 	return Message{Control: Without(ctl, "o"), Payload: p}, Complete
 }
 
-// continuation reports whether a control is a further chunk's: m, and q
-// at most (SPEC §3.4).
-func continuation(ctl Control) bool {
-	if !Has(ctl, "m") {
-		return false
-	}
-	for _, kv := range ctl {
-		if kv.K != "m" && kv.K != "q" {
-			return false
-		}
-	}
-	return true
-}
+// continuation reports whether a control is a further chunk's: m alone
+// (SPEC §3.4).
+func continuation(ctl Control) bool { return len(ctl) == 1 && ctl[0].K == "m" }
 
 // parseControl reads key=value pairs separated by ':' (SPEC §3.2). A pair
 // without '=', a key that is not a key, a value with a character values may

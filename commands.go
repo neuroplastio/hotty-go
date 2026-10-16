@@ -3,6 +3,8 @@ package hotty
 import (
 	"strconv"
 	"strings"
+
+	"github.com/tinylib/msgp/msgp"
 )
 
 // Query asks whether the terminal is a HOTTY host that speaks Version,
@@ -51,7 +53,7 @@ func WithdrawLate() string {
 // the document is sent Detached. It is answered on error: EQUOTA when the
 // host holds no more surfaces.
 func Doc(surface, html string, opts ...DocOption) string {
-	ctl := Control{{"a", "doc"}, {"s", surface}, {"q", ""}}
+	ctl := Control{{"a", "doc"}, {"s", surface}}
 	var replies []ReplyOption
 	for _, o := range opts {
 		if r, ok := o.(ReplyOption); ok {
@@ -83,7 +85,7 @@ func (detached) doc(c *Control) { set(c, "d", "1") }
 //
 // It is what a command prints among its output, which outlives it: whatever
 // reads the terminal next, a shell, would read the surface's events as
-// typing. A host older than §5.5 ignores d=1.
+// typing.
 func Detached() DocOption { return detached{} }
 
 // Axes are the directions a document scrolls in (SPEC §5.1): a bitmask of
@@ -113,8 +115,7 @@ func (s scroll) doc(c *Control) {
 //
 // Like Detached, it belongs to the document: one sent without it does not
 // scroll. 0, the default, sends no key; any other value goes out as given,
-// for the host to judge. A host that does not scroll (Caps.Scroll false)
-// ignores it and clips, as it clips every other document.
+// for the host to judge.
 func Scroll(axes Axes) DocOption { return scroll(axes) }
 
 // Window is the part of a surface a placement shows, in cells from the
@@ -133,20 +134,24 @@ type Placement struct {
 	// Z stacks overlapping placements, from -1000 to 1000: greater is
 	// above, and 0 is the usual.
 	Z int
+	// Press, Fit and Hover belong to the surface, not to the placement
+	// (SPEC §5.2): On turns the event on (1), Off turns it off (0), and
+	// the zero value, absent, sends nothing and leaves it as it was.
+	//
 	// Press asks for a press event wherever the user presses in the
-	// placement, on text and empty space too (p=1).
-	Press bool
+	// placement, on text and empty space too (p).
+	Press Flag
 	// Fit asks for a fit event whenever the rows the document needs at
 	// this width change from the rows last heard, starting from this
-	// placement's (f=1): an image or font arrived, a resource was
+	// placement's (f): an image or font arrived, a resource was
 	// replaced, a delta landed. The placement keeps its size; placing the
-	// surface again is the program's to do (SPEC §5.2).
-	Fit bool
+	// surface again is the program's to do.
+	Fit Flag
 	// Hover asks for a hover event each time the element with an id under
-	// the pointer changes, and when the pointer leaves the window (v=1):
+	// the pointer changes, and when the pointer leaves the window (v):
 	// for a hint of the program's own, or to clear what it lit outside
 	// the surface when the pointer goes onto it (SPEC §9.4).
-	Hover bool
+	Hover Flag
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool
@@ -166,14 +171,16 @@ func placementControl(p Placement, surface string) Control {
 	if p.Z != 0 {
 		ctl = With(ctl, "z", strconv.Itoa(p.Z))
 	}
-	if p.Press {
-		ctl = With(ctl, "p", "1")
-	}
-	if p.Fit {
-		ctl = With(ctl, "f", "1")
-	}
-	if p.Hover {
-		ctl = With(ctl, "v", "1")
+	for _, f := range [...]struct {
+		key  string
+		flag Flag
+	}{{"p", p.Press}, {"f", p.Fit}, {"v", p.Hover}} {
+		switch f.flag {
+		case On:
+			ctl = With(ctl, f.key, "1")
+		case Off:
+			ctl = With(ctl, f.key, "0")
+		}
 	}
 	if p.KeepCursor {
 		ctl = With(ctl, "C", "1")
@@ -227,8 +234,21 @@ func PlacementOf(m Message) (Placement, error) {
 	if p.Z, ok = num("z", 0, -1000, 1000); !ok {
 		return fail("z out of range")
 	}
-	p.Press, p.Fit, p.Hover, p.KeepCursor = Get(m.Control, "p") == "1", Get(m.Control, "f") == "1", Get(m.Control, "v") == "1", Get(m.Control, "C") == "1"
+	p.Press, p.Fit, p.Hover = flagOf(m.Control, "p"), flagOf(m.Control, "f"), flagOf(m.Control, "v")
+	p.KeepCursor = Get(m.Control, "C") == "1"
 	return p, nil
+}
+
+// flagOf reads a placement's p, f or v: 1 is On, 0 is Off, and anything
+// else, absent included, is absent (SPEC §5.2).
+func flagOf(c Control, k string) Flag {
+	switch Get(c, k) {
+	case "1":
+		return On
+	case "0":
+		return Off
+	}
+	return 0
 }
 
 // CursorBelow is the cursor's move a placement without KeepCursor makes
@@ -237,6 +257,110 @@ func PlacementOf(m Message) (Placement, error) {
 // from the screen it emulates feeds it this instead.
 func CursorBelow(rows int) string {
 	return strings.Repeat("\x1bD", max(rows, 0)) + "\r"
+}
+
+// DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay
+// does, checking the whole body first: it is an *Error with Code EINVAL,
+// and with HasOp the index of the first op at fault, when the body does not
+// decode (SPEC §3.3) or has no ops, an op is not a map or names an op there
+// is none of, an op lacks the t or k it needs, or a reveal has a value
+// other than start or end. A value an op does not take is ignored, and so
+// is a key this package does not know.
+func DeltaOf(m Message) ([]Op, error) {
+	fail := func(detail string, at int) ([]Op, error) {
+		e := &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
+		if at >= 0 {
+			e.Op, e.HasOp = at, true
+		}
+		return nil, e
+	}
+	if Get(m.Control, "a") != "delta" {
+		return fail("not a delta command", -1)
+	}
+	var d deltaBody
+	if !decodeBody(m.Payload, &d) {
+		if at := opNotMap(m.Payload); at >= 0 {
+			return fail("op is not a map", at)
+		}
+		return fail("body does not decode", -1)
+	}
+	if len(d.Ops) == 0 {
+		return fail("no ops", -1)
+	}
+	for i, op := range d.Ops {
+		var v string
+		if op.Value != nil {
+			v = *op.Value
+		}
+		switch {
+		case !validOps[op.Op]:
+			return fail("unknown op "+op.Op, i)
+		case op.Target == "" && op.Op != opMorph:
+			return fail("missing t", i)
+		case op.Key == "" && (op.Op == opAttr || op.Op == opUnattr || op.Op == opVar):
+			return fail("missing k", i)
+		case op.Op == opReveal && op.Value != nil && v != RevealStart && v != RevealEnd:
+			return fail("reveal "+v, i)
+		}
+	}
+	return d.Ops, nil
+}
+
+// MenuOf reads an a=menu command's menu (SPEC §10.5), as a host or a relay
+// does: nil, and no error, for a command with no body, which hides the
+// menu. A body that is no menu is an *Error with Code EINVAL.
+func MenuOf(m Message) (*MenuLevel, error) {
+	if Get(m.Control, "a") != "menu" {
+		return nil, &Error{Code: EINVAL, Detail: "not a menu command", Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
+	}
+	if len(m.Payload) == 0 {
+		return nil, nil
+	}
+	var l MenuLevel
+	if !decodeBody(m.Payload, &l) {
+		return nil, &Error{Code: EINVAL, Detail: "body does not decode", Re: "menu"}
+	}
+	return &l, nil
+}
+
+// validOps are the delta ops there are.
+var validOps = map[string]bool{
+	opMorph: true, opInner: true, opReplace: true, opAppend: true, opPrepend: true, opBefore: true,
+	opAfter: true, opRemove: true, opAttr: true, opUnattr: true, opText: true, opVar: true, opReveal: true,
+}
+
+// opNotMap is the index of the first element of a body's ops that is not a
+// map, or -1: a body that is not one map holding an array of ops, or whose
+// ops are all maps, has none.
+func opNotMap(body []byte) int {
+	if !wellFormed(body) {
+		return -1
+	}
+	n, b, err := msgp.ReadMapHeaderBytes(body)
+	for ; n > 0 && err == nil; n-- {
+		var key string
+		if key, b, err = msgp.ReadStringBytes(b); err != nil {
+			break
+		}
+		if key != "ops" {
+			b, err = msgp.Skip(b)
+			continue
+		}
+		var ops uint32
+		if ops, b, err = msgp.ReadArrayHeaderBytes(b); err != nil {
+			break
+		}
+		for i := 0; i < int(ops); i++ {
+			if msgp.NextType(b) != msgp.MapType {
+				return i
+			}
+			if b, err = msgp.Skip(b); err != nil {
+				break
+			}
+		}
+		break
+	}
+	return -1
 }
 
 // Place places a surface at the cursor (SPEC §5.2). Placing a surface that
@@ -264,60 +388,107 @@ func Hide(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "hide"}, {"s", surface}}, nil, NoReply, opts)
 }
 
-// Op is a delta operation (SPEC §6.1).
-type Op string
-
-// The delta operations.
+// The delta ops (SPEC §6.1).
 const (
-	OpMorph   Op = "morph"   // morph the target into the payload; without a target, top-level elements by id
-	OpInner   Op = "inner"   // morph the target's children into the payload's nodes
-	OpReplace Op = "replace" // replace the target with the payload's nodes, without morphing
-	OpAppend  Op = "append"  // add the payload's nodes as the target's last children
-	OpPrepend Op = "prepend" // add the payload's nodes as the target's first children
-	OpBefore  Op = "before"  // insert the payload's nodes before the target
-	OpAfter   Op = "after"   // insert the payload's nodes after the target
-	OpRemove  Op = "remove"  // remove the target
-	OpAttr    Op = "attr"    // set the target's attribute named by the key
-	OpUnattr  Op = "unattr"  // remove the target's attribute named by the key
-	OpText    Op = "text"    // replace the target's children with one text node
-	OpVar     Op = "var"     // set the custom property --key on the target
-	OpReveal  Op = "reveal"  // scroll the target into view; the payload says where (Reveal)
+	opMorph   = "morph"   // morph the target into the value; without a target, top-level elements by id
+	opInner   = "inner"   // morph the target's children into the value's nodes
+	opReplace = "replace" // replace the target with the value's nodes, without morphing
+	opAppend  = "append"  // add the value's nodes as the target's last children
+	opPrepend = "prepend" // add the value's nodes as the target's first children
+	opBefore  = "before"  // insert the value's nodes before the target
+	opAfter   = "after"   // insert the value's nodes after the target
+	opRemove  = "remove"  // remove the target
+	opAttr    = "attr"    // set the target's attribute named by the key
+	opUnattr  = "unattr"  // remove the target's attribute named by the key
+	opText    = "text"    // replace the target's children with one text node
+	opVar     = "var"     // set the custom property --key on the target
+	opReveal  = "reveal"  // scroll the target into view; the value says where
 )
 
-// Delta changes one surface's document (SPEC §6). target is an element id,
-// "" for a morph by top-level ids; key names the attribute or the custom
-// property. It is never answered, unless an option asks.
-func Delta(surface string, op Op, target, key string, payload []byte, opts ...ReplyOption) string {
-	ctl := Control{{"a", "delta"}, {"s", surface}, {"op", string(op)}}
-	if target != "" {
-		ctl = With(ctl, "t", target)
+// valued is an op with a value, present even when empty.
+func valued(op, target, key, value string) Op {
+	return Op{Op: op, Target: target, Key: key, Value: &value}
+}
+
+// OpMorph morphs an element into html, or with no target, each top-level
+// element of html into the document's element with its id (SPEC §6.2).
+func OpMorph(target, html string) Op { return valued(opMorph, target, "", html) }
+
+// OpInner morphs the children of an element into the nodes of html.
+func OpInner(target, html string) Op { return valued(opInner, target, "", html) }
+
+// OpReplace replaces an element with the nodes of html, without morphing.
+func OpReplace(target, html string) Op { return valued(opReplace, target, "", html) }
+
+// OpAppend adds the nodes of html as an element's last children.
+func OpAppend(target, html string) Op { return valued(opAppend, target, "", html) }
+
+// OpPrepend adds the nodes of html as an element's first children.
+func OpPrepend(target, html string) Op { return valued(opPrepend, target, "", html) }
+
+// OpBefore inserts the nodes of html before an element.
+func OpBefore(target, html string) Op { return valued(opBefore, target, "", html) }
+
+// OpAfter inserts the nodes of html after an element.
+func OpAfter(target, html string) Op { return valued(opAfter, target, "", html) }
+
+// OpRemove removes an element. It has no value.
+func OpRemove(target string) Op { return Op{Op: opRemove, Target: target} }
+
+// OpAttr sets an attribute on an element.
+func OpAttr(target, name, value string) Op { return valued(opAttr, target, name, value) }
+
+// OpUnattr removes an attribute from an element. It has no value.
+func OpUnattr(target, name string) Op { return Op{Op: opUnattr, Target: target, Key: name} }
+
+// OpText replaces an element's children with one text node: a clock, a
+// count. Hosts make it cheap (SPEC §6.1).
+func OpText(target, text string) Op { return valued(opText, target, "", text) }
+
+// OpVar sets the custom property --name on an element: the cheap way to
+// move a bar or a needle every frame, with CSS that reads it.
+func OpVar(target, name, value string) Op { return valued(opVar, target, name, value) }
+
+// OpReveal scrolls an element into view (SPEC §6.1): where is RevealStart,
+// RevealEnd or RevealNearest, which has the op no value.
+func OpReveal(target, where string) Op {
+	if where == RevealNearest {
+		return Op{Op: opReveal, Target: target}
 	}
-	if key != "" {
-		ctl = With(ctl, "k", key)
+	return valued(opReveal, target, "", where)
+}
+
+// Delta changes one surface's document (SPEC §6.1): the ops, in the order
+// they apply, which the host shows as one. A program that changes a
+// surface in one frame sends one Delta (SDK.md §2.9). A Delta of no ops is
+// sent, and the host refuses it (EINVAL). It is never answered, unless an
+// option asks; a reply to an op that failed names it, by its index.
+func Delta(surface string, ops []Op, opts ...ReplyOption) string {
+	if ops == nil {
+		ops = []Op{}
 	}
-	return command(ctl, payload, NoReply, opts)
+	return command(Control{{"a", "delta"}, {"s", surface}}, encodeBody(&deltaBody{Ops: ops}), NoReply, opts)
 }
 
 // SetText replaces an element's children with one text node: a clock, a
-// count. Hosts make it cheap (SPEC §6.1).
+// count.
 func SetText(surface, target, text string, opts ...ReplyOption) string {
-	return Delta(surface, OpText, target, "", []byte(text), opts...)
+	return Delta(surface, []Op{OpText(target, text)}, opts...)
 }
 
-// SetVar sets the custom property --name on an element: the cheap way to
-// move a bar or a needle every frame, with CSS that reads it.
+// SetVar sets the custom property --name on an element.
 func SetVar(surface, target, name, value string, opts ...ReplyOption) string {
-	return Delta(surface, OpVar, target, name, []byte(value), opts...)
+	return Delta(surface, []Op{OpVar(target, name, value)}, opts...)
 }
 
 // SetAttr sets an attribute on an element.
 func SetAttr(surface, target, name, value string, opts ...ReplyOption) string {
-	return Delta(surface, OpAttr, target, name, []byte(value), opts...)
+	return Delta(surface, []Op{OpAttr(target, name, value)}, opts...)
 }
 
 // RemoveAttr removes an attribute from an element.
 func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
-	return Delta(surface, OpUnattr, target, name, nil, opts...)
+	return Delta(surface, []Op{OpUnattr(target, name)}, opts...)
 }
 
 // MorphTo morphs an element into html, or with no target, each top-level
@@ -325,7 +496,7 @@ func RemoveAttr(surface, target, name string, opts ...ReplyOption) string {
 // what the user is doing in what stays: focus, the text being typed, an
 // open <details> (SPEC §6.2).
 func MorphTo(surface, target, html string, opts ...ReplyOption) string {
-	return Delta(surface, OpMorph, target, "", []byte(html), opts...)
+	return Delta(surface, []Op{OpMorph(target, html)}, opts...)
 }
 
 // Where Reveal brings an element (SPEC §6.1).
@@ -342,7 +513,7 @@ const (
 // jumps to a section. Elements that report whether they are in view
 // report it after (EventView).
 func Reveal(surface, target, where string, opts ...ReplyOption) string {
-	return Delta(surface, OpReveal, target, "", []byte(where), opts...)
+	return Delta(surface, []Op{OpReveal(target, where)}, opts...)
 }
 
 // Res stores a resource that documents refer to as cid:<id> (SPEC §7.1): a
@@ -374,9 +545,8 @@ func DelAll(opts ...ReplyOption) string {
 // screen when it exits detaches them first, unless it sent them Detached.
 // The next Doc sent without Detached makes the surface the program's again.
 //
-// It is never answered, unless an option asks: a host older than §5.5
-// refuses it (EINVAL), and a reply nobody reads would reach the shell as
-// typing.
+// It is never answered, unless an option asks: a reply nobody reads would
+// reach the shell as typing.
 func Detach(surface string, opts ...ReplyOption) string {
 	return command(Control{{"a", "detach"}, {"s", surface}}, nil, NoReply, opts)
 }
@@ -416,8 +586,9 @@ func Edit(names []string, opts ...ReplyOption) string {
 }
 
 // Menu shows the which-key menu of a program's key sequence while it waits
-// (SPEC §10.6), or with nil hides it. A host shows it only when it reports
-// Caps.Menu.
+// (SPEC §10.5), or with nil hides it. A host shows it when its capabilities
+// have the feature menu (HasFeature(caps, FeatureMenu)); on one that does
+// not, the program shows its menu itself.
 func Menu(level *MenuLevel, opts ...ReplyOption) string {
 	var body []byte
 	if level != nil {

@@ -66,6 +66,9 @@ func sent(h *Host) []string {
 		if !r.OK {
 			line += " " + r.Code
 		}
+		if r.HasOp {
+			line += fmt.Sprintf(" i=%d", r.Op)
+		}
 		out = append(out, line)
 	}
 	return out
@@ -122,11 +125,11 @@ func TestQueryAndCaps(t *testing.T) {
 	m, _ := d.Feed(seqs[0])
 	r, _ := hotty.ReplyOf(m)
 	caps := r.Caps
-	if caps == nil || r.N != 5 || caps.Host != "mine" || caps.Limits["surfaces"] != 3 || caps.V != hotty.Version || caps.Cell == nil || caps.Cell.H != 18 {
+	if caps == nil || r.N != 5 || caps.Host != "mine" || caps.Limits["surfaces"] != 3 || caps.V != hotty.Version || caps.CellCSS.H != 18 {
 		t.Errorf("caps %+v, reply %+v", caps, r)
 	}
 	// Hosts never compress (SPEC §3.3), however long the reply.
-	h = New(t, Caps(hotty.Caps{Host: strings.Repeat("h", 400), Ops: []string{"text", "var", "morph", "inner"}}))
+	h = New(t, Caps(hotty.Caps{Host: strings.Repeat("h", 400), Features: []string{"hover", "menu"}}))
 	send(h, hotty.Query(1))
 	if seqs := oscs(h.drain()); len(seqs) != 1 || strings.Contains(seqs[0], "o=z") {
 		t.Errorf("the caps reply: %q", seqs)
@@ -403,10 +406,10 @@ func TestPlacementAndCursor(t *testing.T) {
 	if h.Screen() != ">\nafter" {
 		t.Errorf("Screen %q", h.Screen())
 	}
-	send(h, hotty.Doc("b", "<p>x</p>"), hotty.PlaceAt("b", 5, 9, hotty.Placement{Cols: 4, Rows: 2, Z: -3, Press: true}, hotty.N(2)))
+	send(h, hotty.Doc("b", "<p>x</p>"), hotty.PlaceAt("b", 5, 9, hotty.Placement{Cols: 4, Rows: 2, Z: -3, Press: hotty.On}, hotty.N(2)))
 	expect(t, sent(h), "ok re=place s=b")
 	b := h.Surface("b")
-	if c, r := b.At(); c != 5 || r != 9 || b.Placement().Z != -3 || !b.Placement().Press {
+	if c, r := b.At(); c != 5 || r != 9 || b.Placement().Z != -3 || b.Placement().Press != hotty.On {
 		t.Errorf("PlaceAt: %d,%d %+v", c, r, b.Placement())
 	}
 	send(h, "!")
@@ -525,7 +528,7 @@ func TestLimits(t *testing.T) {
 // A double click is a click, then a click whose count is 2 (SPEC §9).
 func TestDoubleClick(t *testing.T) {
 	h := New(t)
-	if !h.caps.Count {
+	if !hotty.HasFeature(h.caps, hotty.FeatureCount) {
 		t.Error("DefaultCaps: no count")
 	}
 	send(h, hotty.Doc("f", `<button id=open value=x>Open</button><a href="/doc" id=l>doc</a>`), hotty.Place("f", hotty.Placement{Cols: 20, Rows: 2}))
@@ -588,7 +591,7 @@ func TestDeltasAndInspection(t *testing.T) {
 	if _, ok := s.Value("nope"); ok {
 		t.Error("Value of nothing")
 	}
-	send(h, hotty.Delta("x", hotty.OpText, "ta", "", []byte("new")), hotty.SetAttr("x", "box", "checked", ""))
+	send(h, hotty.SetText("x", "ta", "new"), hotty.SetAttr("x", "box", "checked", ""))
 	if v, _ := s.Value("ta"); v != "new" {
 		t.Errorf("a textarea's text is its value: %q", v)
 	}
@@ -599,7 +602,7 @@ func TestDeltasAndInspection(t *testing.T) {
 		t.Errorf("TextOf, HTML: %s", s.HTML())
 	}
 	send(h, hotty.MorphTo("x", "", `<p id=p>new</p><b id=gone>x</b>`, hotty.Q(hotty.ReplyOnError)))
-	expect(t, sent(h), "err re=delta s=x ENOTARGET")
+	expect(t, sent(h), "err re=delta s=x ENOTARGET i=0")
 	if s.TextOf("p") != "new" {
 		t.Error("morph by ids applies what it can")
 	}
@@ -736,12 +739,12 @@ func TestFormAndKeyboard(t *testing.T) {
 		`ev change t=r2 {"checked":true,"value":"prod"}`,
 		"ev focus t=size",
 		`ev change t=size {"value":"m"}`,
-		`ev submit t=f {"env":"prod","hidden":"h","name":"Ada","notes":"hi","ok":"yes","size":"m"}`)
+		`ev submit t=f {"fields":[["name","Ada"],["notes","hi"],["ok","yes"],["env","prod"],["size","m"],["hidden","h"]]}`)
 
 	// A submit button reports its click, then submits with its own value.
 	_ = h.Click("f", "save")
 	expect(t, sent(h), "ev focus t=save", `ev click t=save {"value":"save"}`,
-		`ev submit t=f {"action":"save","env":"prod","hidden":"h","name":"Ada","notes":"hi","ok":"yes","size":"m"}`)
+		`ev submit t=f {"fields":[["name","Ada"],["notes","hi"],["ok","yes"],["env","prod"],["size","m"],["hidden","h"],["action","save"]]}`)
 	_ = h.Click("f", "reset")
 	expect(t, sent(h), "ev focus t=reset", "ev click t=reset")
 
@@ -804,7 +807,7 @@ func TestProgramFocusAndBlur(t *testing.T) {
 	if h.Surface("f").Focused() != "" {
 		t.Error("a new document has no focus")
 	}
-	send(h, hotty.Focus("f", "a"), hotty.Delta("f", hotty.OpRemove, "a", "", nil))
+	send(h, hotty.Focus("f", "a"), hotty.Delta("f", []hotty.Op{hotty.OpRemove("a")}))
 	if h.Surface("f").Focused() != "" {
 		t.Error("the focused element went")
 	}
@@ -834,7 +837,7 @@ func TestDetached(t *testing.T) {
 
 func TestPressAndEmit(t *testing.T) {
 	h := New(t)
-	send(h, hotty.Doc("p", `<div id=card><p>text <b id=b>bold</b></p></div>`), hotty.Place("p", hotty.Placement{Cols: 10, Rows: 2, Press: true}))
+	send(h, hotty.Doc("p", `<div id=card><p>text <b id=b>bold</b></p></div>`), hotty.Place("p", hotty.Placement{Cols: 10, Rows: 2, Press: hotty.On}))
 	sent(h)
 	_ = h.Press("p", "b")
 	_ = h.Press("p", "")
@@ -842,20 +845,27 @@ func TestPressAndEmit(t *testing.T) {
 	if err := h.Press("p", "nope"); !errors.Is(err, ErrNoElement) {
 		t.Errorf("Press nothing: %v", err)
 	}
+	// p belongs to the surface: placing again without it goes on, and p=0
+	// stops the presses (SPEC §5.2).
 	send(h, hotty.Place("p", hotty.Placement{Cols: 10, Rows: 2}))
-	if err := h.Press("p", "b"); !errors.Is(err, ErrNoPress) {
-		t.Errorf("a placement without p=1: %v", err)
+	if err := h.Press("p", "b"); err != nil || !h.Surface("p").Press() {
+		t.Errorf("a placement without p: %v", err)
 	}
+	send(h, hotty.Place("p", hotty.Placement{Cols: 10, Rows: 2, Press: hotty.Off}))
+	if err := h.Press("p", "b"); !errors.Is(err, ErrNoPress) || h.Surface("p").Press() {
+		t.Errorf("a placement with p=0: %v", err)
+	}
+	sent(h)
 	if err := h.Press("nope", ""); !errors.Is(err, ErrNoSurface) {
 		t.Errorf("Press on no surface: %v", err)
 	}
-	_ = h.Emit("p", hotty.EventResize, "", map[string]float64{"w": 90, "h": 36})
-	expect(t, sent(h), `ev resize t= {"h":36,"w":90}`)
+	_ = h.Emit("p", "later", "", map[string]float64{"w": 90, "h": 36})
+	expect(t, sent(h), `ev later t= {"h":36,"w":90}`)
 	if err := h.Emit("nope", "x", "", nil); !errors.Is(err, ErrNoSurface) {
 		t.Errorf("Emit on no surface: %v", err)
 	}
 	// A press comes first, before what the click does.
-	send(h, hotty.Doc("q", `<button id=b>b</button>`), hotty.Place("q", hotty.Placement{Cols: 10, Rows: 1, Press: true}))
+	send(h, hotty.Doc("q", `<button id=b>b</button>`), hotty.Place("q", hotty.Placement{Cols: 10, Rows: 1, Press: hotty.On}))
 	sent(h)
 	_ = h.Click("q", "b")
 	expect(t, sent(h), "ev press t=b", "ev focus t=b", "ev click t=b")
@@ -865,21 +875,21 @@ func TestPressAndEmit(t *testing.T) {
 // placements that asked, once for each change, from the rows placed.
 func TestFit(t *testing.T) {
 	h := New(t)
-	send(h, hotty.Doc("f", `<p id=a>one</p>`), hotty.Place("f", hotty.Placement{Cols: 10, Fit: true}))
+	send(h, hotty.Doc("f", `<p id=a>one</p>`), hotty.Place("f", hotty.Placement{Cols: 10, Fit: hotty.On}))
 	expect(t, sent(h))
-	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("one\ntwo")))
+	send(h, hotty.SetText("f", "a", "one\ntwo"))
 	expect(t, sent(h), `ev fit t= {"r":2}`)
-	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("one")))
+	send(h, hotty.SetText("f", "a", "one"))
 	expect(t, sent(h), `ev fit t= {"r":1}`)
-	send(h, hotty.Delta("f", hotty.OpText, "a", "", []byte("uno")))
+	send(h, hotty.SetText("f", "a", "uno"))
 	expect(t, sent(h))
 
 	// Placed at rows the document does not need: told at once.
-	send(h, hotty.Place("f", hotty.Placement{Cols: 10, Rows: 4, Fit: true}))
+	send(h, hotty.Place("f", hotty.Placement{Cols: 10, Rows: 4, Fit: hotty.On}))
 	expect(t, sent(h), `ev fit t= {"r":1}`)
 
 	// A resource can change any document: each one that asked is checked.
-	send(h, hotty.Doc("g", `<p>one</p>`), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 3, Fit: true}))
+	send(h, hotty.Doc("g", `<p>one</p>`), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 3, Fit: hotty.On}))
 	expect(t, sent(h), `ev fit t= {"r":1}`)
 	tall := 1
 	h.autoRows = func(*Surface, int) int { return tall }
@@ -887,11 +897,15 @@ func TestFit(t *testing.T) {
 	send(h, hotty.Res("img", "image/png", []byte("x")))
 	expect(t, sent(h), `ev fit t= {"r":5}`, `ev fit t= {"r":5}`)
 
-	// Placed again without f=1: no more.
-	send(h, hotty.Place("f", hotty.Placement{Cols: 10}), hotty.Hide("g"))
-	sent(h)
+	// Placed again without f, it goes on, counted from its own rows; f=0
+	// stops it; a hidden surface sends none.
+	send(h, hotty.Place("f", hotty.Placement{Cols: 10, Rows: 2}), hotty.Hide("g"))
+	expect(t, sent(h), `ev fit t= {"r":5}`)
 	tall = 2
-	send(h, hotty.Res("img", "image/png", []byte("y")), hotty.Delta("f", hotty.OpText, "a", "", []byte("x")))
+	send(h, hotty.Res("img", "image/png", []byte("y")))
+	expect(t, sent(h), `ev fit t= {"r":2}`)
+	tall = 3
+	send(h, hotty.Place("f", hotty.Placement{Cols: 10, Rows: 3, Fit: hotty.Off}), hotty.SetText("f", "a", "x"))
 	expect(t, sent(h))
 }
 
@@ -900,7 +914,7 @@ func TestFit(t *testing.T) {
 func TestHover(t *testing.T) {
 	h := New(t)
 	list := `<div id=l><p id=a>a</p><p id=b>b</p></div>`
-	send(h, hotty.Doc("l", list), hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: true}),
+	send(h, hotty.Doc("l", list), hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: hotty.On}),
 		hotty.Doc("m", list), hotty.Place("m", hotty.Placement{Cols: 10, Rows: 2}))
 	sent(h)
 	must := func(err error) {
@@ -928,15 +942,25 @@ func TestHover(t *testing.T) {
 		t.Errorf("Hover on no element = %v", err)
 	}
 
-	// Placed again without v=1: no more; with it again, from out.
+	// v belongs to the surface: placing again without it goes on, from what
+	// the program heard; v=0 stops it, and v=1 again starts from out.
 	must(h.Hover("l", "a", 1, 0))
 	sent(h)
 	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2}))
-	must(h.Hover("l", "b", 1, 1))
-	expect(t, sent(h))
-	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: true}))
+	must(h.Hover("l", "a", 1, 0))
 	must(h.Hover("l", "b", 1, 1))
 	expect(t, sent(h), `ev hover t=b {"c":1,"r":1}`)
+	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: hotty.Off}))
+	must(h.Hover("l", "a", 1, 0))
+	expect(t, sent(h))
+	send(h, hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: hotty.On}))
+	must(h.Hover("l", "a", 1, 0))
+	expect(t, sent(h), `ev hover t=a {"c":1,"r":0}`)
+	// Hidden, a surface sends none, and goes on from what the program
+	// heard: the same element is not reported again.
+	send(h, hotty.Hide("l"), hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2}))
+	must(h.Hover("l", "a", 1, 0))
+	expect(t, sent(h))
 
 	// Detached: nothing.
 	send(h, hotty.Detach("l"))
@@ -952,7 +976,7 @@ func TestDrag(t *testing.T) {
 	h := New(t)
 	grid := `<div id=g><i id=a data-on="click drag">a</i><i id=b data-on=drag>b</i><span id=gap>-</span>` +
 		`<i data-on=drag>no id</i><input id=f></div>`
-	send(h, hotty.Doc("g", grid), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2, Press: true}))
+	send(h, hotty.Doc("g", grid), hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2, Press: hotty.On}))
 	sent(h)
 	if err := h.DragStart("g", "a", 0, 0, "ctrl", "shift"); err != nil {
 		t.Fatal(err)
@@ -964,12 +988,12 @@ func TestDrag(t *testing.T) {
 	_ = h.DragMove("", 3, -1)   // none, another cell
 	_ = h.DragEnd("b", 2, 1, "shift")
 	expect(t, sent(h),
-		"ev press t=a",
-		`ev dragstart t=a {"c":0,"keys":["shift","ctrl"],"r":0}`,
-		`ev drag t=b {"c":2,"keys":[],"r":0}`,
-		`ev drag t= {"c":3,"keys":[],"r":0}`,
-		`ev drag t= {"c":3,"keys":[],"r":-1}`,
-		`ev dragend t=b {"c":2,"keys":["shift"],"r":1}`)
+		`ev press t=a {"mods":5}`,
+		`ev dragstart t=a {"c":0,"mods":5,"r":0}`,
+		`ev drag t=b {"c":2,"r":0}`,
+		`ev drag t= {"c":3,"r":0}`,
+		`ev drag t= {"c":3,"r":-1}`,
+		`ev dragend t=b {"c":2,"mods":1,"r":1}`)
 	if h.Dragging() {
 		t.Error("still dragging")
 	}
@@ -977,7 +1001,7 @@ func TestDrag(t *testing.T) {
 	// Ending where it began is that element's click too.
 	_ = h.DragStart("g", "a", 0, 0)
 	_ = h.DragEnd("a", 0, 0)
-	expect(t, sent(h), "ev press t=a", `ev dragstart t=a {"c":0,"keys":[],"r":0}`, `ev dragend t=a {"c":0,"keys":[],"r":0}`, "ev click t=a")
+	expect(t, sent(h), "ev press t=a", `ev dragstart t=a {"c":0,"r":0}`, `ev dragend t=a {"c":0,"r":0}`, "ev click t=a")
 
 	// Nothing that opts in, or one with no id: a press, and no drag.
 	if err := h.DragStart("g", "gap", 0, 0); !errors.Is(err, ErrNoReport) || h.Dragging() {
@@ -995,33 +1019,33 @@ func TestDrag(t *testing.T) {
 	if err := h.DragStart("g", "a", 0, 0); !errors.Is(err, ErrDragging) {
 		t.Errorf("a second drag: %v", err)
 	}
-	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"keys":[],"r":0}`, `ev change t=f {"value":"x"}`, "ev blur t=")
+	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"r":0}`, `ev change t=f {"value":"x"}`, "ev blur t=")
 
 	// A new document or a hide cuts it short at the last cell; a detach or
 	// a delete ends it with nothing.
 	_ = h.DragMove("", 4, 1)
 	sent(h)
 	send(h, hotty.Doc("g", grid))
-	expect(t, sent(h), `ev dragend t= {"c":4,"keys":[],"r":1}`)
+	expect(t, sent(h), `ev dragend t= {"c":4,"r":1}`)
 	send(h, hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2}))
 	_ = h.DragStart("g", "b", 1, 0)
 	send(h, hotty.Hide("g"))
-	expect(t, sent(h), `ev dragstart t=b {"c":1,"keys":[],"r":0}`, `ev dragend t= {"c":1,"keys":[],"r":0}`)
+	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"r":0}`, `ev dragend t= {"c":1,"r":0}`)
 	send(h, hotty.Place("g", hotty.Placement{Cols: 10, Rows: 2}))
 	_ = h.DragStart("g", "b", 1, 0)
 	send(h, hotty.Detach("g"))
 	if h.Dragging() {
 		t.Error("a detach leaves no drag")
 	}
-	expect(t, sent(h), `ev dragstart t=b {"c":1,"keys":[],"r":0}`)
+	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"r":0}`)
 }
 
-// Steps (SPEC §9.1): a host whose capabilities say Steps reports where in
+// Steps (SPEC §9.1): a host reports where in
 // an element with data-steps the pointer is, as the test gives it: clamped
 // to the counts, measured against the element the drag began on wherever
 // the pointer goes, with a drag each time it changes.
 func TestDragSteps(t *testing.T) {
-	h := New(t, Caps(hotty.Caps{Steps: true}))
+	h := New(t)
 	doc := `<i id=track data-on=drag data-steps=20>t</i><i id=pad data-on=drag data-steps="0 4">p</i>` +
 		`<i id=bad data-on=drag data-steps="2.5">b</i><i id=other data-on=drag>o</i>`
 	send(h, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 4}))
@@ -1034,12 +1058,12 @@ func TestDragSteps(t *testing.T) {
 	_ = h.DragMove("other", 5, 3)           // a move with no step keeps the last
 	_ = h.DragEndStep("", -4, 3, -1, 0)
 	expect(t, sent(h),
-		`ev dragstart t=track {"c":0,"keys":[],"r":0,"x":3}`,
-		`ev drag t=track {"c":2,"keys":[],"r":0,"x":5}`,
-		`ev drag t= {"c":2,"keys":[],"r":2,"x":5}`,
-		`ev drag t= {"c":9,"keys":[],"r":2,"x":20}`,
-		`ev drag t=other {"c":5,"keys":[],"r":3,"x":20}`,
-		`ev dragend t= {"c":-4,"keys":[],"r":3,"x":0}`)
+		`ev dragstart t=track {"c":0,"r":0,"x":3}`,
+		`ev drag t=track {"c":2,"r":0,"x":5}`,
+		`ev drag t= {"c":2,"r":2,"x":5}`,
+		`ev drag t= {"c":9,"r":2,"x":20}`,
+		`ev drag t=other {"c":5,"r":3,"x":20}`,
+		`ev dragend t= {"c":-4,"r":3,"x":0}`)
 
 	// Only the axes an element counts; a value that is not one or two whole
 	// numbers counts none.
@@ -1048,30 +1072,23 @@ func TestDragSteps(t *testing.T) {
 	_ = h.DragStartStep("s", "bad", 0, 2, 1, 1)
 	_ = h.DragEnd("bad", 0, 2)
 	expect(t, sent(h),
-		`ev dragstart t=pad {"c":0,"keys":[],"r":1,"y":2}`,
-		`ev dragend t=pad {"c":0,"keys":[],"r":1,"y":3}`,
-		`ev dragstart t=bad {"c":0,"keys":[],"r":2}`,
-		`ev dragend t=bad {"c":0,"keys":[],"r":2}`)
+		`ev dragstart t=pad {"c":0,"r":1,"y":2}`,
+		`ev dragend t=pad {"c":0,"r":1,"y":3}`,
+		`ev dragstart t=bad {"c":0,"r":2}`,
+		`ev dragend t=bad {"c":0,"r":2}`)
 
 	// A hide cuts it short with the last step.
 	_ = h.DragStartStep("s", "track", 0, 0, 12, 0)
 	send(h, hotty.Hide("s"))
-	expect(t, sent(h), `ev dragstart t=track {"c":0,"keys":[],"r":0,"x":12}`, `ev dragend t= {"c":0,"keys":[],"r":0,"x":12}`)
-
-	// A host that does not say Steps reports none.
-	plain := New(t)
-	send(plain, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 4}))
-	sent(plain)
-	_ = plain.DragStartStep("s", "track", 0, 0, 3, 0)
-	expect(t, sent(plain), `ev dragstart t=track {"c":0,"keys":[],"r":0}`)
+	expect(t, sent(h), `ev dragstart t=track {"c":0,"r":0,"x":12}`, `ev dragend t= {"c":0,"r":0,"x":12}`)
 }
 
-// Drop (SPEC §9.1): a host whose capabilities say Drop takes an element
+// Drop (SPEC §9.1): a host takes an element
 // with drop in its data-on as a drag's t, never drags it, and reports
 // where in a t with data-steps the pointer is, as the test gives it. A drag
 // that ends on a drop-only element inside the one it began on is a click.
 func TestDrop(t *testing.T) {
-	h := New(t, Caps(hotty.Caps{Drop: true}))
+	h := New(t)
 	doc := `<i id=card data-on=drag>c</i><i id=ada data-on=drop>Ada</i><i id=col data-on=drop data-steps="3 2">col</i>` +
 		`<i id=row data-on="drag click"><b id=pin data-on=drop>p</b></i><i id=knob data-on=drag data-steps=4>k</i>`
 	send(h, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 6}))
@@ -1084,12 +1101,12 @@ func TestDrop(t *testing.T) {
 	_ = h.DragOver("col", 4, 4, 9, 2)    // past the count: clamped
 	_ = h.DragEndOver("col", 4, 4, 3, 2) // the same step, in the dragend
 	expect(t, sent(h),
-		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
-		`ev drag t=ada {"c":1,"keys":[],"r":1}`,
-		`ev drag t=col {"c":1,"keys":[],"r":2,"tx":0,"ty":0}`,
-		`ev drag t=col {"c":2,"keys":[],"r":3,"tx":1,"ty":1}`,
-		`ev drag t=col {"c":4,"keys":[],"r":4,"tx":3,"ty":2}`,
-		`ev dragend t=col {"c":4,"keys":[],"r":4,"tx":3,"ty":2}`)
+		`ev dragstart t=card {"c":1,"r":0}`,
+		`ev drag t=ada {"c":1,"r":1}`,
+		`ev drag t=col {"c":1,"r":2,"tx":0,"ty":0}`,
+		`ev drag t=col {"c":2,"r":3,"tx":1,"ty":1}`,
+		`ev drag t=col {"c":4,"r":4,"tx":3,"ty":2}`,
+		`ev dragend t=col {"c":4,"r":4,"tx":3,"ty":2}`)
 
 	// A press on a drop-only element starts no drag.
 	if err := h.DragStart("s", "ada", 1, 1); !errors.Is(err, ErrNoReport) {
@@ -1100,8 +1117,8 @@ func TestDrop(t *testing.T) {
 	_ = h.DragStart("s", "pin", 1, 5)
 	_ = h.DragEnd("pin", 1, 5)
 	expect(t, sent(h),
-		`ev dragstart t=row {"c":1,"keys":[],"r":5}`,
-		`ev dragend t=pin {"c":1,"keys":[],"r":5}`,
+		`ev dragstart t=row {"c":1,"r":5}`,
+		`ev dragend t=pin {"c":1,"r":5}`,
 		`ev click t=row`)
 
 	// A t that only opts in to drags has no steps in it.
@@ -1109,23 +1126,9 @@ func TestDrop(t *testing.T) {
 	_ = h.DragOver("knob", 1, 6, 2, 0)
 	_ = h.DragEndOver("knob", 1, 6, 3, 0)
 	expect(t, sent(h),
-		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
-		`ev drag t=knob {"c":1,"keys":[],"r":6}`,
-		`ev dragend t=knob {"c":1,"keys":[],"r":6}`)
-
-	// A host that does not say Drop takes no drop-only t and no steps in t.
-	plain := New(t, Caps(hotty.Caps{Steps: true}))
-	send(plain, hotty.Doc("s", doc), hotty.Place("s", hotty.Placement{Cols: 10, Rows: 6}))
-	sent(plain)
-	_ = plain.DragStart("s", "card", 1, 0)
-	_ = plain.DragMove("ada", 1, 1)
-	_ = plain.DragOver("col", 1, 2, 1, 1)
-	_ = plain.DragEnd("col", 1, 2)
-	expect(t, sent(plain),
-		`ev dragstart t=card {"c":1,"keys":[],"r":0}`,
-		`ev drag t= {"c":1,"keys":[],"r":1}`,
-		`ev drag t= {"c":1,"keys":[],"r":2}`,
-		`ev dragend t= {"c":1,"keys":[],"r":2}`)
+		`ev dragstart t=card {"c":1,"r":0}`,
+		`ev drag t=knob {"c":1,"r":6}`,
+		`ev dragend t=knob {"c":1,"r":6}`)
 }
 
 func TestReplies(t *testing.T) {
@@ -1144,8 +1147,8 @@ func TestReplies(t *testing.T) {
 
 func TestBody(t *testing.T) {
 	r, _ := hotty.ReplyOf(hotty.Message{Control: hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}},
-		Payload: Body(`{"v":"0.2","scale":2.0,"cell":{"w":9,"h":18},"limits":{"surfaces":3}}`)})
-	if c := r.Caps; c == nil || c.Scale != 2 || c.Cell.W != 9 || c.Limits["surfaces"] != 3 {
+		Payload: Body(`{"v":"0.3","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
+	if c := r.Caps; c == nil || c.Scale != 2 || c.CellCSS.W != 9 || c.Limits["surfaces"] != 3 {
 		t.Errorf("caps %+v", c)
 	}
 	defer func() {
@@ -1154,4 +1157,247 @@ func TestBody(t *testing.T) {
 		}
 	}()
 	Body(`{`)
+}
+
+// A delta's ops apply in order as one; the body is checked whole first, a
+// missing target fails its op alone, and the reply names the first failure
+// by its index (SPEC §6.1).
+func TestDeltaOps(t *testing.T) {
+	h := shown(t, "x", `<p id=a>1</p><p id=b>2</p>`, Lenient())
+	ack := func(n int) hotty.ReplyOption { return hotty.N(n) }
+	send(h, hotty.Delta("x", []hotty.Op{hotty.OpText("a", "x"), hotty.OpAttr("b", "class", "on"), hotty.OpAfter("b", "<p id=c>3</p>")}, ack(1)))
+	expect(t, sent(h), "ok re=delta s=x")
+	s := h.Surface("x")
+	if s.TextOf("a") != "x" || s.TextOf("c") != "3" {
+		t.Errorf("html %s", s.HTML())
+	}
+	send(h, hotty.Delta("x", []hotty.Op{hotty.OpText("a", "y"), hotty.OpText("zz", "n"), hotty.OpText("b", "z"), hotty.OpRemove("nope")}, hotty.Q(hotty.ReplyOnError)))
+	expect(t, sent(h), "err re=delta s=x ENOTARGET i=1")
+	if s.TextOf("a") != "y" || s.TextOf("b") != "z" {
+		t.Errorf("the ops after a missing target apply: %s", s.HTML())
+	}
+	// Whole body checked first: nothing applies.
+	send(h, hotty.Delta("x", []hotty.Op{hotty.OpText("a", "never"), {Op: "frob", Target: "a"}}, hotty.Q(hotty.ReplyOnError)))
+	expect(t, sent(h), "err re=delta s=x EINVAL i=1")
+	send(h, hotty.Delta("x", nil, hotty.Q(hotty.ReplyOnError)))
+	expect(t, sent(h), "err re=delta s=x EINVAL")
+	if s.TextOf("a") != "y" {
+		t.Error("a delta refused applied an op")
+	}
+	if got := h.Errors(); len(got) != 2 {
+		t.Errorf("errors %v", got)
+	}
+}
+
+// Errors only, unless asked (SPEC §3.5).
+func TestQuietDefaults(t *testing.T) {
+	h := New(t)
+	send(h, "\x1b]7279;a=doc:s=x;"+"PHAgaWQ9YT5hPC9wPg==\x1b\\", hotty.Place("x", hotty.Placement{Cols: 5, Rows: 1}))
+	expect(t, sent(h))
+	send(h, hotty.Place("x", hotty.Placement{Cols: 5, Rows: 1}, hotty.N(2)), hotty.Hide("x", hotty.N(3), hotty.Q(hotty.ReplyOnError)), "\x1b]7279;a=hide:s=nope\x1b\\")
+	expect(t, sent(h), "ok re=place s=x", "err re=hide s=nope ENOENT")
+	send(h, hotty.Query(7))
+	if r := h.sentR(); len(r) != 1 || !r[0].OK || r[0].N != 7 {
+		t.Errorf("a query is answered: %+v", r)
+	}
+}
+
+func (h *Host) sentR() []hotty.Reply { r, _ := h.sentBoth(); return r }
+
+// A key bound to prefix reaches the program, and so does every key after
+// it, Tab and Escape too, until the program sends a=focus or a=blur, the
+// surface loses the keyboard, or the user focuses an element with a press
+// (SPEC §10.5).
+func TestPrefix(t *testing.T) {
+	doc := `<button id=b data-keys="g=prefix">B</button><button id=c>C</button><input id=f data-keys="Control+k=prefix">`
+	h := shown(t, "x", doc)
+	send(h, hotty.Focus("x", "b"))
+	for _, k := range []string{"g", "Space", "Tab", "Escape", "Enter"} {
+		if h.Key(k) {
+			t.Errorf("%s was used after a prefix", k)
+		}
+	}
+	if h.Prefix() != "x" {
+		t.Error("no prefix")
+	}
+	h.drain()
+	send(h, hotty.Focus("x", ""))
+	if h.Prefix() != "" || !h.Key("Space") {
+		t.Error("a=focus ends the prefix")
+	}
+	expect(t, sent(h), "ev click t=b")
+	h.Key("g")
+	send(h, hotty.Blur("x"))
+	send(h, hotty.Focus("x", "b"))
+	if h.Prefix() != "" || !h.Key("Tab") {
+		t.Error("a=blur ends the prefix")
+	}
+	h.Key("Shift+Tab")
+	// A press that focuses an element ends it; so does losing the keyboard.
+	send(h, hotty.Focus("x", "b"))
+	h.Key("g")
+	_ = h.Click("x", "c")
+	if h.Prefix() != "" || !h.Key("Space") {
+		t.Error("a press ends the prefix")
+	}
+	send(h, hotty.Focus("x", "b"))
+	h.Key("g")
+	_ = h.Blur("x")
+	send(h, hotty.Focus("x", "c"))
+	if !h.Key("Space") {
+		t.Error("losing the keyboard ends the prefix")
+	}
+	// In a text field: nothing is typed or edited after it.
+	h.drain()
+	send(h, hotty.Focus("x", "f"))
+	h.Key("a")
+	h.Key("Control+k")
+	h.Key("b")
+	h.Key("Backspace")
+	send(h, hotty.Focus("x", "f"))
+	h.Key("c")
+	if v, _ := h.Surface("x").Value("f"); v != "ac" {
+		t.Errorf("the field holds %q", v)
+	}
+}
+
+// The menu a program shows is recorded, and goes with an empty a=menu,
+// Escape, a key it does not list, a change of screen and a reset (SPEC
+// §10.5).
+func TestMenu(t *testing.T) {
+	menu := &hotty.MenuLevel{Seq: []string{"Space"}, Items: []hotty.MenuItem{{Key: "f", Label: "+file", Group: true, Enabled: true}, {Key: "Mod+q", Label: "Quit", Enabled: true}}}
+	h := New(t)
+	show := func() {
+		t.Helper()
+		h.drain()
+		send(h, hotty.Menu(menu, hotty.N(1)))
+		expect(t, sent(h), "ok re=menu")
+		if got := h.Menu(); got == nil || got.Items[0].Key != "f" {
+			t.Fatalf("Menu() = %+v", got)
+		}
+	}
+	show()
+	send(h, hotty.Menu(nil))
+	if h.Menu() != nil {
+		t.Error("an empty a=menu hides it")
+	}
+	show()
+	h.Key("f") // listed
+	h.Key("Control+q")
+	if h.Menu() == nil {
+		t.Error("a key it lists hides it")
+	}
+	h.Key("x")
+	if h.Menu() != nil {
+		t.Error("a key it does not list")
+	}
+	show()
+	h.Key("Escape")
+	if h.Menu() != nil {
+		t.Error("Escape")
+	}
+	show()
+	h.Type("z")
+	if h.Menu() != nil {
+		t.Error("typed text it does not list")
+	}
+	show()
+	send(h, "\x1b[?1049h")
+	if h.Menu() != nil {
+		t.Error("a change of screen")
+	}
+	show()
+	send(h, "\x1bc")
+	if h.Menu() != nil {
+		t.Error("a reset")
+	}
+	// A body that is no menu is refused; a host without the feature shows none.
+	lenient := New(t, Lenient())
+	send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "menu"}, {K: "n", V: "2"}}, Body(`["Space"]`)))
+	if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
+		t.Errorf("a menu that is none: %+v", r)
+	}
+	plain := New(t, Caps(hotty.Caps{Features: []string{hotty.FeatureHover}}))
+	send(plain, hotty.Menu(menu))
+	if plain.Menu() != nil {
+		t.Error("a host without menu shows one")
+	}
+}
+
+// Changed capabilities are told with every field that differs from what the
+// program last heard (SPEC §4, §9); a zoom says nothing.
+func TestChangeCaps(t *testing.T) {
+	h := New(t)
+	h.Change(func(c *hotty.Caps) { c.Mod = "Meta" })
+	expect(t, sent(h)) // the program has not asked
+	send(h, hotty.Query(1))
+	h.drain()
+	h.Change(func(c *hotty.Caps) { c.Scale = 2 })
+	expect(t, sent(h))
+	h.Change(func(c *hotty.Caps) { c.CellCSS = hotty.Size{W: 10, H: 20}; c.Mod = "Control"; c.Features = nil })
+	evs := h.sentEvents()
+	if len(evs) != 1 || evs[0].Kind != hotty.EventCaps || evs[0].Surface != "" || evs[0].Changed == nil {
+		t.Fatalf("events %+v", evs)
+	}
+	got := evs[0].Changed
+	if got.CellCSS != (hotty.Size{W: 10, H: 20}) || got.Mod != "Control" || got.Scale != 2 || len(got.Features) != 0 {
+		t.Errorf("changed %+v", got)
+	}
+	// The scale rode along; it is heard now, and the features are empty.
+	merged := hotty.Merge(DefaultCaps(), *got)
+	if merged.CellCSS.H != 20 || merged.Features != nil || merged.Scale != 2 {
+		t.Errorf("merged %+v", merged)
+	}
+	h.Change(func(c *hotty.Caps) { c.Edit = map[string][]string{"copy": {"Meta+c"}} })
+	if evs := h.sentEvents(); len(evs) != 1 || len(evs[0].Changed.Edit["copy"]) != 1 {
+		t.Errorf("edit: %+v", evs)
+	}
+	// A new cell lays documents out again: fit.
+	send(h, hotty.Doc("f", "<p>x</p>"), hotty.Place("f", hotty.Placement{Cols: 10, Rows: 1, Fit: hotty.On}))
+	h.drain()
+	h.autoRows = func(*Surface, int) int { return 3 }
+	h.Change(func(c *hotty.Caps) { c.CellCSS.H = 30 })
+	var kinds []string
+	for _, e := range h.sentEvents() {
+		kinds = append(kinds, e.Kind)
+	}
+	if !slices.Equal(kinds, []string{"caps", "fit"}) {
+		t.Errorf("events %v", kinds)
+	}
+}
+
+// Modifiers ride on clicks, presses and drags as bits; a press with Alt is
+// the program's gesture (SPEC §9, §9.2).
+func TestMods(t *testing.T) {
+	h := New(t)
+	send(h, hotty.Doc("m", `<button id=b>b</button>`), hotty.Place("m", hotty.Placement{Cols: 10, Rows: 1, Press: hotty.On}))
+	h.drain()
+	_ = h.Click("m", "b", "shift", "meta")
+	_ = h.Press("m", "", "ctrl")
+	_ = h.Click("m", "b", "alt")
+	expect(t, sent(h), `ev press t=b {"mods":9}`, "ev focus t=b", `ev click t=b {"mods":9}`, `ev press t= {"mods":4}`)
+	h.Key("Shift+Enter")
+	expect(t, sent(h), `ev click t=b {"mods":1}`)
+}
+
+// Without the features hover and count, the host says neither.
+func TestWithoutFeatures(t *testing.T) {
+	h := New(t, Caps(hotty.Caps{Features: []string{}}))
+	send(h, hotty.Doc("f", `<button id=b>b</button>`), hotty.Place("f", hotty.Placement{Cols: 10, Rows: 1, Hover: hotty.On}))
+	h.drain()
+	_ = h.Hover("f", "b", 0, 0)
+	h.Unhover()
+	_ = h.DoubleClick("f", "b")
+	var counts []int
+	for _, e := range h.Events() {
+		if e.Kind == hotty.EventHover {
+			t.Error("hover without the feature")
+		}
+		if e.Kind == hotty.EventClick {
+			counts = append(counts, e.Count)
+		}
+	}
+	if !slices.Equal(counts, []int{1, 1}) {
+		t.Errorf("counts %v", counts)
+	}
 }

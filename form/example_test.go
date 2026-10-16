@@ -38,7 +38,7 @@ func Example_askForDeployDetails() {
 
 	// What the host sends when the user presses Enter (SPEC §9).
 	ev := hotty.Event{Surface: surface, Kind: hotty.EventSubmit, Target: form.FormID,
-		Fields: map[string]string{"env": "production", "version": "v1.4.2", "notify": "true"}}
+		Fields: []hotty.FormField{{Name: "env", Value: "production"}, {Name: "version", Value: "v1.4.2"}, {Name: "notify", Value: "true"}}}
 	answers, problems := spec.Read(ev.Fields)
 	out, _ := json.Marshal(answers)
 	fmt.Println(string(out), len(problems), "problems")
@@ -61,14 +61,20 @@ func ExampleSpec_Show() {
 	var d hotty.Decoder
 	for _, cmd := range spec.Show("deploy-4121-form", problems) {
 		m, _ := d.Feed(cmd)
-		if hotty.Get(m.Control, "t") == form.ProblemID(1) || hotty.Get(m.Control, "a") == "focus" {
-			fmt.Printf("%s %s %s %q\n", hotty.Get(m.Control, "a"), hotty.Get(m.Control, "op"), hotty.Get(m.Control, "t"), m.Payload)
+		ops, _ := hotty.DeltaOf(m)
+		for _, o := range ops {
+			if o.Target == form.ProblemID(1) {
+				fmt.Printf("%s %s %s %q\n", hotty.Get(m.Control, "a"), o.Op, o.Target, *o.Value)
+			}
+		}
+		if hotty.Get(m.Control, "a") == "focus" {
+			fmt.Println("focus", hotty.Get(m.Control, "t"))
 		}
 	}
 	// Output:
 	// version: required
 	// delta text e1 "! required"
-	// focus  f1 ""
+	// focus f1
 }
 
 // A program that submits the form itself, on a key the controls leave to

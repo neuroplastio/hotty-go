@@ -6,12 +6,15 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks HOTTY 0.2: a host's replies and events carry msgpack bodies
-(SPEC §3.3), and its query lists the version it speaks (`a=q:n=1:v=0.2`,
-SPEC §4). A terminal of another HOTTY version, a 0.1 one included, is no
-host to it, and the program draws in cells. A program written for 0.1
-ports as hotty's [CHANGES.md](https://github.com/neuroplastio/hotty/blob/main/CHANGES.md)
-says: a clicked link is `Event.Link`, not a field.
+It speaks HOTTY 0.3: a host's replies and events carry msgpack bodies
+(SPEC §3.3), a delta carries a list of ops (SPEC §6), and its query lists
+the version it speaks (`a=q:n=1:v=0.3`, SPEC §4). A terminal of another
+HOTTY version is no host to it, and the program draws in cells. A program
+written for 0.2 ports as hotty's
+[CHANGES.md](https://github.com/neuroplastio/hotty/blob/main/CHANGES.md)
+says: the changes of a frame go in one `hotty.Delta` of `hotty.Op`s, a
+host's optional features are asked with `hotty.HasFeature`, and a submit's
+fields are an ordered list.
 
 The SDK:
 
@@ -114,7 +117,7 @@ go run ./dashboard https://example.com
 | [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest HOTTY program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
 | [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
 | [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | The SDK has no Markdown in it: the program renders with a Markdown library (goldmark) and sends the HTML, the way it would any other. |
-| [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.SetVar) and text deltas change the labels (hotty.SetText), a few dozen bytes each, in synchronized output so the host shows them together (SPEC §6). |
+| [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.OpVar) and text ops change the labels (hotty.OpText), a few dozen bytes each, in one delta so the host shows them together (SPEC §6). |
 | [replay](examples/replay) | Replay plays a terminal session back on a surface, at the size it was recorded and scaled to fit, and leaves its last frame in the scrollback. | It shows a terminal inside a document: hottyvt keeps a terminal emulator of the session's size, apart from the terminal the program runs in, and sends its screen as HTML, then a delta per row that changes, in synchronized output so the host shows each frame whole (SPEC §6). |
 <!-- /docgen:examples -->
 
