@@ -601,14 +601,15 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	}
 	if a == "menu" {
 		// The menu a program shows, or none (SPEC §10.5). A host without
-		// the feature shows nothing.
+		// the feature takes no a=menu.
+		if !hotty.HasFeature(h.caps, hotty.FeatureMenu) {
+			return hotty.EINVAL, "no menus here", nil
+		}
 		l, err := hotty.MenuOf(m)
 		if e := (*hotty.Error)(nil); errors.As(err, &e) {
 			return e.Code, e.Detail, nil
 		}
-		if hotty.HasFeature(h.caps, hotty.FeatureMenu) {
-			h.menu = l
-		}
+		h.menu = l
 		return "", "", nil
 	}
 	switch a {
@@ -1995,7 +1996,7 @@ func (h *Host) tellCaps() {
 // Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it
 // shows none: the program sent none or an empty a=menu, or the menu went
 // with Escape, a key it does not list, a change of screen or a reset. A
-// host without the feature menu shows none.
+// host without the feature menu answers a=menu EINVAL.
 func (h *Host) Menu() *hotty.MenuLevel {
 	h.mu.Lock()
 	defer h.mu.Unlock()

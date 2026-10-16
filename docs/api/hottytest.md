@@ -454,7 +454,7 @@ Lines is the screen's text as the program wrote its lines: Screen, with each row
 func (h *Host) Menu() *hotty.MenuLevel
 ```
 
-Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it shows none: the program sent none or an empty a=menu, or the menu went with Escape, a key it does not list, a change of screen or a reset. A host without the feature menu shows none.
+Menu is the menu the program shows (a=menu, SPEC §10.5), nil when it shows none: the program sent none or an empty a=menu, or the menu went with Escape, a key it does not list, a change of screen or a reset. A host without the feature menu answers a=menu EINVAL.
 
 ### <a id="Host.Opened"></a>func (*Host) Opened
 

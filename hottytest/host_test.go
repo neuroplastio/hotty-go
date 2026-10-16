@@ -1311,16 +1311,17 @@ func TestMenu(t *testing.T) {
 	if h.Menu() != nil {
 		t.Error("a reset")
 	}
-	// A body that is no menu is refused; a host without the feature shows none.
+	// A body that is no menu is refused, and so is any a=menu on a host
+	// without the feature.
 	lenient := New(t, Lenient())
 	send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "menu"}, {K: "n", V: "2"}}, Body(`["Space"]`)))
 	if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
 		t.Errorf("a menu that is none: %+v", r)
 	}
-	plain := New(t, Caps(hotty.Caps{Features: []string{hotty.FeatureHover}}))
-	send(plain, hotty.Menu(menu))
-	if plain.Menu() != nil {
-		t.Error("a host without menu shows one")
+	plain := New(t, Lenient(), Caps(hotty.Caps{Features: []string{hotty.FeatureHover}}))
+	send(plain, hotty.Menu(menu, hotty.N(3)))
+	if r := plain.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL || plain.Menu() != nil {
+		t.Errorf("a host without menu: %+v, shows %+v", r, plain.Menu())
 	}
 }
 
