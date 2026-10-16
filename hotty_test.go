@@ -172,13 +172,15 @@ func TestDeltaOf(t *testing.T) {
 		`{"ops":[{"op":"text","t":"a","v":"x"},{"op":"text","v":"y"}]}`:  1,
 		`{"ops":[{"op":"reveal","t":"a","v":"middle"}]}`:                 0,
 		`{"ops":[{"op":"text","t":"a","v":"x"},"text"]}`:                 1,
-		`{"ops":[3]}`:                                      0,
-		`{"ops":[]}`:                                       -1,
-		`{"op":"text","t":"a","v":"x"}`:                    -1,
-		`["text","a","x"]`:                                 -1,
-		`{"ops":{"op":"text"}}`:                            -1,
-		`{"ops":[{"op":"text","t":3,"v":"x"}]}`:            -1,
-		`{"ops":[{"op":"text","t":"a","v":"x"}],"ops":[]}`: -1,
+		`{"ops":[3]}`:                           0,
+		`{"ops":[]}`:                            -1,
+		`{"op":"text","t":"a","v":"x"}`:         -1,
+		`["text","a","x"]`:                      -1,
+		`{"ops":{"op":"text"}}`:                 -1,
+		`{"ops":[{"op":"text","t":3,"v":"x"}]}`: 0,
+		`{"ops":[{"op":"text","t":"a"},{"op":"remove","t":"a","v":7}]}`: 1,
+		`{"ops":[{"op":"text","t":""}]}`:                                0,
+		`{"ops":[{"op":"text","t":"a","v":"x"}],"ops":[]}`:              -1,
 	} {
 		_, err := DeltaOf(delta(js))
 		var e *Error

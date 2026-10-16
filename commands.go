@@ -262,10 +262,11 @@ func CursorBelow(rows int) string {
 // DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay
 // does, checking the whole body first: it is an *Error with Code EINVAL,
 // and with HasOp the index of the first op at fault, when the body does not
-// decode (SPEC §3.3) or has no ops, an op is not a map or names an op there
-// is none of, an op lacks the t or k it needs, or a reveal has a value
-// other than start or end. A value an op does not take is ignored, and so
-// is a key this package does not know.
+// decode (SPEC §3.3) or has no ops, an op is not a map, holds op, t, k or v
+// as anything but a str, or names an op there is none of, an op lacks the
+// t or k it needs (an empty one is none), or a reveal has a value other
+// than start or end. A value an op does not take is ignored, and so is a
+// key this package does not know.
 func DeltaOf(m Message) ([]Op, error) {
 	fail := func(detail string, at int) ([]Op, error) {
 		e := &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
@@ -279,8 +280,8 @@ func DeltaOf(m Message) ([]Op, error) {
 	}
 	var d deltaBody
 	if !decodeBody(m.Payload, &d) {
-		if at := opNotMap(m.Payload); at >= 0 {
-			return fail("op is not a map", at)
+		if at := opAtFault(m.Payload); at >= 0 {
+			return fail("op is not a map of strs", at)
 		}
 		return fail("body does not decode", -1)
 	}
@@ -329,10 +330,11 @@ var validOps = map[string]bool{
 	opAfter: true, opRemove: true, opAttr: true, opUnattr: true, opText: true, opVar: true, opReveal: true,
 }
 
-// opNotMap is the index of the first element of a body's ops that is not a
-// map, or -1: a body that is not one map holding an array of ops, or whose
-// ops are all maps, has none.
-func opNotMap(body []byte) int {
+// opAtFault is the index of the first element of a body's ops that is not
+// a map, or holds a key of an op as another type than its own, or -1: a
+// body that is not one map holding an array of ops, or whose ops all
+// decode, has none.
+func opAtFault(body []byte) int {
 	if !wellFormed(body) {
 		return -1
 	}
@@ -354,9 +356,15 @@ func opNotMap(body []byte) int {
 			if msgp.NextType(b) != msgp.MapType {
 				return i
 			}
-			if b, err = msgp.Skip(b); err != nil {
+			rest, err := msgp.Skip(b)
+			if err != nil {
 				break
 			}
+			var op Op
+			if !decodeBody(b[:len(b)-len(rest)], &op) {
+				return i
+			}
+			b = rest
 		}
 		break
 	}

@@ -1563,7 +1563,7 @@ Op is one change of a delta (SPEC §6.1): what to do, to which element, with whi
 func DeltaOf(m Message) ([]Op, error)
 ```
 
-DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay does, checking the whole body first: it is an \*Error with Code EINVAL, and with HasOp the index of the first op at fault, when the body does not decode (SPEC §3.3) or has no ops, an op is not a map or names an op there is none of, an op lacks the t or k it needs, or a reveal has a value other than start or end. A value an op does not take is ignored, and so is a key this package does not know.
+DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay does, checking the whole body first: it is an \*Error with Code EINVAL, and with HasOp the index of the first op at fault, when the body does not decode (SPEC §3.3) or has no ops, an op is not a map, holds op, t, k or v as anything but a str, or names an op there is none of, an op lacks the t or k it needs (an empty one is none), or a reveal has a value other than start or end. A value an op does not take is ignored, and so is a key this package does not know.
 
 ### <a id="OpAfter"></a>func OpAfter
 
