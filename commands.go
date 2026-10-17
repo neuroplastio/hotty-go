@@ -364,6 +364,96 @@ func MenuShowOf(m Message) ([]string, error) {
 	return k.Seq, nil
 }
 
+// TouchMax is as many areas as an a=touch may name (SPEC §9.6). A body with
+// more is EINVAL.
+const TouchMax = 256
+
+// TouchOf reads an a=touch command's areas (SPEC §9.6), as a host or a
+// relay does: nil, and no error, for a command with no body or no areas,
+// which leaves none. A body that is no map of areas, an area without a
+// field or with one of another type, C or R under 0, W or H under 1, a
+// Drag other than "x", "y" and "xy", or more than TouchMax areas, is an
+// *Error with Code EINVAL.
+func TouchOf(m Message) ([]TouchArea, error) {
+	if Get(m.Control, "a") != "touch" {
+		return nil, &Error{Code: EINVAL, Detail: "not a touch command", Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
+	}
+	if len(m.Payload) == 0 {
+		return nil, nil
+	}
+	fail := func(detail string) ([]TouchArea, error) {
+		return nil, &Error{Code: EINVAL, Detail: detail, Re: "touch"}
+	}
+	var t touchBody
+	if !decodeBody(m.Payload, &t) {
+		return fail("body is no map of areas")
+	}
+	if !touchFields(m.Payload) {
+		return fail("no areas, or an area without a field")
+	}
+	if len(t.Areas) > TouchMax {
+		return fail("more than 256 areas")
+	}
+	for _, a := range t.Areas {
+		switch {
+		case a.C < 0 || a.R < 0:
+			return fail("c or r under 0")
+		case a.W < 1 || a.H < 1:
+			return fail("w or h under 1")
+		case a.Drag != "x" && a.Drag != "y" && a.Drag != "xy":
+			return fail("drag " + a.Drag)
+		}
+	}
+	if len(t.Areas) == 0 {
+		return nil, nil
+	}
+	return t.Areas, nil
+}
+
+// touchFields reports whether a touch body that decodes gives its areas,
+// and each area all five of its fields: the codec reads a field it is not
+// given as its zero value. A body's maps give each key once (wellFormed).
+func touchFields(body []byte) bool {
+	n, b, err := msgp.ReadMapHeaderBytes(body)
+	for ; n > 0 && err == nil; n-- {
+		var key string
+		if key, b, err = msgp.ReadStringBytes(b); err != nil {
+			return false
+		}
+		if key != "areas" {
+			b, err = msgp.Skip(b)
+			continue
+		}
+		var areas, fields uint32
+		if areas, b, err = msgp.ReadArrayHeaderBytes(b); err != nil {
+			return false
+		}
+		for ; areas > 0; areas-- {
+			if fields, b, err = msgp.ReadMapHeaderBytes(b); err != nil {
+				return false
+			}
+			have := 0
+			for ; fields > 0; fields-- {
+				if key, b, err = msgp.ReadStringBytes(b); err != nil {
+					return false
+				}
+				switch key {
+				case "c", "r", "w", "h", "drag":
+					have++
+				}
+				if b, err = msgp.Skip(b); err != nil {
+					return false
+				}
+			}
+			if have != 5 {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // validOps are the delta ops there are.
 var validOps = map[string]bool{
 	opMorph: true, opInner: true, opReplace: true, opAppend: true, opPrepend: true, opBefore: true,
@@ -677,6 +767,29 @@ func MenuShow(seq []string, opts ...ReplyOption) string {
 // MenuHide hides the level shown (SPEC §10.7). The menu stays.
 func MenuHide(opts ...ReplyOption) string {
 	return command(Control{{"a", "menu"}, {"show", "0"}}, nil, NoReply, opts)
+}
+
+// Touch names the cells where a finger drags as the mouse does (SPEC §9.6),
+// so that what the program drags with the mouse in its cells, a slider, a
+// finger drags too. While the program has the terminal report the mouse's
+// buttons, a touch that begins in an area and first moves the way it drags
+// is the primary button: pressed where it began, moved with the finger,
+// released where it lifts. A tap there presses and releases. Elsewhere, and
+// the other way, a finger scrolls as it did.
+//
+// The areas last until the program sends others, and with none it leaves
+// none. They are cells of the screen it is sent on: the main and the
+// alternate screen keep their own, leaving the alternate screen drops its,
+// and a full reset drops both. So the program sends them again when what it
+// drew moves, the terminal's size changes, or it switches screens, and sends
+// Touch(nil) when it ends. It keeps to TouchMax areas, W and H at least 1. A
+// host that takes no touch accepts it, and nothing comes of it.
+func Touch(areas []TouchArea, opts ...ReplyOption) string {
+	var body []byte
+	if len(areas) > 0 {
+		body = encodeBody(&touchBody{Areas: areas})
+	}
+	return command(Control{{"a", "touch"}}, body, NoReply, opts)
 }
 
 // MenuLevelOf is the level of tree that the keys seq reach (SPEC §10.7): its

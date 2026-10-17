@@ -83,6 +83,26 @@ type MenuKeys struct {
 	Seq []string `msg:"seq"`
 }
 
+// TouchArea is cells of the screen where a finger drags as the mouse does
+// (Touch, SPEC §9.6). C and R are the first column and row it covers,
+// counted from 0 at the screen's top left (a mouse report counts from 1),
+// and W and H the columns and rows it spans, at least 1 each. Drag is the
+// way a finger drags in it: "x" across, "y" up and down, "xy" either. A
+// horizontal slider's is "x".
+type TouchArea struct {
+	C    int    `msg:"c"`
+	R    int    `msg:"r"`
+	W    int    `msg:"w"`
+	H    int    `msg:"h"`
+	Drag string `msg:"drag"`
+}
+
+// touchBody is the body of an a=touch (SPEC §9.6). Touch writes it;
+// TouchOf reads it, checking each area has all its fields.
+type touchBody struct {
+	Areas []TouchArea `msg:"areas"`
+}
+
 // Area is the cells an element covers (SPEC §9), counted as a drag's are:
 // Col and Row are the first column and row it touches, from 0 at the
 // surface's top left (not its window's), and W and H the columns and rows

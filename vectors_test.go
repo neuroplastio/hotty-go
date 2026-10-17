@@ -201,6 +201,15 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return MenuShow(keys, opts...)
 	case "menu_hide":
 		return MenuHide(opts...)
+	case "touch":
+		var areas []TouchArea
+		for _, a := range asSlice(args["areas"]) {
+			a := asMap(a)
+			n := func(k string) int { f, _ := a[k].(float64); return int(f) }
+			drag, _ := a["drag"].(string)
+			areas = append(areas, TouchArea{C: n("c"), R: n("r"), W: n("w"), H: n("h"), Drag: drag})
+		}
+		return Touch(areas, opts...)
 	case "sync":
 		var cmds []string
 		for _, c := range args["commands"].([]any) {

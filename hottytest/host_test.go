@@ -1383,6 +1383,93 @@ func TestMenu(t *testing.T) {
 	}
 }
 
+// The touch areas a program names are kept per screen: the alternate
+// screen starts with none and leaving it drops its own, a reset drops both,
+// and a body that is no map of areas is refused and changes nothing (SPEC
+// §9.6).
+func TestTouchAreas(t *testing.T) {
+	h := New(t)
+	if h.TouchAreas() != nil {
+		t.Error("areas before any a=touch")
+	}
+	slider := []hotty.TouchArea{{C: 2, R: 3, W: 10, H: 1, Drag: "x"}, {C: 0, R: 5, W: 1, H: 4, Drag: "y"}}
+	send(h, hotty.Touch(slider))
+	if got := h.TouchAreas(); !slices.Equal(got, slider) {
+		t.Errorf("areas %+v", got)
+	}
+	got := h.TouchAreas()
+	got[0].C = 99
+	if h.TouchAreas()[0].C != 2 {
+		t.Error("TouchAreas shares the host's")
+	}
+	send(h, "\x1b[?1049h")
+	if h.TouchAreas() != nil {
+		t.Error("the alternate screen has areas of its own")
+	}
+	knob := []hotty.TouchArea{{C: 1, R: 1, W: 1, H: 1, Drag: "xy"}}
+	send(h, hotty.Touch(knob))
+	if got := h.TouchAreas(); !slices.Equal(got, knob) {
+		t.Errorf("the alternate screen's %+v", got)
+	}
+	send(h, "\x1b[?1049l")
+	if got := h.TouchAreas(); !slices.Equal(got, slider) {
+		t.Errorf("back on the main screen: %+v", got)
+	}
+	send(h, "\x1b[?1049h")
+	if h.TouchAreas() != nil {
+		t.Error("leaving the alternate screen drops its areas")
+	}
+	send(h, hotty.Touch(knob))
+	send(h, "\x1bc")
+	if h.TouchAreas() != nil {
+		t.Error("a reset, on the alternate screen")
+	}
+	send(h, "\x1b[?1049l")
+	if h.TouchAreas() != nil {
+		t.Error("a reset, on the main screen")
+	}
+	send(h, hotty.Touch(slider))
+	send(h, hotty.Touch(nil))
+	if h.TouchAreas() != nil {
+		t.Error("an a=touch with no areas leaves none")
+	}
+	// What is no map of areas is EINVAL, and keeps the areas there were.
+	lenient := New(t, Lenient())
+	send(lenient, hotty.Touch(slider))
+	for _, body := range []string{
+		`["x"]`, `{}`, `{"areas":{"c":0}}`, `{"areas":[1]}`,
+		`{"areas":[{"c":0,"r":0,"w":1,"drag":"x"}]}`,
+		`{"areas":[{"c":0.5,"r":0,"w":1,"h":1,"drag":"x"}]}`,
+		`{"areas":[{"c":0,"r":0,"w":1,"h":1,"drag":"yx"}]}`,
+		`{"areas":[{"c":-1,"r":0,"w":1,"h":1,"drag":"x"}]}`,
+		`{"areas":[{"c":0,"r":0,"w":1,"h":0,"drag":"x"}]}`,
+	} {
+		send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "touch"}, {K: "n", V: "2"}}, Body(body)))
+		if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
+			t.Errorf("%s: %+v", body, r)
+		}
+		if got := lenient.TouchAreas(); !slices.Equal(got, slider) {
+			t.Errorf("%s changed the areas: %+v", body, got)
+		}
+	}
+	many := make([]hotty.TouchArea, hotty.TouchMax+1)
+	for i := range many {
+		many[i] = hotty.TouchArea{C: i % 80, R: i / 80, W: 1, H: 1, Drag: "x"}
+	}
+	send(lenient, hotty.Touch(many, hotty.N(3)))
+	if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
+		t.Errorf("%d areas: %+v", len(many), r)
+	}
+	send(lenient, hotty.Touch(many[:hotty.TouchMax], hotty.N(4)))
+	if r := lenient.sentR(); len(r) != 1 || r[0].Code != "" || len(lenient.TouchAreas()) != hotty.TouchMax {
+		t.Errorf("%d areas: %+v", hotty.TouchMax, r)
+	}
+	send(lenient, hotty.Encode(hotty.Control{{K: "a", V: "touch"}, {K: "n", V: "5"}}, Body(`{"areas":[],"more":1}`)))
+	if r := lenient.sentR(); len(r) != 1 || r[0].Code != "" || lenient.TouchAreas() != nil {
+		t.Errorf("no areas: %+v", r)
+	}
+}
+
 // A pick sends command with the item's name and nothing else; a disabled
 // item, an unknown name and no menu send nothing (SPEC §10.7).
 func TestPick(t *testing.T) {

@@ -21,6 +21,10 @@
 // A placement made on the alternate screen goes with it, and so does its
 // surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 //
+// It keeps the touch areas the program names (a=touch, SPEC §9.6) for each
+// screen, as a host does, and checks them as one does (TouchAreas); no
+// finger reaches them.
+//
 // It also answers the queries terminals answer: Primary Device Attributes,
 // the cursor's position, the background colour, and, when asked to
 // (KittyGraphics), the kitty graphics query. It keeps the cells the
@@ -200,6 +204,11 @@ type Host struct {
 	faultOp  int                // the index of the op a delta failed at, or -1
 	prefix   *Surface           // the surface whose keys all reach the program, while it has the keyboard (SPEC §10.5)
 	alt      bool               // the alternate screen is on
+
+	// The program's touch areas (a=touch, SPEC §9.6) on the main and the
+	// alternate screen.
+	touch [2][]hotty.TouchArea
+
 	commands []hotty.Message
 	replies  []hotty.Message
 	events   []hotty.Event
@@ -398,10 +407,12 @@ func (h *Host) byte(c byte) {
 func (h *Host) altScreen(on bool) {
 	if on != h.alt {
 		// The screen changed: the level shown hides, and leaving the
-		// alternate screen drops its menu (SPEC §10.7).
+		// alternate screen drops its menu (SPEC §10.7) and its touch
+		// areas (SPEC §9.6).
 		h.shown = false
 		if h.alt {
 			h.menus[1] = nil
+			h.touch[1] = nil
 		}
 	}
 	if !on && h.alt {
@@ -423,13 +434,15 @@ func (h *Host) altScreen(on bool) {
 	h.alt = on
 }
 
-// reset is RIS: a full reset deletes every surface (SPEC §5.4), and
-// forgets a query held for a late answer (SPEC §4).
+// reset is RIS: a full reset deletes every surface (SPEC §5.4), drops both
+// screens' touch areas (SPEC §9.6), and forgets a query held for a late
+// answer (SPEC §4).
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.keyboard = nil
 	h.held = nil
 	h.menus, h.shown = [2]*hotty.MenuTree{}, false
+	h.touch = [2][]hotty.TouchArea{}
 	h.scr, h.alt, h.hidden = screen{cols: h.cols, rows: h.rows}, false, false
 }
 
@@ -613,6 +626,16 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			return hotty.EINVAL, "no menus here", nil
 		}
 		return h.menuCommand(m)
+	}
+	if a == "touch" {
+		// The cells where a finger drags as the mouse, kept for the
+		// screen it is sent on (SPEC §9.6). No finger reaches them here.
+		areas, err := hotty.TouchOf(m)
+		if e := (*hotty.Error)(nil); errors.As(err, &e) {
+			return e.Code, e.Detail, nil
+		}
+		h.touch[h.screen()] = areas
+		return "", "", nil
 	}
 	switch a {
 	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur":
@@ -2052,6 +2075,18 @@ func (h *Host) Menu() *hotty.MenuTree {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.menus[h.screen()]
+}
+
+// TouchAreas are the touch areas the program keeps on the screen it is on
+// (a=touch, SPEC §9.6), in the order it listed them: nil when it has none.
+// It sent none, or an a=touch with no areas, or they were the alternate
+// screen's and the program left it, or a reset dropped them. An a=touch
+// whose body is no map of areas is EINVAL, and leaves the areas as they
+// were.
+func (h *Host) TouchAreas() []hotty.TouchArea {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Clone(h.touch[h.screen()])
 }
 
 // Shown is the level of the menu that the host shows (a=menu:show=1, SPEC

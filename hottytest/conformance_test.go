@@ -74,6 +74,8 @@ type vectorStep struct {
 	Inspect []string          `json:"inspect"`
 	Expect  json.RawMessage   `json:"expect"`
 	Pointer string            `json:"pointer"`
+	Touch   string            `json:"touch"`
+	Write   *string           `json:"write"`
 	Key     *string           `json:"key"`
 	Keys    []string          `json:"keys"`
 	Term    *bool             `json:"terminal"`
@@ -396,7 +398,7 @@ func TestConformanceVectors(t *testing.T) {
 				var fields map[string]json.RawMessage
 				_ = json.Unmarshal(raw, &fields)
 				_, steps[i].HasEvs = fields["events"]
-				if steps[i].Pointer != "" {
+				if steps[i].Pointer != "" || steps[i].Touch != "" {
 					keys, pointer = false, true
 				}
 			}
@@ -405,7 +407,13 @@ func TestConformanceVectors(t *testing.T) {
 					checkInspect(t, i, h, st)
 					continue
 				}
-				if st.Pointer != "" {
+				if st.Pointer != "" || st.Touch != "" {
+					continue
+				}
+				if st.Write != nil {
+					// What the program writes that is not HOTTY's: this
+					// host is a terminal, and takes it as one.
+					_, _ = h.Write([]byte(*st.Write))
 					continue
 				}
 				if st.Menu != "" {

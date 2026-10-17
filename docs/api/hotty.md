@@ -80,6 +80,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Speaks(query Control) bool`](#Speaks)
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
+- [`func Touch(areas []TouchArea, opts ...ReplyOption) string`](#Touch)
 - [`func ValidName(s string) bool`](#ValidName)
 - [`func WithdrawLate() string`](#WithdrawLate)
 - [`type Action`](#Action)
@@ -199,6 +200,11 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z *Size) DecodeMsg(dc *msgp.Reader) (err error)`](#Size.DecodeMsg)
   - [`func (z Size) EncodeMsg(en *msgp.Writer) (err error)`](#Size.EncodeMsg)
   - [`func (z Size) Msgsize() (s int)`](#Size.Msgsize)
+- [`type TouchArea`](#TouchArea)
+  - [`func TouchOf(m Message) ([]TouchArea, error)`](#TouchOf)
+  - [`func (z *TouchArea) DecodeMsg(dc *msgp.Reader) (err error)`](#TouchArea.DecodeMsg)
+  - [`func (z *TouchArea) EncodeMsg(en *msgp.Writer) (err error)`](#TouchArea.EncodeMsg)
+  - [`func (z *TouchArea) Msgsize() (s int)`](#TouchArea.Msgsize)
 - [`type View`](#View)
 - [`type Window`](#Window)
 
@@ -362,6 +368,14 @@ const TerminalKeys = "arrow_left=char-backward ctrl+b=char-backward arrow_right=
 ```
 
 TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(platform, multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves enter to SPEC §10.2's default.
+
+<a id="TouchMax"></a>
+
+```go
+const TouchMax = 256
+```
+
+TouchMax is as many areas as an a=touch may name (SPEC §9.6). A body with more is EINVAL.
 
 ## <a id="Blur"></a>func Blur
 
@@ -740,6 +754,16 @@ func Sync(cmds ...string) string
 ```
 
 Sync wraps commands in synchronized output (DEC mode 2026, SPEC §6.3): the host shows the state after all of them, never one in between.
+
+## <a id="Touch"></a>func Touch
+
+```go
+func Touch(areas []TouchArea, opts ...ReplyOption) string
+```
+
+Touch names the cells where a finger drags as the mouse does (SPEC §9.6), so that what the program drags with the mouse in its cells, a slider, a finger drags too. While the program has the terminal report the mouse's buttons, a touch that begins in an area and first moves the way it drags is the primary button: pressed where it began, moved with the finger, released where it lifts. A tap there presses and releases. Elsewhere, and the other way, a finger scrolls as it did.
+
+The areas last until the program sends others, and with none it leaves none. They are cells of the screen it is sent on: the main and the alternate screen keep their own, leaving the alternate screen drops its, and a full reset drops both. So the program sends them again when what it drew moves, the terminal's size changes, or it switches screens, and sends Touch(nil) when it ends. It keeps to TouchMax areas, W and H at least 1. A host that takes no touch accepts it, and nothing comes of it.
 
 ## <a id="ValidName"></a>func ValidName
 
@@ -2164,6 +2188,52 @@ EncodeMsg implements msgp.Encodable
 
 ```go
 func (z Size) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
+## <a id="TouchArea"></a>type TouchArea
+
+```go
+type TouchArea struct {
+	C    int    `msg:"c"`
+	R    int    `msg:"r"`
+	W    int    `msg:"w"`
+	H    int    `msg:"h"`
+	Drag string `msg:"drag"`
+}
+```
+
+TouchArea is cells of the screen where a finger drags as the mouse does (Touch, SPEC §9.6). C and R are the first column and row it covers, counted from 0 at the screen's top left (a mouse report counts from 1), and W and H the columns and rows it spans, at least 1 each. Drag is the way a finger drags in it: "x" across, "y" up and down, "xy" either. A horizontal slider's is "x".
+
+### <a id="TouchOf"></a>func TouchOf
+
+```go
+func TouchOf(m Message) ([]TouchArea, error)
+```
+
+TouchOf reads an a=touch command's areas (SPEC §9.6), as a host or a relay does: nil, and no error, for a command with no body or no areas, which leaves none. A body that is no map of areas, an area without a field or with one of another type, C or R under 0, W or H under 1, a Drag other than "x", "y" and "xy", or more than TouchMax areas, is an \*Error with Code EINVAL.
+
+### <a id="TouchArea.DecodeMsg"></a>func (*TouchArea) DecodeMsg
+
+```go
+func (z *TouchArea) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="TouchArea.EncodeMsg"></a>func (*TouchArea) EncodeMsg
+
+```go
+func (z *TouchArea) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="TouchArea.Msgsize"></a>func (*TouchArea) Msgsize
+
+```go
+func (z *TouchArea) Msgsize() (s int)
 ```
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message

@@ -1021,6 +1021,61 @@ func TestMenuShowOf(t *testing.T) {
 	}
 }
 
+// TouchOf reads what Touch writes, and refuses what is no map of areas
+// (SPEC §9.6).
+func TestTouchOf(t *testing.T) {
+	var d Decoder
+	read := func(cmd string) Message {
+		m, r := d.Feed(cmd)
+		if r != Complete {
+			t.Fatalf("%q: %v", cmd, r)
+		}
+		return m
+	}
+	areas := []TouchArea{{C: 2, R: 3, W: 10, H: 1, Drag: "x"}, {C: 0, R: 5, W: 1, H: 4, Drag: "y"}, {W: 1, H: 1, Drag: "xy"}}
+	if got, err := TouchOf(read(Touch(areas))); err != nil || !slices.Equal(got, areas) {
+		t.Errorf("areas: %+v, %v", got, err)
+	}
+	many := make([]TouchArea, TouchMax)
+	for i := range many {
+		many[i] = TouchArea{C: i, W: 1, H: 1, Drag: "x"}
+	}
+	if got, err := TouchOf(read(Touch(many))); err != nil || len(got) != TouchMax {
+		t.Errorf("%d areas: %d, %v", TouchMax, len(got), err)
+	}
+	for name, m := range map[string]Message{
+		"no body":         read(Touch(nil)),
+		"no areas":        host(Control{{"a", "touch"}}, `{"areas":[]}`),
+		"a key not known": host(Control{{"a", "touch"}}, `{"areas":[],"more":1}`),
+	} {
+		if got, err := TouchOf(m); err != nil || got != nil {
+			t.Errorf("%s: %+v, %v", name, got, err)
+		}
+	}
+	for name, m := range map[string]Message{
+		"not a touch":       read(Hide("s")),
+		"not a map":         host(Control{{"a", "touch"}}, `["x"]`),
+		"does not parse":    host(Control{{"a", "touch"}}, `{`),
+		"no areas key":      host(Control{{"a", "touch"}}, `{}`),
+		"areas a map":       host(Control{{"a", "touch"}}, `{"areas":{"c":0}}`),
+		"an area no map":    host(Control{{"a", "touch"}}, `{"areas":[1]}`),
+		"without h":         host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":0,"w":1,"drag":"x"}]}`),
+		"without drag":      host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":0,"w":1,"h":1,"x":1}]}`),
+		"c a float":         host(Control{{"a", "touch"}}, `{"areas":[{"c":1.0,"r":0,"w":1,"h":1,"drag":"x"}]}`),
+		"drag a number":     host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":0,"w":1,"h":1,"drag":1}]}`),
+		"r under 0":         host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":-1,"w":1,"h":1,"drag":"x"}]}`),
+		"w under 1":         host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":0,"w":0,"h":1,"drag":"x"}]}`),
+		"drag yx":           host(Control{{"a", "touch"}}, `{"areas":[{"c":0,"r":0,"w":1,"h":1,"drag":"yx"}]}`),
+		"257 areas":         read(Touch(append(many, many[0]))),
+		"a key given twice": host(Control{{"a", "touch"}}, "\x82\xa5areas\x90\xa5areas\x90"),
+	} {
+		var e *Error
+		if _, err := TouchOf(m); !errors.As(err, &e) || e.Code != EINVAL {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestMenuLevelOf(t *testing.T) {
 	linux, mac := Platform{Mod: "ctrl"}, Platform{Mod: "super"}
 	keys := func(items []MenuItem) (out []string) {

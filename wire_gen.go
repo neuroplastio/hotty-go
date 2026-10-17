@@ -1374,6 +1374,131 @@ func (z Size) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *TouchArea) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "c":
+			z.C, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "C")
+				return
+			}
+		case "r":
+			z.R, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "R")
+				return
+			}
+		case "w":
+			z.W, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "W")
+				return
+			}
+		case "h":
+			z.H, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "H")
+				return
+			}
+		case "drag":
+			z.Drag, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Drag")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *TouchArea) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 5
+	// write "c"
+	err = en.Append(0x85, 0xa1, 0x63)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.C)
+	if err != nil {
+		err = msgp.WrapError(err, "C")
+		return
+	}
+	// write "r"
+	err = en.Append(0xa1, 0x72)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.R)
+	if err != nil {
+		err = msgp.WrapError(err, "R")
+		return
+	}
+	// write "w"
+	err = en.Append(0xa1, 0x77)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.W)
+	if err != nil {
+		err = msgp.WrapError(err, "W")
+		return
+	}
+	// write "h"
+	err = en.Append(0xa1, 0x68)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.H)
+	if err != nil {
+		err = msgp.WrapError(err, "H")
+		return
+	}
+	// write "drag"
+	err = en.Append(0xa4, 0x64, 0x72, 0x61, 0x67)
+	if err != nil {
+		return
+	}
+	err = en.WriteString(z.Drag)
+	if err != nil {
+		err = msgp.WrapError(err, "Drag")
+		return
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *TouchArea) Msgsize() (s int) {
+	s = 1 + 2 + msgp.IntSize + 2 + msgp.IntSize + 2 + msgp.IntSize + 2 + msgp.IntSize + 5 + msgp.StringPrefixSize + len(z.Drag)
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *changeDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -2888,6 +3013,94 @@ func (z *submitDetail) Msgsize() (s int) {
 	s = 1 + 7 + msgp.ArrayHeaderSize
 	for za0001 := range z.Fields {
 		s += 1 + msgp.StringPrefixSize + len(z.Fields[za0001].Name) + msgp.StringPrefixSize + len(z.Fields[za0001].Value)
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *touchBody) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "areas":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Areas")
+				return
+			}
+			if zb0002 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Areas) >= int(zb0002) {
+				z.Areas = (z.Areas)[:zb0002]
+			} else {
+				z.Areas = make([]TouchArea, zb0002)
+			}
+			for za0001 := range z.Areas {
+				err = z.Areas[za0001].DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "Areas", za0001)
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *touchBody) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 1
+	// write "areas"
+	err = en.Append(0x81, 0xa5, 0x61, 0x72, 0x65, 0x61, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteArrayHeader(uint32(len(z.Areas)))
+	if err != nil {
+		err = msgp.WrapError(err, "Areas")
+		return
+	}
+	for za0001 := range z.Areas {
+		err = z.Areas[za0001].EncodeMsg(en)
+		if err != nil {
+			err = msgp.WrapError(err, "Areas", za0001)
+			return
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *touchBody) Msgsize() (s int) {
+	s = 1 + 6 + msgp.ArrayHeaderSize
+	for za0001 := range z.Areas {
+		s += z.Areas[za0001].Msgsize()
 	}
 	return
 }

@@ -26,6 +26,8 @@ The host keeps every surface's document as the program's commands leave it, with
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
+It keeps the touch areas the program names (a=touch, SPEC §9.6) for each screen, as a host does, and checks them as one does (TouchAreas); no finger reaches them.
+
 It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. It keeps the cells the program printed, as rows (Screen) and as the lines it wrote (Lines), and where it left the cursor (Cursor).
 
 A Host made with Text is a terminal that is not a HOTTY host: the program's commands get no answer, as in any other terminal.
@@ -85,6 +87,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Surface(name string) *Surface`](#Host.Surface)
   - [`func (h *Host) Surfaces() []*Surface`](#Host.Surfaces)
   - [`func (h *Host) TermSize() (cols, rows int)`](#Host.TermSize)
+  - [`func (h *Host) TouchAreas() []hotty.TouchArea`](#Host.TouchAreas)
   - [`func (h *Host) Type(keys string)`](#Host.Type)
   - [`func (h *Host) Unhover()`](#Host.Unhover)
   - [`func (h *Host) Write(p []byte) (int, error)`](#Host.Write)
@@ -569,6 +572,14 @@ func (h *Host) TermSize() (cols, rows int)
 ```
 
 TermSize is the terminal's size (Size), as hottyterm.New takes it.
+
+### <a id="Host.TouchAreas"></a>func (*Host) TouchAreas
+
+```go
+func (h *Host) TouchAreas() []hotty.TouchArea
+```
+
+TouchAreas are the touch areas the program keeps on the screen it is on (a=touch, SPEC §9.6), in the order it listed them: nil when it has none. It sent none, or an a=touch with no areas, or they were the alternate screen's and the program left it, or a reset dropped them. An a=touch whose body is no map of areas is EINVAL, and leaves the areas as they were.
 
 ### <a id="Host.Type"></a>func (*Host) Type
 
