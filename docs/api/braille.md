@@ -18,7 +18,7 @@ A Canvas is dots, each set with an ink: a small number the program maps to a col
 
 ### <a id="example-package-lineChart"></a>Example (LineChart)
 
-A line chart in cells, for a terminal that is not a HOTTY host: values scaled to the canvas's dots, joined by lines, a row of text per row of cells. Row's style wraps runs of one ink, in a colour say.
+A line chart in cells, for a terminal that is not a hotty host: values scaled to the canvas's dots, joined by lines, a row of text per row of cells. Row's style wraps runs of one ink, in a colour say.
 
 ```go
 values := []float64{3, 5, 4, 8, 6, 9, 7, 10}

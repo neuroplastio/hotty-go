@@ -11,7 +11,7 @@ import (
 	"github.com/neuroplastio/hotty-go/hottytest"
 )
 
-// native is a Session that has found a HOTTY terminal.
+// native is a Session that has found a hotty terminal.
 func native() *Session {
 	h := New()
 	h.Mode = Native

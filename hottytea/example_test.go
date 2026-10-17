@@ -13,7 +13,7 @@ import (
 )
 
 // counter is a full-screen program with one surface: a count, and a button
-// that adds one. In a terminal that is not a HOTTY host, it draws the
+// that adds one. In a terminal that is not a hotty host, it draws the
 // count in cells, and the + key adds one.
 type counter struct {
 	s     *hottytea.Session

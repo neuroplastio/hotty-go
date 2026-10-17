@@ -144,7 +144,7 @@ func TestMessages(t *testing.T) {
 	if msg, _ := s.Update(ok); msg != nil {
 		t.Errorf("an ok reply: %#v", msg)
 	}
-	// Not HOTTY's: back as it was.
+	// Not hotty's: back as it was.
 	title := uv.UnknownOscEvent("\x1b]2;title\x07")
 	if msg, _ := s.Update(title); msg != tea.Msg(title) {
 		t.Errorf("another OSC: %#v", msg)

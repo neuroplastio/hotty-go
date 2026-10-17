@@ -6,15 +6,15 @@ A page for each package of `github.com/neuroplastio/hotty-go`, written from the 
 
 | package | what it is |
 | --- | --- |
-| [`hotty`](hotty.md) | Package hotty speaks HOTTY, HTML Over The TTY (https://github.com/neuroplastio/hotty), from a Go program. |
+| [`hotty`](hotty.md) | Package hotty speaks hotty, HTML over the TTY (https://github.com/neuroplastio/hotty), from a Go program. |
 | [`blocks`](blocks.md) | Package blocks draws bars in terminal cells with the block elements (U+2581–U+2588): a column's height in eighths of a row, as a bar chart or a histogram in text has it. |
 | [`braille`](braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
-| [`chart`](chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark). |
-| [`form`](form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers. |
-| [`hottyedit`](hottyedit.md) | Package hottyedit edits a text field as a HOTTY host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret. |
-| [`hottytea`](hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
-| [`hottyterm`](hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
-| [`hottytest`](hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
-| [`hottyvt`](hottyvt.md) | Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
+| [`chart`](chart.md) | Package chart draws line charts for hotty surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark). |
+| [`form`](form.md) | Package form is a form for a hotty surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers. |
+| [`hottyedit`](hottyedit.md) | Package hottyedit edits a text field as a hotty host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret. |
+| [`hottytea`](hottytea.md) | Package hottytea is hotty for a full-screen Bubble Tea program: it finds out whether the terminal is a hotty host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
+| [`hottyterm`](hottyterm.md) | Package hottyterm is hotty for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
+| [`hottytest`](hottytest.md) | Package hottytest is a hotty host that runs inside a test. |
+| [`hottyvt`](hottyvt.md) | Package hottyvt shows a terminal's screen on a hotty surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
 | [`hottyvt/asciicast`](hottyvt-asciicast.md) | Package asciicast reads terminal recordings in asciinema's asciicast format, versions 2 and 3: a header with the terminal's size, then what the recorded program wrote, each piece at the time it wrote it, with markers a recording may carry between them. |
 | [`series`](series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |

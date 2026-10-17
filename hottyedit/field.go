@@ -1,4 +1,4 @@
-// Package hottyedit edits a text field as a HOTTY host edits one (SPEC
+// Package hottyedit edits a text field as a hotty host edits one (SPEC
 // §10.2), for a program that draws its fields in cells: the same actions,
 // the same words and lines, the same caret.
 //

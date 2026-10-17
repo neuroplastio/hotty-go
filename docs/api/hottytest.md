@@ -11,7 +11,7 @@ import "github.com/neuroplastio/hotty-go/hottytest"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hottytest is a HOTTY host that runs inside a test. The program under test reads from it and writes to it as it would a terminal; the test then looks at what the program showed, and plays the user.
+Package hottytest is a hotty host that runs inside a test. The program under test reads from it and writes to it as it would a terminal; the test then looks at what the program showed, and plays the user.
 
 ```go
 h := hottytest.New(t)
@@ -22,15 +22,15 @@ h.Click("tool-card", "retry")                 // what the user does
 h.Key("Tab")                                  // keys, as SPEC §10.2 has a host take them
 ```
 
-The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the HOTTY conformance vectors that need no layout: it skips the ones marked scroll, steps, drop and view, and those for features it lacks (SDK.md §4.4). It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows), nothing in it scrolls, and a test says where in an element a pointer is (DragStartStep).
+The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the hotty conformance vectors that need no layout: it skips the ones marked scroll, steps, drop and view, and those for features it lacks (SDK.md §4.4). It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows), nothing in it scrolls, and a test says where in an element a pointer is (DragStartStep).
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
 It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. It keeps the cells the program printed, as rows (Screen) and as the lines it wrote (Lines), and where it left the cursor (Cursor).
 
-A Host made with Text is a terminal that is not a HOTTY host: the program's commands get no answer, as in any other terminal.
+A Host made with Text is a terminal that is not a hotty host: the program's commands get no answer, as in any other terminal.
 
-Unless Lenient, a program that breaks the protocol fails the test: a malformed command, one the host refuses as invalid (EINVAL), or a HOTTY command other than the query sent to a terminal that is not a host.
+Unless Lenient, a program that breaks the protocol fails the test: a malformed command, one the host refuses as invalid (EINVAL), or a hotty command other than the query sent to a terminal that is not a host.
 
 ## <a id="pkg-index"></a>Index
 
@@ -187,7 +187,7 @@ type Host struct {
 }
 ```
 
-Host is a HOTTY host for a test: a terminal the program reads (Read) and writes (Write). Its methods are safe for concurrent use.
+Host is a hotty host for a test: a terminal the program reads (Read) and writes (Write). Its methods are safe for concurrent use.
 
 ### <a id="New"></a>func New
 
@@ -203,7 +203,7 @@ New makes a host for a test, closed when the test ends. tb may be nil outside a 
 func (h *Host) BecomeHost()
 ```
 
-BecomeHost makes a terminal made with Text a HOTTY host from now on, as a multiplexer becomes one when a terminal that is a host attaches to the program's pane: it answers the last query the program sent, if that one asked for a late answer (late=1, SPEC §4) and was not withdrawn or reset since, and every command after.
+BecomeHost makes a terminal made with Text a hotty host from now on, as a multiplexer becomes one when a terminal that is a host attaches to the program's pane: it answers the last query the program sent, if that one asked for a late answer (late=1, SPEC §4) and was not withdrawn or reset since, and every command after.
 
 ### <a id="Host.Blur"></a>func (*Host) Blur
 
@@ -279,7 +279,7 @@ Close ends the program's input: a Read gets io.EOF once it has read what was sen
 func (h *Host) Commands() []hotty.Message
 ```
 
-Commands are the HOTTY messages the program sent, in order.
+Commands are the hotty messages the program sent, in order.
 
 ### <a id="Host.Cursor"></a>func (*Host) Cursor
 
@@ -592,7 +592,7 @@ Unhover takes the pointer off the surface it is on: onto the cells, or out of th
 func (h *Host) Write(p []byte) (int, error)
 ```
 
-Write is the program's output. It is parsed as it comes: HOTTY commands are carried out and answered, the terminal's queries answered, and the rest kept as cells (Screen). It never fails.
+Write is the program's output. It is parsed as it comes: hotty commands are carried out and answered, the terminal's queries answered, and the rest kept as cells (Screen). It never fails.
 
 ## <a id="Option"></a>type Option
 
@@ -648,7 +648,7 @@ Size sets the terminal's size in cells; 80×24 by default.
 func Text() Option
 ```
 
-Text makes the host a terminal that is not a HOTTY host: it answers DA1 and the cursor's position, and ignores HOTTY, until BecomeHost.
+Text makes the host a terminal that is not a hotty host: it answers DA1 and the cursor's position, and ignores hotty, until BecomeHost.
 
 ## <a id="Surface"></a>type Surface
 

@@ -11,9 +11,9 @@ import "github.com/neuroplastio/hotty-go"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hotty speaks HOTTY, HTML Over The TTY ([https://github.com/neuroplastio/hotty](https://github.com/neuroplastio/hotty)), from a Go program.
+Package hotty speaks hotty, HTML over the TTY ([https://github.com/neuroplastio/hotty](https://github.com/neuroplastio/hotty)), from a Go program.
 
-A HOTTY host is a terminal that shows surfaces: small HTML documents placed on rectangles of cells. A program sends documents, placements and deltas as escape sequences in its ordinary output, and hears replies and the user's events on its input.
+A hotty host is a terminal that shows surfaces: small HTML documents placed on rectangles of cells. A program sends documents, placements and deltas as escape sequences in its ordinary output, and hears replies and the user's events on its input.
 
 This package is the wire, and does no I/O:
 
@@ -230,7 +230,7 @@ The Detector's times (SPEC §4): how long to wait for any answer at all; after a
 
 ```go
 const (
-	// Number is HOTTY's OSC number: the ASCII codes of H and O.
+	// Number is hotty's OSC number: the ASCII codes of H and O.
 	Number = "7279"
 	// Chunk is the most payload bytes one OSC carries (SPEC §3.4).
 	Chunk = 4096
@@ -609,7 +609,7 @@ PlaceAt places a surface with its window's top-left corner at cell (x, y), count
 func Query(n int, opts ...QueryOption) string
 ```
 
-Query asks whether the terminal is a HOTTY host that speaks Version, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends, in Version or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
+Query asks whether the terminal is a hotty host that speaks Version, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends, in Version or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
 
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
@@ -1069,7 +1069,7 @@ DetectState is what a Detector has found.
 const (
 	// Detecting: nothing is known yet.
 	Detecting DetectState = iota
-	// Native: the terminal is a HOTTY host.
+	// Native: the terminal is a hotty host.
 	Native
 	// Text: it is not; the program draws in cells.
 	Text
@@ -1108,13 +1108,13 @@ type Detector struct {
 }
 ```
 
-Detector decides whether the terminal is a HOTTY host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
+Detector decides whether the terminal is a hotty host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
 
 The terminal is a host when it answers the query with capabilities that decode and name Version. Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
 
 Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query, ok or an error, is detection's whenever it comes.
 
-With Late, the query asks for a late answer (SPEC §4): the first reply that answers it once the State is Text, and makes the terminal a host, makes the State Native, with the host's capabilities, Decided and Done as it was. The program then starts using HOTTY.
+With Late, the query asks for a late answer (SPEC §4): the first reply that answers it once the State is Text, and makes the terminal a host, makes the State Native, with the host's capabilities, Decided and Done as it was. The program then starts using hotty.
 
 Decided and Done differ only when the terminal answers the query: what it is is known when its reply arrives, and detection is over when the DA1 answer behind it does. A program that must not wait acts when Decided; one that hands the terminal on, when Done.
 
@@ -1629,7 +1629,7 @@ type Message struct {
 }
 ```
 
-Message is one HOTTY message: a reply or an event from the host, or a command from the program (what a host, a relay or a test decodes). Its control is in the order the keys came, so a relay that forwards it sends the same bytes.
+Message is one hotty message: a reply or an event from the host, or a command from the program (what a host, a relay or a test decodes). Its control is in the order the keys came, so a relay that forwards it sends the same bytes.
 
 ## <a id="Op"></a>type Op
 
@@ -1881,7 +1881,7 @@ QueryOption is an option of Query: Late.
 func Late() QueryOption
 ```
 
-Late asks for a late answer (late=1, SPEC §4). What stands between the program and the terminal and has no host yet, such as a multiplexer running the program's pane with no terminal attached, may hold the query, and answer it once there is a host, whenever that is. A program that asks takes that answer as detection finding a host: it can start using HOTTY after it fell back to cells. A host answers at once, as it answers any query.
+Late asks for a late answer (late=1, SPEC §4). What stands between the program and the terminal and has no host yet, such as a multiplexer running the program's pane with no terminal attached, may hold the query, and answer it once there is a host, whenever that is. A program that asks takes that answer as detection finding a host: it can start using hotty after it fell back to cells. A host answers at once, as it answers any query.
 
 A program that asked, and will no longer take the answer, such as one about to exit, sends WithdrawLate, or the answer would reach whatever reads the terminal after it.
 
@@ -1984,7 +1984,7 @@ Result is what a Decoder made of one sequence.
 
 ```go
 const (
-	// NotHotty: the sequence is not HOTTY's, and the caller handles it.
+	// NotHotty: the sequence is not hotty's, and the caller handles it.
 	NotHotty Result = iota
 	// Partial: a chunk of a message that is not complete yet (SPEC §3.4).
 	Partial
@@ -2014,15 +2014,15 @@ type Scanner struct {
 	// as SegmentDA1, for a program that reads them itself (SDK.md §4.1).
 	// Without it they pass.
 	DA1 bool
-	// Invalid counts the HOTTY sequences dropped so far.
+	// Invalid counts the hotty sequences dropped so far.
 	Invalid int
 	// contains filtered or unexported fields
 }
 ```
 
-Scanner cuts HOTTY sequences out of a byte stream, however the reads split it (SDK.md §3.7): a terminal's input, read raw, or a program's output, for a relay. Everything else goes out as it came, in order, in the Feed that brought it; the Scanner holds only what may still become a segment of its own, the start of ESC ] 7279 ; (or of a DA1 answer, with DA1) and a HOTTY sequence in progress. So the segments do not depend on how the stream was split, and a key is never kept waiting.
+Scanner cuts hotty sequences out of a byte stream, however the reads split it (SDK.md §3.7): a terminal's input, read raw, or a program's output, for a relay. Everything else goes out as it came, in order, in the Feed that brought it; the Scanner holds only what may still become a segment of its own, the start of ESC ] 7279 ; (or of a DA1 answer, with DA1) and a hotty sequence in progress. So the segments do not depend on how the stream was split, and a key is never kept waiting.
 
-An ESC inside a HOTTY sequence that does not begin its ST ends the sequence unfinished: it is dropped as malformed, and the ESC begins what comes next. A sequence longer than 64 KiB is dropped up to its terminator.
+An ESC inside a hotty sequence that does not begin its ST ends the sequence unfinished: it is dropped as malformed, and the ESC begins what comes next. A sequence longer than 64 KiB is dropped up to its terminator.
 
 Its zero value is ready to use. It is not safe for concurrent use.
 
@@ -2040,7 +2040,7 @@ Feed takes the next bytes of the stream and returns its segments, in order. Adja
 func (s *Scanner) Flush() []Segment
 ```
 
-Flush ends the stream: what is held goes out as SegmentPass, except a HOTTY sequence in progress, which is dropped as malformed.
+Flush ends the stream: what is held goes out as SegmentPass, except a hotty sequence in progress, which is dropped as malformed.
 
 A program reading keys flushes a lone ESC that a read ended with, as the Escape key (SDK.md §4.1), at once or when no more bytes follow soon:
 
@@ -2057,7 +2057,7 @@ if h := s.Holding(); len(h) == 1 && !s.InSequence() {
 func (s *Scanner) Holding() []byte
 ```
 
-Holding returns the bytes the Scanner holds for the next Feed: the start of a segment, or a HOTTY sequence in progress. They are good until the next Feed or Flush.
+Holding returns the bytes the Scanner holds for the next Feed: the start of a segment, or a hotty sequence in progress. They are good until the next Feed or Flush.
 
 ### <a id="Scanner.InSequence"></a>func (*Scanner) InSequence
 
@@ -2065,7 +2065,7 @@ Holding returns the bytes the Scanner holds for the next Feed: the start of a se
 func (s *Scanner) InSequence() bool
 ```
 
-InSequence reports whether a HOTTY sequence is in progress, or one too long is being dropped: the next Feed goes on with it, and Flush would drop it. Otherwise what Holding returns is the start of a segment, which a program reading keys may flush after a moment, as typing (an ESC, then ], is Alt+]).
+InSequence reports whether a hotty sequence is in progress, or one too long is being dropped: the next Feed goes on with it, and Flush would drop it. Otherwise what Holding returns is the start of a segment, which a program reading keys may flush after a moment, as typing (an ESC, then ], is Alt+]).
 
 ## <a id="Segment"></a>type Segment
 
@@ -2093,10 +2093,10 @@ SegmentKind is what a Segment holds.
 
 ```go
 const (
-	// SegmentPass: bytes that are not HOTTY's, unchanged: keys, mouse
+	// SegmentPass: bytes that are not hotty's, unchanged: keys, mouse
 	// reports, text, other escape sequences, other OSCs.
 	SegmentPass SegmentKind = iota
-	// SegmentOSC: one complete HOTTY sequence, from ESC ] 7279 ; to its
+	// SegmentOSC: one complete hotty sequence, from ESC ] 7279 ; to its
 	// terminator (ST or BEL), ready for a Decoder.
 	SegmentOSC
 	// SegmentDA1: an answer to Primary Device Attributes, CSI ? <digits

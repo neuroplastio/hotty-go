@@ -1,7 +1,7 @@
 // Hello prints a line of HTML in the terminal, and a line of text where
 // the terminal cannot show HTML.
 //
-// It is the smallest HOTTY program: open the terminal, ask whether it is a
+// It is the smallest hotty program: open the terminal, ask whether it is a
 // host, print a document at the cursor, and read the host's replies before
 // exiting, so that none is left for the shell.
 package main

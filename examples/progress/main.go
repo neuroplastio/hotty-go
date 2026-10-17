@@ -4,7 +4,7 @@
 // It shows the cheap way to change a surface many times a second: a custom
 // property moves the bar (hotty.OpVar) and text ops change the labels
 // (hotty.OpText), a few dozen bytes each, in one delta so the host shows
-// them together (SPEC §6). Where the terminal is not a HOTTY
+// them together (SPEC §6). Where the terminal is not a hotty
 // host, the line is redrawn with a carriage return; into a pipe, a line per
 // step.
 //

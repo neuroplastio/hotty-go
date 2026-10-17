@@ -7,7 +7,7 @@ import (
 	"github.com/tinylib/msgp/msgp"
 )
 
-// Query asks whether the terminal is a HOTTY host that speaks Version,
+// Query asks whether the terminal is a hotty host that speaks Version,
 // fenced by Primary Device Attributes (SPEC §4): a host replies to the
 // query, numbered n, before the DA1 answer every terminal sends, in Version
 // or with EVERSION. A DA1 answer with no reply before it means there is no
@@ -32,7 +32,7 @@ func (late) query(c *Control) { set(c, "late", "1") }
 // running the program's pane with no terminal attached, may hold the
 // query, and answer it once there is a host, whenever that is. A program
 // that asks takes that answer as detection finding a host: it can start
-// using HOTTY after it fell back to cells. A host answers at once, as it
+// using hotty after it fell back to cells. A host answers at once, as it
 // answers any query.
 //
 // A program that asked, and will no longer take the answer, such as one

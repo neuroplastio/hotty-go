@@ -6,7 +6,7 @@ import (
 	"github.com/neuroplastio/hotty-go/braille"
 )
 
-// A line chart in cells, for a terminal that is not a HOTTY host: values
+// A line chart in cells, for a terminal that is not a hotty host: values
 // scaled to the canvas's dots, joined by lines, a row of text per row of
 // cells. Row's style wraps runs of one ink, in a colour say.
 func Example_lineChart() {

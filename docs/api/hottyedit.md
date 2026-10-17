@@ -12,7 +12,7 @@ import "github.com/neuroplastio/hotty-go/hottyedit"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hottyedit edits a text field as a HOTTY host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret.
+Package hottyedit edits a text field as a hotty host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret.
 
 A program gives its surfaces a keymap in data-keys (hotty.TerminalKeys, say), and its cells rendition looks keys up in the same keymap, resolved with hotty.Resolve, and does what they say to a Field:
 

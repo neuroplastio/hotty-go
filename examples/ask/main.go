@@ -5,7 +5,7 @@
 // program's while it asks, takes the keyboard, reports a submit, and shows
 // what is wrong without a round trip per key; then a detached summary
 // replaces it, so nothing is left that reports to the shell (SPEC §5.5,
-// §10). Where the terminal is not a HOTTY host it asks a question a line.
+// §10). Where the terminal is not a hotty host it asks a question a line.
 // Either way only the answers go to stdout:
 //
 //	answers=$(ask) && echo "$answers" | jq .env

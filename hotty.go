@@ -1,7 +1,7 @@
-// Package hotty speaks HOTTY, HTML Over The TTY
+// Package hotty speaks hotty, HTML over the TTY
 // (https://github.com/neuroplastio/hotty), from a Go program.
 //
-// A HOTTY host is a terminal that shows surfaces: small HTML documents
+// A hotty host is a terminal that shows surfaces: small HTML documents
 // placed on rectangles of cells. A program sends documents, placements and
 // deltas as escape sequences in its ordinary output, and hears replies and
 // the user's events on its input.
@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	// Number is HOTTY's OSC number: the ASCII codes of H and O.
+	// Number is hotty's OSC number: the ASCII codes of H and O.
 	Number = "7279"
 	// Chunk is the most payload bytes one OSC carries (SPEC §3.4).
 	Chunk = 4096

@@ -1,4 +1,4 @@
-// Package chart draws line charts for HOTTY surfaces, as inline SVG that a
+// Package chart draws line charts for hotty surfaces, as inline SVG that a
 // program changes with deltas as values arrive, and in cells for a terminal
 // that is not a host (Spark).
 //

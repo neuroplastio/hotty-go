@@ -12,15 +12,15 @@ import "github.com/neuroplastio/hotty-go/hottytea"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages.
+Package hottytea is hotty for a full-screen Bubble Tea program: it finds out whether the terminal is a hotty host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages.
 
 A Session is the program's side. Its life in a program:
 
   - Before the program runs, its output goes through the Session (Watch, or WatchFile for a terminal), and Attach gives it the program.
   - Init returns s.Detect().
-  - Update hands every message to s.Update first. What is HOTTY's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
+  - Update hands every message to s.Update first. What is hotty's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
-  - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that HOTTY commands stay in order with Bubble Tea's frames.
+  - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that hotty commands stay in order with Bubble Tea's frames.
 
 Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit. So a program never returns an empty View under its surfaces (Layout).
 
@@ -51,7 +51,7 @@ import (
 )
 
 // counter is a full-screen program with one surface: a count, and a button
-// that adds one. In a terminal that is not a HOTTY host, it draws the
+// that adds one. In a terminal that is not a hotty host, it draws the
 // count in cells, and the + key adds one.
 type counter struct {
 	s     *hottytea.Session
@@ -239,7 +239,7 @@ AckMsg is the host's ok for a command the program numbered (hotty.N): the host h
 type Counts struct{ Docs, Places, Hides, Deletes, Relayouts int }
 ```
 
-Counts are what Layout has sent so far: documents, placements, hides and deletes, and the relayouts after the renderer erased or scrolled the screen. A program that measures its own HOTTY traffic reads them.
+Counts are what Layout has sent so far: documents, placements, hides and deletes, and the relayouts after the renderer erased or scrolled the screen. A program that measures its own hotty traffic reads them.
 
 ## <a id="ErrorMsg"></a>type ErrorMsg
 
@@ -313,7 +313,7 @@ Mode is what the terminal turned out to be.
 ```go
 const (
 	Detecting Mode = iota // not known yet: Layout and Send do nothing
-	Native                // a HOTTY host: surfaces
+	Native                // a hotty host: surfaces
 	Text                  // not a host: everything is drawn in cells
 )
 ```
@@ -397,7 +397,7 @@ type Session struct {
 	// are hard: a surface beyond them is not sent until there is room.
 	Limit int
 
-	// Sent counts the bytes of HOTTY commands Flush has written.
+	// Sent counts the bytes of hotty commands Flush has written.
 	Sent int
 	// Count counts what Layout has sent.
 	Count Counts
@@ -405,7 +405,7 @@ type Session struct {
 }
 ```
 
-Session is a Bubble Tea program's side of HOTTY (SPEC §2: a program's connection to a host). Its methods are for the program's Update, which Bubble Tea runs on one goroutine; the output it watches, and the commands Flush returns, run on others.
+Session is a Bubble Tea program's side of hotty (SPEC §2: a program's connection to a host). Its methods are for the program's Update, which Bubble Tea runs on one goroutine; the output it watches, and the commands Flush returns, run on others.
 
 ### <a id="New"></a>func New
 
@@ -524,7 +524,7 @@ Send queues commands (deltas, focus) for the next Flush. It does nothing when th
 func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd)
 ```
 
-Update takes the program's messages first. What is HOTTY's comes back as ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other messages come back as they are. A nil message was the Session's alone.
+Update takes the program's messages first. What is hotty's comes back as ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other messages come back as they are. A nil message was the Session's alone.
 
 ### <a id="Session.Watch"></a>func (*Session) Watch
 
@@ -548,7 +548,7 @@ WatchFile is Watch for a terminal's file, such as os.Stdout: what it returns is 
 func (h *Session) Written() int
 ```
 
-Written counts every byte written through Watch or WatchFile: frames and HOTTY commands alike.
+Written counts every byte written through Watch or WatchFile: frames and hotty commands alike.
 
 ## <a id="Surface"></a>type Surface
 

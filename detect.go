@@ -12,7 +12,7 @@ type DetectState uint8
 const (
 	// Detecting: nothing is known yet.
 	Detecting DetectState = iota
-	// Native: the terminal is a HOTTY host.
+	// Native: the terminal is a hotty host.
 	Native
 	// Text: it is not; the program draws in cells.
 	Text
@@ -42,7 +42,7 @@ const (
 	DetectAfterReply = 300 * time.Millisecond
 )
 
-// Detector decides whether the terminal is a HOTTY host (SDK.md §3.8). It
+// Detector decides whether the terminal is a hotty host (SDK.md §3.8). It
 // is a state machine with the time passed in, so it behaves the same
 // however the program reads the terminal: the program sends what Start
 // returns, gives it each DA1 answer and each reply it reads, calls Tick at
@@ -62,7 +62,7 @@ const (
 // With Late, the query asks for a late answer (SPEC §4): the first reply
 // that answers it once the State is Text, and makes the terminal a host,
 // makes the State Native, with the host's capabilities, Decided and Done
-// as it was. The program then starts using HOTTY.
+// as it was. The program then starts using hotty.
 //
 // Decided and Done differ only when the terminal answers the query: what
 // it is is known when its reply arrives, and detection is over when the DA1

@@ -6,7 +6,7 @@
 //
 // The SDK has no Markdown in it: the program renders with a Markdown
 // library (goldmark) and sends the HTML, the way it would any other. What
-// is HOTTY's is around that:
+// is hotty's is around that:
 //
 //   - A surface has at most 1000 rows (SPEC §5.2), and one that fits the
 //     screen can be seen whole: the document goes out in pages of about a
@@ -19,7 +19,7 @@
 //     whatever reads the terminal after the program exits (§5.5).
 //   - 1rlh is one row (§8), so CSS can size an image in rows.
 //
-// Anywhere else, a pipe or a terminal that is not a HOTTY host, the
+// Anywhere else, a pipe or a terminal that is not a hotty host, the
 // Markdown itself is printed: it is written to be read as text.
 package main
 

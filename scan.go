@@ -10,10 +10,10 @@ type SegmentKind uint8
 
 // The kinds of Segment.
 const (
-	// SegmentPass: bytes that are not HOTTY's, unchanged: keys, mouse
+	// SegmentPass: bytes that are not hotty's, unchanged: keys, mouse
 	// reports, text, other escape sequences, other OSCs.
 	SegmentPass SegmentKind = iota
-	// SegmentOSC: one complete HOTTY sequence, from ESC ] 7279 ; to its
+	// SegmentOSC: one complete hotty sequence, from ESC ] 7279 ; to its
 	// terminator (ST or BEL), ready for a Decoder.
 	SegmentOSC
 	// SegmentDA1: an answer to Primary Device Attributes, CSI ? <digits
@@ -43,7 +43,7 @@ type Segment struct {
 	Data []byte
 }
 
-// scanMax is the longest HOTTY sequence a Scanner takes, its terminator
+// scanMax is the longest hotty sequence a Scanner takes, its terminator
 // not counted (SDK.md §3.7): no host sends one longer, since a chunk is at
 // most Chunk bytes of base64.
 const scanMax = 64 << 10
@@ -54,19 +54,19 @@ type scanMode uint8
 
 const (
 	scanGround  scanMode = iota // between segments
-	scanOSC                     // in a HOTTY sequence
+	scanOSC                     // in a hotty sequence
 	scanDiscard                 // in one too long, dropped up to its terminator
 )
 
-// Scanner cuts HOTTY sequences out of a byte stream, however the reads
+// Scanner cuts hotty sequences out of a byte stream, however the reads
 // split it (SDK.md §3.7): a terminal's input, read raw, or a program's
 // output, for a relay. Everything else goes out as it came, in order, in
 // the Feed that brought it; the Scanner holds only what may still become a
 // segment of its own, the start of ESC ] 7279 ; (or of a DA1 answer, with
-// DA1) and a HOTTY sequence in progress. So the segments do not depend on
+// DA1) and a hotty sequence in progress. So the segments do not depend on
 // how the stream was split, and a key is never kept waiting.
 //
-// An ESC inside a HOTTY sequence that does not begin its ST ends the
+// An ESC inside a hotty sequence that does not begin its ST ends the
 // sequence unfinished: it is dropped as malformed, and the ESC begins what
 // comes next. A sequence longer than 64 KiB is dropped up to its
 // terminator.
@@ -77,7 +77,7 @@ type Scanner struct {
 	// as SegmentDA1, for a program that reads them itself (SDK.md §4.1).
 	// Without it they pass.
 	DA1 bool
-	// Invalid counts the HOTTY sequences dropped so far.
+	// Invalid counts the hotty sequences dropped so far.
 	Invalid int
 
 	mode   scanMode
@@ -143,7 +143,7 @@ func (s *Scanner) ground(out []Segment, p []byte, i int) ([]Segment, int) {
 	}
 }
 
-// match tells what b, which begins with ESC, begins: a HOTTY sequence or
+// match tells what b, which begins with ESC, begins: a hotty sequence or
 // a DA1 answer, ending at end; perhaps one, if the bytes that would tell
 // have not come yet (partial); or neither (SegmentPass).
 func (s *Scanner) match(b []byte) (kind SegmentKind, end int, partial bool) {
@@ -200,7 +200,7 @@ func (s *Scanner) heldByte(out []Segment, c byte) []Segment {
 	return out
 }
 
-// osc takes the bytes of a HOTTY sequence, up to its end or p's.
+// osc takes the bytes of a hotty sequence, up to its end or p's.
 func (s *Scanner) osc(out []Segment, p []byte, i int) ([]Segment, int) {
 	if s.esc {
 		s.esc = false
@@ -285,7 +285,7 @@ func (s *Scanner) discard(p []byte, i int) int {
 }
 
 // Flush ends the stream: what is held goes out as SegmentPass, except a
-// HOTTY sequence in progress, which is dropped as malformed.
+// hotty sequence in progress, which is dropped as malformed.
 //
 // A program reading keys flushes a lone ESC that a read ended with, as the
 // Escape key (SDK.md §4.1), at once or when no more bytes follow soon:
@@ -308,7 +308,7 @@ func (s *Scanner) Flush() []Segment {
 }
 
 // Holding returns the bytes the Scanner holds for the next Feed: the start
-// of a segment, or a HOTTY sequence in progress. They are good until the
+// of a segment, or a hotty sequence in progress. They are good until the
 // next Feed or Flush.
 func (s *Scanner) Holding() []byte {
 	if s.mode == scanOSC {
@@ -317,7 +317,7 @@ func (s *Scanner) Holding() []byte {
 	return s.held
 }
 
-// InSequence reports whether a HOTTY sequence is in progress, or one too
+// InSequence reports whether a hotty sequence is in progress, or one too
 // long is being dropped: the next Feed goes on with it, and Flush would
 // drop it. Otherwise what Holding returns is the start of a segment, which
 // a program reading keys may flush after a moment, as typing (an ESC, then

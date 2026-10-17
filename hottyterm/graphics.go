@@ -16,7 +16,7 @@ import (
 const graphicsQuery = "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\" + "\x1b[c"
 
 // KittyGraphics asks the terminal whether it shows kitty graphics: pixels
-// placed on the cells, which is what a HOTTY polyfill (hotty-blitz's
+// placed on the cells, which is what a hotty polyfill (hotty-blitz's
 // `hotty run`) draws surfaces with on a terminal that is not a host. Ask
 // after Detect, and only when Detect is false: a host needs no pixels of
 // its own. It asks each time it is called. A terminal made with Known is

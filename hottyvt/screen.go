@@ -1,4 +1,4 @@
-// Package hottyvt shows a terminal's screen on a HOTTY surface: what a
+// Package hottyvt shows a terminal's screen on a hotty surface: what a
 // program would write to a terminal goes in, and HTML comes out, first as
 // an element of a document and then as deltas for the rows that changed.
 //
@@ -41,9 +41,9 @@
 //
 // # Surfaces
 //
-// A program that speaks HOTTY, recorded in a HOTTY host, made surfaces as
+// A program that speaks hotty, recorded in a hotty host, made surfaces as
 // well as cells, and the screen shows them as a host would (SPEC §5–§7): it
-// reads the HOTTY messages in what it is given, keeps each surface's
+// reads the hotty messages in what it is given, keeps each surface's
 // document, placement and resources, and shows each placed surface above
 // the rows, at its cells, laid out at its size and scaled with the screen.
 // What the surfaces do reaches the screen's surface as Delta's commands: a
@@ -79,7 +79,7 @@
 // the colours a program sets for the terminal's default foreground and
 // background (OSC 10, 11), which would fight the host's theme. The
 // emulator's answers to queries (the cursor's position, device attributes)
-// are dropped, unless Replies takes them; HOTTY's are not made. Text is the
+// are dropped, unless Replies takes them; hotty's are not made. Text is the
 // cells', without the surfaces' text.
 //
 // This package does no I/O but for those answers: like the hotty package,
@@ -181,7 +181,7 @@ type Screen struct {
 	// heard of them yet (surfaces.go).
 	noSurfaces bool
 	dec        hotty.Decoder
-	held       []byte // the end of what Write was given, which may begin a HOTTY message
+	held       []byte // the end of what Write was given, which may begin a hotty message
 	surfaces   map[string]*surface
 	order      []*surface // in the order they were made: their stacking
 	made       int        // surfaces made, for their numbers
@@ -210,8 +210,8 @@ func Scale(scale float64) Option { return func(s *Screen) { s.scale = scale } }
 // visible.
 func HideCursor() Option { return func(s *Screen) { s.cursor = false } }
 
-// NoSurfaces makes the screen a terminal that is not a HOTTY host: it
-// shows the cells alone, and ignores the HOTTY messages in what it is
+// NoSurfaces makes the screen a terminal that is not a hotty host: it
+// shows the cells alone, and ignores the hotty messages in what it is
 // given, as such a terminal does.
 func NoSurfaces() Option { return func(s *Screen) { s.noSurfaces = true } }
 

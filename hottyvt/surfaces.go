@@ -15,8 +15,8 @@ import (
 	"github.com/neuroplastio/hotty-go"
 )
 
-// A screen shows the surfaces the program makes, as a HOTTY host would
-// (SPEC §5): the HOTTY messages in what it is given make surfaces, place
+// A screen shows the surfaces the program makes, as a hotty host would
+// (SPEC §5): the hotty messages in what it is given make surfaces, place
 // them, change them, and send them resources, and the screen keeps each
 // surface's document and placement. Each one it shows is an element of the
 // screen's own, above the rows, at its cells: a box the window's size
@@ -91,15 +91,15 @@ func (o op) wire() hotty.Op {
 	return hotty.Op{Op: o.op, Target: o.target, Key: o.key, Value: &v}
 }
 
-// The longest HOTTY sequence the screen holds while waiting for its end: a
+// The longest hotty sequence the screen holds while waiting for its end: a
 // chunk is at most 4096 bytes of payload, and its control (SPEC §3.4).
 const maxSequence = 64 << 10
 
 var oscHotty = []byte("\x1b]" + hotty.Number)
 
-// feed takes output: HOTTY messages to the surfaces, the rest to the cells.
+// feed takes output: hotty messages to the surfaces, the rest to the cells.
 //
-// A HOTTY message is an OSC: it starts with ESC ] wherever it is, since an
+// A hotty message is an OSC: it starts with ESC ] wherever it is, since an
 // ESC ends any other string, and ends with BEL or ST (ESC \). Another ESC
 // cuts it short, and starts what follows.
 func (s *Screen) feed(p []byte) {
@@ -318,7 +318,7 @@ func textOf(n *nethtml.Node) string {
 
 // --- messages -----------------------------------------------------------------
 
-// message does what a HOTTY message from the program says. The screen
+// message does what a hotty message from the program says. The screen
 // answers nothing: the program that made a recording had its answers.
 func (s *Screen) message(m hotty.Message) {
 	name := hotty.Get(m.Control, "s")

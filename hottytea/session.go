@@ -1,5 +1,5 @@
-// Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds
-// out whether the terminal is a HOTTY host, keeps the program's surfaces
+// Package hottytea is hotty for a full-screen Bubble Tea program: it finds
+// out whether the terminal is a hotty host, keeps the program's surfaces
 // on screen as its frame changes, and turns what the host sends into
 // messages.
 //
@@ -8,7 +8,7 @@
 //   - Before the program runs, its output goes through the Session (Watch,
 //     or WatchFile for a terminal), and Attach gives it the program.
 //   - Init returns s.Detect().
-//   - Update hands every message to s.Update first. What is HOTTY's comes
+//   - Update hands every message to s.Update first. What is hotty's comes
 //     back as ReadyMsg once the Session knows the terminal (Mode Native or
 //     Text), EventMsg for what the user did in a surface, ErrorMsg for a
 //     command the host refused, AckMsg for the ok of a command the program
@@ -22,7 +22,7 @@
 //     or a delete when it goes. View then returns the cells, with room
 //     left where the surfaces go.
 //   - Deltas go out with Send, and leave with the next Flush, as one
-//     tea.Raw, so that HOTTY commands stay in order with Bubble Tea's
+//     tea.Raw, so that hotty commands stay in order with Bubble Tea's
 //     frames.
 //
 // Bubble Tea's renderer erases the screen and scrolls regions on its own,
@@ -52,7 +52,7 @@ import (
 
 // Counts are what Layout has sent so far: documents, placements, hides and
 // deletes, and the relayouts after the renderer erased or scrolled the
-// screen. A program that measures its own HOTTY traffic reads them.
+// screen. A program that measures its own hotty traffic reads them.
 type Counts struct{ Docs, Places, Hides, Deletes, Relayouts int }
 
 // Mode is what the terminal turned out to be.
@@ -61,7 +61,7 @@ type Mode int
 // The modes.
 const (
 	Detecting Mode = iota // not known yet: Layout and Send do nothing
-	Native                // a HOTTY host: surfaces
+	Native                // a hotty host: surfaces
 	Text                  // not a host: everything is drawn in cells
 )
 
@@ -213,7 +213,7 @@ func changed(was, now bool) hotty.Flag {
 // that draws them itself).
 const DefaultLimit = 48
 
-// Session is a Bubble Tea program's side of HOTTY (SPEC §2: a program's
+// Session is a Bubble Tea program's side of hotty (SPEC §2: a program's
 // connection to a host). Its methods are for the program's Update, which
 // Bubble Tea runs on one goroutine; the output it watches, and the
 // commands Flush returns, run on others.
@@ -239,7 +239,7 @@ type Session struct {
 	// are hard: a surface beyond them is not sent until there is room.
 	Limit int
 
-	// Sent counts the bytes of HOTTY commands Flush has written.
+	// Sent counts the bytes of hotty commands Flush has written.
 	Sent int
 	// Count counts what Layout has sent.
 	Count Counts
@@ -318,7 +318,7 @@ func (h *Session) detected(was time.Time) (tea.Msg, tea.Cmd) {
 	return msg, cmd
 }
 
-// Update takes the program's messages first. What is HOTTY's comes back as
+// Update takes the program's messages first. What is hotty's comes back as
 // ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other
 // messages come back as they are. A nil message was the Session's alone.
 func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
