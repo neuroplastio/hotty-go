@@ -1,7 +1,7 @@
-// Package hottyterm is HOTTY for a program that is not a full-screen Bubble
+// Package hottyterm is hotty for a program that is not a full-screen Bubble
 // Tea program: a command that prints documents and exits, one that asks a
 // question, a chart that streams. A Term is the process's terminal: it finds
-// out whether the terminal is a HOTTY host, names surfaces so that two runs
+// out whether the terminal is a hotty host, names surfaces so that two runs
 // never share one, writes commands, and reads what comes back.
 //
 // The order of use:
@@ -18,7 +18,7 @@
 // # Input
 //
 // Everything the terminal sends is read once, by the Term: keys, the mouse,
-// pastes, and HOTTY replies and events. What a call waits for goes to that
+// pastes, and hotty replies and events. What a call waits for goes to that
 // call: Detect's answer, a Fence's DA1, a Request's numbered reply. The
 // rest is delivered by Events, in order, from whenever it arrived. So a
 // program may Request while another goroutine reads Events.
@@ -50,13 +50,13 @@ import (
 type Size struct{ Cols, Rows int }
 
 // Known is what a terminal is known to be without asking it, such as a
-// terminal emulated in a page that always has the HOTTY addon.
+// terminal emulated in a page that always has the hotty addon.
 type Known struct {
 	Native bool
 	Caps   hotty.Caps
 }
 
-// Message is a HOTTY message from the terminal, a reply or an event
+// Message is a hotty message from the terminal, a reply or an event
 // (SPEC §3.6, §9), as Events delivers it.
 type Message struct{ hotty.Message }
 
@@ -98,7 +98,7 @@ type Term struct {
 	// TermType is $TERM, for decoding keys.
 	TermType string
 	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
-	// program that can start using HOTTY after it found no host: one that
+	// program that can start using hotty after it found no host: one that
 	// runs in a multiplexer's pane before a terminal is attached to it.
 	// If the answer comes, the reply goes to Events, with the host's
 	// capabilities (Reply.Caps), and Native, Caps and Detect report a host
@@ -308,7 +308,7 @@ func (t *Term) Resized(s Size) {
 	t.sizes <- s
 }
 
-// Native reports what Detect found: true for a HOTTY host.
+// Native reports what Detect found: true for a hotty host.
 func (t *Term) Native() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -324,7 +324,7 @@ func (t *Term) Caps() hotty.Caps {
 	return t.caps
 }
 
-// Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and
+// Detect asks the terminal whether it is a hotty host (SPEC §4), once, and
 // reports the answer; later calls return the first answer, or the late one
 // (Late). A terminal that answers neither the query nor DA1 within 1.5 s,
 // or before ctx ends, is not a host.
@@ -637,7 +637,7 @@ func (t *Term) DetachAll() error {
 }
 
 // Events delivers what the terminal sends that no call waits for, from
-// when it arrived on: keys, the mouse, pastes, and HOTTY replies and
+// when it arrived on: keys, the mouse, pastes, and hotty replies and
 // events as Message. The channel closes when the input ends, the Term is
 // closed, or ctx is done. Later calls return the same channel.
 func (t *Term) Events(ctx context.Context) <-chan Event {
@@ -711,7 +711,7 @@ func (t *Term) listenClaiming(claim func([]Event) []Event, take func(Event) bool
 	}
 }
 
-// start reads In from now until Close, decoding HOTTY's messages, which may
+// start reads In from now until Close, decoding hotty's messages, which may
 // arrive in chunks, and routing every event.
 func (t *Term) start() {
 	t.mu.Lock()

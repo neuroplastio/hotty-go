@@ -20,7 +20,7 @@ func TestWatcherFindsErasesAndScrolls(t *testing.T) {
 		{"erase below only", []string{"\x1b[J\x1b[0J\x1b[K\x1b[5X"}, false},
 		{"private modes", []string{"\x1b[?2026h\x1b[?1049h\x1b[?25l\x1b[>4;2m\x1b[=1;1u"}, false},
 		{"cursor and colours", []string{"\x1b7\x1b[2;1H\x1b[38;2;1;2;3mabc\x1b[m\x1b8"}, false},
-		{"a HOTTY payload", []string{"\x1b]7279;a=doc:s=x;MltTTUJb", "WzJKG1syVA==\x1b\\"}, false},
+		{"a hotty payload", []string{"\x1b]7279;a=doc:s=x;MltTTUJb", "WzJKG1syVA==\x1b\\"}, false},
 		{"a title with an ESC-like body", []string{"\x1b]2;[2J\x07text"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

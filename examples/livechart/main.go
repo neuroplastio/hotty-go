@@ -5,7 +5,7 @@
 //	(echo "rx tx"; while sleep 1; do rates; done) | livechart -rows 10
 //
 // series.Parser reads the numbers: a column a series, named by a first
-// line with no numbers, or with -key the number after KEY=. On a HOTTY host
+// line with no numbers, or with -key the number after KEY=. On a hotty host
 // the chart is a detached surface, sent once: each frame's deltas change
 // its lines (chart.Line.DeltaShapes) and the values in its legend, and the
 // grid only when the axis changes, which series.Scale keeps from happening
@@ -257,7 +257,7 @@ const (
 	muted               = "#898781"
 )
 
-// surface is the chart on a HOTTY host.
+// surface is the chart on a hotty host.
 type surface struct {
 	ctx        context.Context
 	t          *hottyterm.Term

@@ -1,4 +1,4 @@
-// hottytest: a HOTTY host for tests. A module of its own for x/net/html.
+// hottytest: a hotty host for tests. A module of its own for x/net/html.
 module github.com/neuroplastio/hotty-go/hottytest
 
 go 1.24.0

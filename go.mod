@@ -1,4 +1,4 @@
-// hotty-go: the HOTTY protocol (package hotty), which needs msgp's runtime
+// hotty-go: the hotty protocol (package hotty), which needs msgp's runtime
 // for a host's msgpack bodies (SDK.md §2.1) and myelinkey, which names and
 // reads keys (SPEC §10.4), and the packages that need
 // nothing more: chart, form, series, braille, blocks.

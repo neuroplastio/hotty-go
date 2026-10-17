@@ -10,7 +10,7 @@ import (
 	"github.com/neuroplastio/hotty-go/hottyvt"
 )
 
-// What a full-screen program that speaks HOTTY writes, in the chunks a pty
+// What a full-screen program that speaks hotty writes, in the chunks a pty
 // would hand over: cells around a card, the card's document, its
 // placement, deltas, a resource, a window as it scrolls, a hide, another
 // card, and a delete.

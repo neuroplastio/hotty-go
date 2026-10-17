@@ -36,7 +36,7 @@ type watcher struct {
 	ping    []byte
 	pingAt  time.Time
 	out     func([]byte) (int, error)
-	written int // every byte written, frames and HOTTY alike
+	written int // every byte written, frames and hotty alike
 }
 
 // frameEnd ends every frame Bubble Tea writes to a terminal that has
@@ -146,7 +146,7 @@ func (h *Session) WatchFile(f *os.File) *File {
 }
 
 // Written counts every byte written through Watch or WatchFile: frames and
-// HOTTY commands alike.
+// hotty commands alike.
 func (h *Session) Written() int {
 	h.watch.mu.Lock()
 	defer h.watch.mu.Unlock()

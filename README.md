@@ -1,15 +1,15 @@
 # hotty-go
 
-hotty-go is the Go SDK for [HOTTY](https://github.com/neuroplastio/hotty),
-HTML Over The TTY. With it, a terminal program shows small HTML documents,
+hotty-go is the Go SDK for [hotty](https://github.com/neuroplastio/hotty),
+HTML over the TTY. With it, a terminal program shows small HTML documents,
 called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks HOTTY 0.4: a key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
+It speaks hotty 0.4: a key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
 name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
 events carry msgpack bodies (SPEC §3.3), and its query lists the version it
-speaks (`a=q:n=1:v=0.4`, SPEC §4). A terminal of another HOTTY version is no
+speaks (`a=q:n=1:v=0.4`, SPEC §4). A terminal of another hotty version is no
 host to it, and the program draws in cells. A program written for 0.3 ports
 as hotty's
 [CHANGES.md](https://github.com/neuroplastio/hotty/blob/main/CHANGES.md)
@@ -22,7 +22,7 @@ The SDK:
 
 - encodes the protocol, and cuts it out of a byte stream, for a program
   that reads its terminal raw or a relay that reads another's output;
-- finds out whether the terminal is a HOTTY host;
+- finds out whether the terminal is a hotty host;
 - keeps surfaces on screen while a full-screen frame changes;
 - edits a text field in cells as a host edits it on a surface, with the
   keymap the program gives both (`hotty.TerminalKeys`, `hottyedit`);
@@ -82,23 +82,23 @@ go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyte
 <!-- docgen:packages -->
 | package | what it is |
 | --- | --- |
-| [`hotty`](docs/api/hotty.md) | Package hotty speaks HOTTY, HTML Over The TTY (https://github.com/neuroplastio/hotty), from a Go program. |
+| [`hotty`](docs/api/hotty.md) | Package hotty speaks hotty, HTML over the TTY (https://github.com/neuroplastio/hotty), from a Go program. |
 | [`blocks`](docs/api/blocks.md) | Package blocks draws bars in terminal cells with the block elements (U+2581–U+2588): a column's height in eighths of a row, as a bar chart or a histogram in text has it. |
 | [`braille`](docs/api/braille.md) | Package braille draws in terminal cells with the Unicode braille patterns (U+2800–U+28FF): each cell is two dots across and four down, so a line chart in text has four times the rows and twice the columns of its cells. |
-| [`chart`](docs/api/chart.md) | Package chart draws line charts for HOTTY surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark). |
-| [`form`](docs/api/form.md) | Package form is a form for a HOTTY surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers. |
-| [`hottyedit`](docs/api/hottyedit.md) | Package hottyedit edits a text field as a HOTTY host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret. |
-| [`hottytea`](docs/api/hottytea.md) | Package hottytea is HOTTY for a full-screen Bubble Tea program: it finds out whether the terminal is a HOTTY host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
-| [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
-| [`hottytest`](docs/api/hottytest.md) | Package hottytest is a HOTTY host that runs inside a test. |
-| [`hottyvt`](docs/api/hottyvt.md) | Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
+| [`chart`](docs/api/chart.md) | Package chart draws line charts for hotty surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark). |
+| [`form`](docs/api/form.md) | Package form is a form for a hotty surface: a spec, the document it makes (real HTML controls, with ids a program can focus and change with deltas), and what a submit event brings back, read into typed answers. |
+| [`hottyedit`](docs/api/hottyedit.md) | Package hottyedit edits a text field as a hotty host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret. |
+| [`hottytea`](docs/api/hottytea.md) | Package hottytea is hotty for a full-screen Bubble Tea program: it finds out whether the terminal is a hotty host, keeps the program's surfaces on screen as its frame changes, and turns what the host sends into messages. |
+| [`hottyterm`](docs/api/hottyterm.md) | Package hottyterm is hotty for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. |
+| [`hottytest`](docs/api/hottytest.md) | Package hottytest is a hotty host that runs inside a test. |
+| [`hottyvt`](docs/api/hottyvt.md) | Package hottyvt shows a terminal's screen on a hotty surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed. |
 | [`hottyvt/asciicast`](docs/api/hottyvt-asciicast.md) | Package asciicast reads terminal recordings in asciinema's asciicast format, versions 2 and 3: a header with the terminal's size, then what the recorded program wrote, each piece at the time it wrote it, with markers a recording may carry between them. |
 | [`series`](docs/api/series.md) | Package series reads numbers from a stream of text, as plotting tools such as youplot and asciigraph do: lines of numbers separated by spaces, tabs or commas, a column a series, and a first line with no numbers naming them. |
 <!-- /docgen:packages -->
 
 ## Examples
 
-Each example is a program for one use case. It works in a HOTTY host, in
+Each example is a program for one use case. It works in a hotty host, in
 any other terminal, and into a pipe, and its tests run it in each.
 
 The examples are a module of their own (`examples/go.mod`), built against
@@ -114,9 +114,9 @@ go run ./dashboard https://example.com
 | example | use case | what it shows |
 | --- | --- | --- |
 | [ask](examples/ask) | Ask asks for what a deploy needs with a form, and prints the answers as JSON for the script that ran it. | It shows a surface the program reads events from: the form is the program's while it asks, takes the keyboard, reports a submit, and shows what is wrong without a round trip per key; then a detached summary replaces it, so nothing is left that reports to the shell (SPEC §5.5, §10). |
-| [card](examples/card) | Card prints the result of a deploy as a card that stays in the scrollback, as a box of text where the terminal is not a HOTTY host, and as one line of data into a pipe. | It shows the three renditions every HOTTY program has (SPEC §14): which one a run takes, and how each is made. |
+| [card](examples/card) | Card prints the result of a deploy as a card that stays in the scrollback, as a box of text where the terminal is not a hotty host, and as one line of data into a pipe. | It shows the three renditions every hotty program has (SPEC §14): which one a run takes, and how each is made. |
 | [dashboard](examples/dashboard) | Dashboard watches HTTP endpoints, full screen: whether each is up, and its latency charted as the probes come back. | It is a Bubble Tea program, and each endpoint is a card on a surface that hottytea keeps in place as the frame changes. |
-| [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest HOTTY program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
+| [hello](examples/hello) | Hello prints a line of HTML in the terminal, and a line of text where the terminal cannot show HTML. | It is the smallest hotty program: open the terminal, ask whether it is a host, print a document at the cursor, and read the host's replies before exiting, so that none is left for the shell. |
 | [livechart](examples/livechart) | Livechart charts the numbers a command prints, live, below the command line, and leaves the chart in the scrollback when the command ends. | series.Parser reads the numbers: a column a series, named by a first line with no numbers, or with -key the number after KEY=. |
 | [markdown](examples/markdown) | Markdown shows a Markdown file among a command's output, its images and tables included, and leaves it in the scrollback. | The SDK has no Markdown in it: the program renders with a Markdown library (goldmark) and sends the HTML, the way it would any other. |
 | [progress](examples/progress) | Progress shows a task's progress as a bar that moves in place, and leaves its last state in the scrollback. | It shows the cheap way to change a surface many times a second: a custom property moves the bar (hotty.OpVar) and text ops change the labels (hotty.OpText), a few dozen bytes each, in one delta so the host shows them together (SPEC §6). |

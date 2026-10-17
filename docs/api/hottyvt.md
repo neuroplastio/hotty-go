@@ -12,7 +12,7 @@ import "github.com/neuroplastio/hotty-go/hottyvt"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hottyvt shows a terminal's screen on a HOTTY surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed.
+Package hottyvt shows a terminal's screen on a hotty surface: what a program would write to a terminal goes in, and HTML comes out, first as an element of a document and then as deltas for the rows that changed.
 
 A Screen is a terminal emulator (github.com/charmbracelet/x/vt) with a size of its own, apart from the terminal the program runs in. Write gives it output, as a terminal's pty would: a recording played back, a command run in a pseudo-terminal, a program's own drawing. HTML is the screen as it is now, to put in a document; Delta is the commands that bring a surface showing it up to now, one per row that changed, so a frame where a clock ticks costs one row (SPEC §6).
 
@@ -34,7 +34,7 @@ The custom property --vt-scale on the screen's element sizes it: at 1 (the defau
 
 ### <a id="hdr-Surfaces"></a>Surfaces
 
-A program that speaks HOTTY, recorded in a HOTTY host, made surfaces as well as cells, and the screen shows them as a host would (SPEC §5–§7): it reads the HOTTY messages in what it is given, keeps each surface's document, placement and resources, and shows each placed surface above the rows, at its cells, laid out at its size and scaled with the screen. What the surfaces do reaches the screen's surface as Delta's commands: a delta to a surface is the same delta to the surface's element in the screen's, so a card whose clock ticks costs what it cost the program; a placement is its box's style; a resource is a resource of the program showing the screen, named with the screen's id (Resources). A placement moves with its line as the screen scrolls and goes when that line leaves the screen, and one made on the alternate screen goes with it, as its surface does (SPEC §5.4).
+A program that speaks hotty, recorded in a hotty host, made surfaces as well as cells, and the screen shows them as a host would (SPEC §5–§7): it reads the hotty messages in what it is given, keeps each surface's document, placement and resources, and shows each placed surface above the rows, at its cells, laid out at its size and scaled with the screen. What the surfaces do reaches the screen's surface as Delta's commands: a delta to a surface is the same delta to the surface's element in the screen's, so a card whose clock ticks costs what it cost the program; a placement is its box's style; a resource is a resource of the program showing the screen, named with the screen's id (Resources). A placement moves with its line as the screen scrolls and goes when that line leaves the screen, and one made on the alternate screen goes with it, as its surface does (SPEC §5.4).
 
 Each surface's document is rewritten to live in the screen's beside the others: its ids are prefixed with its element's (id-d1-…), its selectors scoped to that element, and what it says of its root (html, body, :root) is said of the element. The rules of the document the screen is in reach the surfaces' elements too, so keep them to its own classes.
 
@@ -42,7 +42,7 @@ The surfaces show as a recording does, as detached ones (SPEC §5.5) that report
 
 ### <a id="hdr-What_it_leaves_out"></a>What it leaves out
 
-The scrollback: the screen shows what a terminal of its size would, and nothing that scrolled off. Images (kitty graphics, sixel), blinking, and the colours a program sets for the terminal's default foreground and background (OSC 10, 11), which would fight the host's theme. The emulator's answers to queries (the cursor's position, device attributes) are dropped, unless Replies takes them; HOTTY's are not made. Text is the cells', without the surfaces' text.
+The scrollback: the screen shows what a terminal of its size would, and nothing that scrolled off. Images (kitty graphics, sixel), blinking, and the colours a program sets for the terminal's default foreground and background (OSC 10, 11), which would fight the host's theme. The emulator's answers to queries (the cursor's position, device attributes) are dropped, unless Replies takes them; hotty's are not made. Text is the cells', without the surfaces' text.
 
 This package does no I/O but for those answers: like the hotty package, it returns commands for the program to send.
 
@@ -184,7 +184,7 @@ ID names the screen's element, and makes its rows' ids (id-r0, id-r1, …): for 
 func NoSurfaces() Option
 ```
 
-NoSurfaces makes the screen a terminal that is not a HOTTY host: it shows the cells alone, and ignores the HOTTY messages in what it is given, as such a terminal does.
+NoSurfaces makes the screen a terminal that is not a hotty host: it shows the cells alone, and ignores the hotty messages in what it is given, as such a terminal does.
 
 ### <a id="Replies"></a>func Replies
 

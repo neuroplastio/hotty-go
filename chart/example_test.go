@@ -84,7 +84,7 @@ func ExampleBox() {
 	// <div class="chart-box"><svg id="net" viewBox="0 0 40 10" preserveAspectRatio="none"><path id="inL" d="M0,9L20,7L40,8" fill="none" stroke="#5b8def" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path id="outL" d="M0,5L20,6L40,4" fill="none" stroke="#e8c872" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg></div>
 }
 
-// In a terminal that is not a HOTTY host the same series is a row of
+// In a terminal that is not a hotty host the same series is a row of
 // cells, scaled by Bounds with some headroom.
 func ExampleSpark() {
 	load := []float64{0.4, 0.9, 1.6, 2.8, math.NaN(), 3.1, 2.2, 1.0}

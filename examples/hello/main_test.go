@@ -32,7 +32,7 @@ func TestHost(t *testing.T) {
 func TestText(t *testing.T) {
 	h := hottytest.New(t, hottytest.Text())
 	var out, errs strings.Builder
-	if code := run(context.Background(), &out, &errs, opener(h)); code != 0 || !strings.Contains(out.String(), "not a HOTTY host") {
+	if code := run(context.Background(), &out, &errs, opener(h)); code != 0 || !strings.Contains(out.String(), "not a hotty host") {
 		t.Errorf("exit %d: %q", code, out.String())
 	}
 }

@@ -1,4 +1,4 @@
-// hottyvt: a terminal's screen on a HOTTY surface. A module of its own for
+// hottyvt: a terminal's screen on a hotty surface. A module of its own for
 // the terminal emulator, and x/net/html for the surfaces it shows.
 module github.com/neuroplastio/hotty-go/hottyvt
 

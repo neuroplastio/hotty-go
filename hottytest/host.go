@@ -1,4 +1,4 @@
-// Package hottytest is a HOTTY host that runs inside a test. The program
+// Package hottytest is a hotty host that runs inside a test. The program
 // under test reads from it and writes to it as it would a terminal; the
 // test then looks at what the program showed, and plays the user.
 //
@@ -11,7 +11,7 @@
 //
 // The host keeps every surface's document as the program's commands leave
 // it, with the delta operations and the morph of SPEC §6, and answers each
-// command as SPEC §3.6 has hosts do. It passes the HOTTY conformance
+// command as SPEC §3.6 has hosts do. It passes the hotty conformance
 // vectors that need no layout: it skips the ones marked scroll, steps, drop
 // and view, and those for features it lacks (SDK.md §4.4). It lays nothing
 // out and draws no pixels: a placement with auto rows gets an estimate
@@ -31,11 +31,11 @@
 // program printed, as rows (Screen) and as the lines it wrote (Lines), and
 // where it left the cursor (Cursor).
 //
-// A Host made with Text is a terminal that is not a HOTTY host: the
+// A Host made with Text is a terminal that is not a hotty host: the
 // program's commands get no answer, as in any other terminal.
 //
 // Unless Lenient, a program that breaks the protocol fails the test: a
-// malformed command, one the host refuses as invalid (EINVAL), or a HOTTY
+// malformed command, one the host refuses as invalid (EINVAL), or a hotty
 // command other than the query sent to a terminal that is not a host.
 package hottytest
 
@@ -62,7 +62,7 @@ import (
 
 // Errors of the user's actions.
 var (
-	ErrNotHost    = errors.New("hottytest: the terminal is not a HOTTY host")
+	ErrNotHost    = errors.New("hottytest: the terminal is not a hotty host")
 	ErrNoSurface  = errors.New("hottytest: no such surface")
 	ErrNoElement  = errors.New("hottytest: no such element")
 	ErrDetached   = errors.New("hottytest: the surface is detached, and reports nothing")
@@ -120,11 +120,11 @@ func Caps(c hotty.Caps) Option {
 	}
 }
 
-// Text makes the host a terminal that is not a HOTTY host: it answers DA1
-// and the cursor's position, and ignores HOTTY, until BecomeHost.
+// Text makes the host a terminal that is not a hotty host: it answers DA1
+// and the cursor's position, and ignores hotty, until BecomeHost.
 func Text() Option { return func(h *Host) { h.text = true } }
 
-// BecomeHost makes a terminal made with Text a HOTTY host from now on, as a
+// BecomeHost makes a terminal made with Text a hotty host from now on, as a
 // multiplexer becomes one when a terminal that is a host attaches to the
 // program's pane: it answers the last query the program sent, if that one
 // asked for a late answer (late=1, SPEC §4) and was not withdrawn or reset
@@ -166,7 +166,7 @@ func DefaultCaps() hotty.Caps {
 		Limits:   map[string]int{"surfaces": 64, "message": hotty.DefaultMax}}
 }
 
-// Host is a HOTTY host for a test: a terminal the program reads (Read) and
+// Host is a hotty host for a test: a terminal the program reads (Read) and
 // writes (Write). Its methods are safe for concurrent use.
 type Host struct {
 	tb       testing.TB
@@ -328,7 +328,7 @@ func (h *Host) Type(keys string) {
 // TermSize is the terminal's size (Size), as hottyterm.New takes it.
 func (h *Host) TermSize() (cols, rows int) { return h.cols, h.rows }
 
-// Write is the program's output. It is parsed as it comes: HOTTY commands
+// Write is the program's output. It is parsed as it comes: hotty commands
 // are carried out and answered, the terminal's queries answered, and the
 // rest kept as cells (Screen). It never fails.
 func (h *Host) Write(p []byte) (int, error) {
@@ -498,7 +498,7 @@ func (h *Host) osc(seq string) {
 	m, r := h.dec.Feed(seq)
 	if h.dec.Invalid > before {
 		h.invalid += h.dec.Invalid - before
-		h.protocol("a malformed HOTTY message (SPEC §3.7): %q", clip(seq))
+		h.protocol("a malformed hotty message (SPEC §3.7): %q", clip(seq))
 	}
 	if r != hotty.Complete {
 		return
@@ -506,7 +506,7 @@ func (h *Host) osc(seq string) {
 	h.commands = append(h.commands, m)
 	if h.text {
 		if hotty.Get(m.Control, "a") != "q" {
-			h.protocol("a HOTTY command to a terminal that is not a host (SPEC §14): %v", m.Control)
+			h.protocol("a hotty command to a terminal that is not a host (SPEC §14): %v", m.Control)
 			return
 		}
 		// One query is held at a time: a later one, a withdrawal
@@ -2187,7 +2187,7 @@ func (h *Host) Output() string {
 	return h.output.String()
 }
 
-// Commands are the HOTTY messages the program sent, in order.
+// Commands are the hotty messages the program sent, in order.
 func (h *Host) Commands() []hotty.Message {
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -11,7 +11,7 @@ import "github.com/neuroplastio/hotty-go/hottyterm"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package hottyterm is HOTTY for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. A Term is the process's terminal: it finds out whether the terminal is a HOTTY host, names surfaces so that two runs never share one, writes commands, and reads what comes back.
+Package hottyterm is hotty for a program that is not a full-screen Bubble Tea program: a command that prints documents and exits, one that asks a question, a chart that streams. A Term is the process's terminal: it finds out whether the terminal is a hotty host, names surfaces so that two runs never share one, writes commands, and reads what comes back.
 
 The order of use:
 
@@ -28,7 +28,7 @@ replies, err := t.Fence(ctx)  // the terminal took it all; errors?
 
 ### <a id="hdr-Input"></a>Input
 
-Everything the terminal sends is read once, by the Term: keys, the mouse, pastes, and HOTTY replies and events. What a call waits for goes to that call: Detect's answer, a Fence's DA1, a Request's numbered reply. The rest is delivered by Events, in order, from whenever it arrived. So a program may Request while another goroutine reads Events.
+Everything the terminal sends is read once, by the Term: keys, the mouse, pastes, and hotty replies and events. What a call waits for goes to that call: Detect's answer, a Fence's DA1, a Request's numbered reply. The rest is delivered by Events, in order, from whenever it arrived. So a program may Request while another goroutine reads Events.
 
 ### <a id="hdr-Leaving_the_terminal_clean"></a>Leaving the terminal clean
 
@@ -134,7 +134,7 @@ type Known struct {
 }
 ```
 
-Known is what a terminal is known to be without asking it, such as a terminal emulated in a page that always has the HOTTY addon.
+Known is what a terminal is known to be without asking it, such as a terminal emulated in a page that always has the hotty addon.
 
 ## <a id="Message"></a>type Message
 
@@ -142,7 +142,7 @@ Known is what a terminal is known to be without asking it, such as a terminal em
 type Message struct{ hotty.Message }
 ```
 
-Message is a HOTTY message from the terminal, a reply or an event (SPEC §3.6, §9), as Events delivers it.
+Message is a hotty message from the terminal, a reply or an event (SPEC §3.6, §9), as Events delivers it.
 
 ## <a id="Size"></a>type Size
 
@@ -169,7 +169,7 @@ type Term struct {
 	// TermType is $TERM, for decoding keys.
 	TermType string
 	// Late makes Detect ask for a late answer (hotty.Late, SPEC §4), for a
-	// program that can start using HOTTY after it found no host: one that
+	// program that can start using hotty after it found no host: one that
 	// runs in a multiplexer's pane before a terminal is attached to it.
 	// If the answer comes, the reply goes to Events, with the host's
 	// capabilities (Reply.Caps), and Native, Caps and Detect report a host
@@ -230,7 +230,7 @@ DetachAll detaches every surface Surface has named (hotty.Detach), so that none 
 func (t *Term) Detect(ctx context.Context) bool
 ```
 
-Detect asks the terminal whether it is a HOTTY host (SPEC §4), once, and reports the answer; later calls return the first answer, or the late one (Late). A terminal that answers neither the query nor DA1 within 1.5 s, or before ctx ends, is not a host.
+Detect asks the terminal whether it is a hotty host (SPEC §4), once, and reports the answer; later calls return the first answer, or the late one (Late). A terminal that answers neither the query nor DA1 within 1.5 s, or before ctx ends, is not a host.
 
 A host's reply comes before its answer to DA1, and Detect waits for that too, so that nothing is left for whoever reads the terminal next.
 
@@ -240,7 +240,7 @@ A host's reply comes before its answer to DA1, and Detect waits for that too, so
 func (t *Term) Events(ctx context.Context) <-chan Event
 ```
 
-Events delivers what the terminal sends that no call waits for, from when it arrived on: keys, the mouse, pastes, and HOTTY replies and events as Message. The channel closes when the input ends, the Term is closed, or ctx is done. Later calls return the same channel.
+Events delivers what the terminal sends that no call waits for, from when it arrived on: keys, the mouse, pastes, and hotty replies and events as Message. The channel closes when the input ends, the Term is closed, or ctx is done. Later calls return the same channel.
 
 ### <a id="Term.Fence"></a>func (*Term) Fence
 
@@ -266,7 +266,7 @@ File is the terminal's own file natively (/dev/tty, what Open opened), and nil f
 func (t *Term) KittyGraphics(ctx context.Context) bool
 ```
 
-KittyGraphics asks the terminal whether it shows kitty graphics: pixels placed on the cells, which is what a HOTTY polyfill (hotty-blitz's \`hotty run\`) draws surfaces with on a terminal that is not a host. Ask after Detect, and only when Detect is false: a host needs no pixels of its own. It asks each time it is called. A terminal made with Known is not asked (false), nor is one that answers neither the query nor DA1 within 1.5 s.
+KittyGraphics asks the terminal whether it shows kitty graphics: pixels placed on the cells, which is what a hotty polyfill (hotty-blitz's \`hotty run\`) draws surfaces with on a terminal that is not a host. Ask after Detect, and only when Detect is false: a host needs no pixels of its own. It asks each time it is called. A terminal made with Known is not asked (false), nor is one that answers neither the query nor DA1 within 1.5 s.
 
 ### <a id="Term.LineStart"></a>func (*Term) LineStart
 
@@ -282,7 +282,7 @@ LineStart moves the cursor to the start of a line, where a surface placed at the
 func (t *Term) Native() bool
 ```
 
-Native reports what Detect found: true for a HOTTY host.
+Native reports what Detect found: true for a hotty host.
 
 ### <a id="Term.OnClose"></a>func (*Term) OnClose
 

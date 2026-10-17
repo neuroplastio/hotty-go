@@ -12,7 +12,7 @@ import "github.com/neuroplastio/hotty-go/chart"
 
 ## <a id="pkg-overview"></a>Overview
 
-Package chart draws line charts for HOTTY surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark).
+Package chart draws line charts for hotty surfaces, as inline SVG that a program changes with deltas as values arrive, and in cells for a terminal that is not a host (Spark).
 
 A Line is one series: its box, its scale and its colour. SVG is the chart in a box of its own. For a box several series share (Box), each draws its Shapes, its line and area, and one of them its Rules, the grid. Delta and DeltaShapes are the commands that bring a chart already sent to new values: a few hundred bytes a tick, where a new document would be thousands (SPEC §6).
 
@@ -172,7 +172,7 @@ Spark is a chart in one row of cells, for a terminal that is not a host: the las
 
 ### <a id="example-Spark"></a>Example
 
-In a terminal that is not a HOTTY host the same series is a row of cells, scaled by Bounds with some headroom.
+In a terminal that is not a hotty host the same series is a row of cells, scaled by Bounds with some headroom.
 
 ```go
 load := []float64{0.4, 0.9, 1.6, 2.8, math.NaN(), 3.1, 2.2, 1.0}

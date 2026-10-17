@@ -68,7 +68,7 @@ type buildVector struct {
 	Out      []segment      `json:"out"`
 }
 
-// segment is a part of a builder's output: bytes that are not HOTTY's, or
+// segment is a part of a builder's output: bytes that are not hotty's, or
 // one command, decoded.
 type segment struct {
 	Raw *string `json:"raw,omitempty"`
@@ -283,7 +283,7 @@ func placement(v any) Placement {
 	return p
 }
 
-// segments splits output into the bytes that are not HOTTY's, adjacent ones
+// segments splits output into the bytes that are not hotty's, adjacent ones
 // together, and the commands, decoded.
 func segments(t *testing.T, out string) []segment {
 	t.Helper()

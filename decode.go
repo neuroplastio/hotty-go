@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Message is one HOTTY message: a reply or an event from the host, or a
+// Message is one hotty message: a reply or an event from the host, or a
 // command from the program (what a host, a relay or a test decodes). Its
 // control is in the order the keys came, so a relay that forwards it sends
 // the same bytes.
@@ -23,7 +23,7 @@ type Result int
 
 // The results of Decoder.Feed.
 const (
-	// NotHotty: the sequence is not HOTTY's, and the caller handles it.
+	// NotHotty: the sequence is not hotty's, and the caller handles it.
 	NotHotty Result = iota
 	// Partial: a chunk of a message that is not complete yet (SPEC §3.4).
 	Partial

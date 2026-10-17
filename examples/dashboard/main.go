@@ -11,7 +11,7 @@
 // so it comes back without its document being sent again. A press on a card
 // selects it, and the footer, drawn in cells, says more about it.
 //
-// On a terminal that is not a HOTTY host, each endpoint is a line of cells
+// On a terminal that is not a hotty host, each endpoint is a line of cells
 // with a sparkline (chart.Spark).
 //
 // Keys: ↑ and ↓ (or k and j) select, r probes now, q quits.

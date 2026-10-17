@@ -1,4 +1,4 @@
-// hottytea: HOTTY for a full-screen Bubble Tea program. A module of its
+// hottytea: hotty for a full-screen Bubble Tea program. A module of its
 // own for Bubble Tea.
 module github.com/neuroplastio/hotty-go/hottytea
 

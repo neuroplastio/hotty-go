@@ -257,7 +257,7 @@ func TestCells(t *testing.T) {
 	stop()
 	// The query was all: Text fails the test on any other command.
 	if n := len(h.Commands()); n != 1 {
-		t.Errorf("%d HOTTY commands sent", n)
+		t.Errorf("%d hotty commands sent", n)
 	}
 }
 

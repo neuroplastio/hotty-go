@@ -148,7 +148,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// command is the last HOTTY command the program sent with these keys.
+// command is the last hotty command the program sent with these keys.
 // The test reads the host's copies of the commands while the program runs:
 // a surface's own state is the host's to change then.
 func command(h *hottytest.Host, keys ...string) (hotty.Message, bool) {
@@ -295,7 +295,7 @@ func TestAProgramInText(t *testing.T) {
 	h.Type("q")
 	wait()
 	if n := len(h.Commands()); n != 1 {
-		t.Errorf("%d HOTTY commands, want the query alone", n)
+		t.Errorf("%d hotty commands, want the query alone", n)
 	}
 }
 

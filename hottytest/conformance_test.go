@@ -356,7 +356,7 @@ func (r *requirements) UnmarshalJSON(b []byte) error {
 // commands, is skipped.
 var implements = map[string]bool{"hover": true, "count": true, "menu": true}
 
-// The host passes the HOTTY conformance vectors, as hotty-blitz and
+// The host passes the hotty conformance vectors, as hotty-blitz and
 // xterm-addon-hotty do.
 func TestConformanceVectors(t *testing.T) {
 	data, err := os.ReadFile("../testdata/conformance/vectors.json")
@@ -411,7 +411,7 @@ func TestConformanceVectors(t *testing.T) {
 					continue
 				}
 				if st.Write != nil {
-					// What the program writes that is not HOTTY's: this
+					// What the program writes that is not hotty's: this
 					// host is a terminal, and takes it as one.
 					_, _ = h.Write([]byte(*st.Write))
 					continue

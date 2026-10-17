@@ -1,8 +1,8 @@
 // Card prints the result of a deploy as a card that stays in the
-// scrollback, as a box of text where the terminal is not a HOTTY host, and
+// scrollback, as a box of text where the terminal is not a hotty host, and
 // as one line of data into a pipe.
 //
-// It shows the three renditions every HOTTY program has (SPEC §14): which
+// It shows the three renditions every hotty program has (SPEC §14): which
 // one a run takes, and how each is made. The card is sent detached, links
 // only as hyperlinks, so nothing in it reports to the shell after the
 // program exits (SPEC §5.5).
