@@ -29,7 +29,7 @@ func from(ctl hotty.Control, body string) tea.Msg {
 
 func caps(n string) tea.Msg {
 	return from(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: n}},
-		`{"v":"0.3","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64},"host":"test"}`)
+		`{"v":"0.4","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64},"host":"test"}`)
 }
 
 var da1 = uv.PrimaryDeviceAttributesEvent{62, 22}
@@ -533,12 +533,12 @@ func TestWatchFile(t *testing.T) {
 // A caps event changes Caps, and still comes back as an event (SPEC §4).
 func TestCapsEventsAreMerged(t *testing.T) {
 	s := native()
-	s.Caps = hotty.Caps{V: hotty.Version, Mod: "Control", Scheme: "dark"}
-	msg, _ := s.Update(from(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: "caps"}}, `{"mod":"Meta","cellcss":{"w":10.0,"h":20.0}}`))
+	s.Caps = hotty.Caps{V: hotty.Version, Mod: "ctrl", Scheme: "dark"}
+	msg, _ := s.Update(from(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: "caps"}}, `{"mod":"super","cellcss":{"w":10.0,"h":20.0}}`))
 	if e, ok := msg.(EventMsg); !ok || e.Kind != hotty.EventCaps {
 		t.Fatalf("got %#v", msg)
 	}
-	if s.Caps.Mod != "Meta" || s.Caps.CellCSS.H != 20 || s.Caps.Scheme != "dark" {
+	if s.Caps.Mod != "super" || s.Caps.CellCSS.H != 20 || s.Caps.Scheme != "dark" {
 		t.Errorf("caps %+v", s.Caps)
 	}
 }

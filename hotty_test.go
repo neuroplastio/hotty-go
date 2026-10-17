@@ -293,7 +293,7 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.3\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.4\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }
@@ -560,7 +560,7 @@ func TestEvents(t *testing.T) {
 	}
 
 	drag, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "drag"}, {"t", "c3_1"}}, `{"c":-2,"r":7,"mods":5}`))
-	if d := drag.Drag; d == nil || d.Col != -2 || d.Row != 7 || drag.Mods != ModShift|ModControl || d.HasX || d.HasY {
+	if d := drag.Drag; d == nil || d.Col != -2 || d.Row != 7 || drag.Mods != ModShift|ModCtrl || d.HasX || d.HasY {
 		t.Errorf("Drag = %+v, mods %d", d, drag.Mods)
 	}
 	steps, _ := EventOf(host(Control{{"a", "ev"}, {"s", "grid"}, {"e", "dragend"}, {"t", ""}}, `{"c":0,"r":0,"x":0}`))
@@ -587,7 +587,7 @@ func TestEvents(t *testing.T) {
 		t.Errorf("a press's Area = %+v, mods %d", a, title.Mods)
 	}
 	// A press with no element and a modifier has a detail of mods alone.
-	if p, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}}, `{"mods":8}`)); p.Mods != ModMeta || p.Area != nil || p.Target != "" {
+	if p, _ := EventOf(host(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}}, `{"mods":8}`)); p.Mods != ModSuper || p.Area != nil || p.Target != "" {
 		t.Errorf("a press on nothing: %+v", p)
 	}
 	if env.Mods != 0 {
@@ -611,12 +611,12 @@ func TestEvents(t *testing.T) {
 func TestEncodeEvent(t *testing.T) {
 	on, x := true, 3
 	for _, e := range []Event{
-		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Mods: ModShift | ModMeta, Count: 1},
+		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Mods: ModShift | ModSuper, Count: 1},
 		{Surface: "f", Kind: EventClick, Target: "go", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 2},
 		{Surface: "f", Kind: EventClick, Target: "", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}, Count: 1},
 		{Surface: "f", Kind: EventClick, Target: "plain", Count: 1},
 		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}, Mods: ModAlt},
-		{Surface: "f", Kind: EventPress, Mods: ModControl},
+		{Surface: "f", Kind: EventPress, Mods: ModCtrl},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
 		{Surface: "f", Kind: EventInput, Target: "q", Value: "ab"},
@@ -695,7 +695,7 @@ func TestReplies(t *testing.T) {
 
 func TestCaps(t *testing.T) {
 	r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
-		`{"v":"0.3","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
+		`{"v":"0.4","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
 			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
 	caps := r.Caps
 	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
@@ -714,7 +714,7 @@ func TestCaps(t *testing.T) {
 	if HasFeature(none, FeatureHover) || Light(none) {
 		t.Error("a host that lists nothing")
 	}
-	for _, bad := range []string{`{"v":`, `{"v":"0.3","scale":2}`, `{"v":"0.3","features":["hover",3]}`, `{"v":"0.3","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
+	for _, bad := range []string{`{"v":`, `{"v":"0.4","scale":2}`, `{"v":"0.4","features":["hover",3]}`, `{"v":"0.4","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
 		if r, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, bad)); r.Caps != nil {
 			t.Errorf("caps from %s", bad)
 		}
@@ -822,20 +822,20 @@ func TestVectorsAreCurrent(t *testing.T) {
 func TestKeymapProgram(t *testing.T) {
 	// The root gives the arrows and End to the program; the element takes
 	// End back with an action, which counts for nothing outside a field.
-	m := ParseKeymap(Platform{}, strings.Join([]string{"ArrowDown=program ArrowUp=program End=program j=program", "End=line-end"}, " "))
+	m := ParseKeymap(Platform{}, strings.Join([]string{"arrow_down=program arrow_up=program end=program j=program", "end=line-end"}, " "))
 	for key, want := range map[string]bool{
-		"ArrowDown": true, "Shift+ArrowDown": true, "ArrowUp": true, "j": true,
-		"End": false, "Home": false, "Enter": false, "J": false, "Control+ArrowDown": false,
-		"Tab": false, "Escape": false, "": false, "Hyper+a": false,
+		"arrow_down": true, "shift+arrow_down": true, "arrow_up": true, "j": true,
+		"end": false, "home": false, "enter": false, "shift+j": false, "ctrl+arrow_down": false,
+		"tab": false, "escape": false, "": false, "hyper+a": false, "mod+j": false,
 	} {
 		if got := m.Program(key); got != want {
 			t.Errorf("Program(%q) = %v, want %v", key, got, want)
 		}
 	}
-	// A key with Shift bound to an action of its own is not looked up
-	// without Shift.
-	if ParseKeymap(Platform{}, "ArrowDown=program Shift+ArrowDown=line-next").Program("Shift+ArrowDown") {
-		t.Error("Shift+ArrowDown, bound to line-next, went to the program")
+	// A key with shift bound to an action of its own is not looked up
+	// without shift.
+	if ParseKeymap(Platform{}, "arrow_down=program shift+arrow_down=line-next").Program("shift+arrow_down") {
+		t.Error("shift+arrow_down, bound to line-next, went to the program")
 	}
 	// A key bound to prefix is the program's, and Prefix says it of it
 	// alone.
@@ -844,34 +844,43 @@ func TestKeymapProgram(t *testing.T) {
 		t.Error("prefix and program")
 	}
 	// In a field's keymap, Lookup says as much.
-	f := Resolve(Platform{}, false, "ArrowLeft=program")
-	if !f.Program("ArrowLeft") || f.Lookup("ArrowLeft") != "" || f.Program("ArrowRight") {
-		t.Error("a field's keymap: ArrowLeft is not the program's, or ArrowRight is")
+	f := Resolve(Platform{}, false, "arrow_left=program")
+	if !f.Program("arrow_left") || f.Lookup("arrow_left") != "" || f.Program("arrow_right") {
+		t.Error("a field's keymap: arrow_left is not the program's, or arrow_right is")
 	}
-	if g := Resolve(Platform{}, false, "Control+k=prefix"); g.Lookup("Control+k") != "" || !g.Prefix("Control+k") {
+	if g := Resolve(Platform{}, false, "ctrl+k=prefix"); g.Lookup("ctrl+k") != "" || !g.Prefix("ctrl+k") {
 		t.Error("a field does not use a key bound to prefix")
+	}
+	if !f.Binds("shift+arrow_left") || f.Binds("ctrl+key_w") || Resolve(Platform{}, false).Binds("shift+g") {
+		t.Error("Binds")
 	}
 }
 
-// A Platform reads Mod as its own modifier (SPEC §10.4).
+// A Platform reads mod as its own modifier (SPEC §10.4).
 func TestPlatformReadKey(t *testing.T) {
 	for _, c := range []struct {
 		p          Platform
 		name, want string
 	}{
-		{Platform{}, "Mod+a", "Control+a"},
-		{Platform{}, "Shift+Mod+z", "Control+Z"},
-		{Platform{Mod: "Meta"}, "Mod+a", "Meta+a"},
-		{Platform{Mod: "Meta"}, "Control+a", "Control+a"},
-		{Platform{Mod: "Meta"}, "Shift+Mod+ArrowLeft", "Meta+Shift+ArrowLeft"},
-		{Platform{}, "Mod+Control+x", "Control+x"},
+		{Platform{}, "mod+a", "ctrl+a"},
+		{Platform{}, "Shift+Mod+z", "ctrl+shift+z"},
+		{Platform{Mod: "super"}, "mod+a", "super+a"},
+		{Platform{Mod: "super"}, "Ctrl+a", "ctrl+a"},
+		{Platform{Mod: "super"}, "Shift+Mod+ArrowLeft", "super+shift+arrow_left"},
+		{Platform{Mod: "other"}, "mod+x", "ctrl+x"},
+		{Platform{}, "G", "g"},
 	} {
 		if got, ok := c.p.ReadKey(c.name); !ok || got != c.want {
 			t.Errorf("%+v.ReadKey(%q) = %q, %v; want %q", c.p, c.name, got, ok, c.want)
 		}
 	}
-	if _, ok := (Platform{}).ReadKey("Mod+Nope+a"); ok {
-		t.Error("a name that does not parse read")
+	for _, name := range []string{"mod+nope+a", "mod+ctrl+x", "meta+a", ""} {
+		if got, ok := (Platform{}).ReadKey(name); ok {
+			t.Errorf("ReadKey(%q) = %q, want none", name, got)
+		}
+	}
+	if _, ok := ParseKey("mod+a"); ok {
+		t.Error("ParseKey read mod")
 	}
 }
 
@@ -928,7 +937,7 @@ func nested(n int) *MenuTree {
 
 // testMenu is a leader with a group in it, as a program names its bindings.
 var testMenu = &MenuTree{Label: "Files", Items: []MenuItem{
-	{Key: "Space", Label: "Leader", Enabled: true, Items: []MenuItem{
+	{Key: "space", Label: "Leader", Enabled: true, Items: []MenuItem{
 		{Key: "f", Label: "File", Enabled: true, Items: []MenuItem{
 			{Key: "n", Label: "New file", Name: "file-new", Enabled: true},
 			{Key: "r", Label: "Rename", Name: "file-rename"},
@@ -984,7 +993,7 @@ func TestMenuShowOf(t *testing.T) {
 		}
 		return m
 	}
-	if seq, err := MenuShowOf(read(MenuShow([]string{"Space", "f"}))); err != nil || !slices.Equal(seq, []string{"Space", "f"}) {
+	if seq, err := MenuShowOf(read(MenuShow([]string{"space", "f"}))); err != nil || !slices.Equal(seq, []string{"space", "f"}) {
 		t.Errorf("keys: %v, %v", seq, err)
 	}
 	for name, m := range map[string]Message{
@@ -998,8 +1007,8 @@ func TestMenuShowOf(t *testing.T) {
 	}
 	for name, m := range map[string]Message{
 		"not a menu":   read(Hide("s")),
-		"not a map":    host(Control{{"a", "menu"}, {"show", "1"}}, `["Space"]`),
-		"seq a str":    host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":"Space"}`),
+		"not a map":    host(Control{{"a", "menu"}, {"show", "1"}}, `["space"]`),
+		"seq a str":    host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":"space"}`),
 		"seq a number": host(Control{{"a", "menu"}, {"show", "1"}}, `{"seq":[1]}`),
 	} {
 		var e *Error
@@ -1013,7 +1022,7 @@ func TestMenuShowOf(t *testing.T) {
 }
 
 func TestMenuLevelOf(t *testing.T) {
-	linux, mac := Platform{Mod: "Control"}, Platform{Mod: "Meta"}
+	linux, mac := Platform{Mod: "ctrl"}, Platform{Mod: "super"}
 	keys := func(items []MenuItem) (out []string) {
 		for _, it := range items {
 			out = append(out, it.Key)
@@ -1024,14 +1033,14 @@ func TestMenuLevelOf(t *testing.T) {
 		seq  []string
 		want []string // nil: no group
 	}{
-		{nil, []string{"Space", ""}},
-		{[]string{"Space"}, []string{"f", "q", ""}},
-		{[]string{"Space", "f"}, []string{"n", "r"}},
-		{[]string{"Space", "q"}, nil}, // a leaf is no group
+		{nil, []string{"space", ""}},
+		{[]string{"space"}, []string{"f", "q", ""}},
+		{[]string{"space", "f"}, []string{"n", "r"}},
+		{[]string{"space", "q"}, nil}, // a leaf is no group
 		{[]string{"x"}, nil},
-		{[]string{"Space", "f", "n"}, nil},
+		{[]string{"space", "f", "n"}, nil},
 		{[]string{""}, nil}, // an item with no key is reached by none
-		{[]string{"Control+"}, nil},
+		{[]string{"ctrl+"}, nil},
 	} {
 		items, ok := MenuLevelOf(testMenu, linux, c.seq)
 		if ok != (c.want != nil) || !slices.Equal(keys(items), c.want) {
@@ -1041,14 +1050,14 @@ func TestMenuLevelOf(t *testing.T) {
 	if items, ok := MenuLevelOf(nil, linux, nil); ok || items != nil {
 		t.Errorf("no menu: %v, %v", items, ok)
 	}
-	// Keys compare as the platform reads them: Mod is Control on one and
-	// Meta on the other.
-	m := &MenuTree{Items: []MenuItem{{Key: "Mod+k", Items: []MenuItem{{Key: "a"}}}}}
+	// Keys compare as the platform reads them: mod is ctrl on one and
+	// super on the other.
+	m := &MenuTree{Items: []MenuItem{{Key: "mod+k", Items: []MenuItem{{Key: "a"}}}}}
 	for _, c := range []struct {
 		p    Platform
 		key  string
 		want bool
-	}{{linux, "Control+k", true}, {linux, "Meta+k", false}, {mac, "Meta+k", true}, {mac, "Control+k", false}, {mac, "Mod+k", true}} {
+	}{{linux, "ctrl+k", true}, {linux, "super+k", false}, {mac, "super+k", true}, {mac, "ctrl+k", false}, {mac, "mod+k", true}} {
 		if _, ok := MenuLevelOf(m, c.p, []string{c.key}); ok != c.want {
 			t.Errorf("%s on %s: %v", c.key, c.p.Mod, ok)
 		}

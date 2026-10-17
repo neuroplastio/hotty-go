@@ -1147,7 +1147,7 @@ func TestReplies(t *testing.T) {
 
 func TestBody(t *testing.T) {
 	r, _ := hotty.ReplyOf(hotty.Message{Control: hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}},
-		Payload: Body(`{"v":"0.3","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
+		Payload: Body(`{"v":"0.4","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
 	if c := r.Caps; c == nil || c.Scale != 2 || c.CellCSS.W != 9 || c.Limits["surfaces"] != 3 {
 		t.Errorf("caps %+v", c)
 	}
@@ -1205,14 +1205,14 @@ func TestQuietDefaults(t *testing.T) {
 func (h *Host) sentR() []hotty.Reply { r, _ := h.sentBoth(); return r }
 
 // A key bound to prefix reaches the program, and so does every key after
-// it, Tab and Escape too, until the program sends a=focus or a=blur, the
+// it, tab and escape too, until the program sends a=focus or a=blur, the
 // surface loses the keyboard, or the user focuses an element with a press
 // (SPEC §10.5).
 func TestPrefix(t *testing.T) {
-	doc := `<button id=b data-keys="g=prefix">B</button><button id=c>C</button><input id=f data-keys="Control+k=prefix">`
+	doc := `<button id=b data-keys="g=prefix">B</button><button id=c>C</button><input id=f data-keys="ctrl+k=prefix">`
 	h := shown(t, "x", doc)
 	send(h, hotty.Focus("x", "b"))
-	for _, k := range []string{"g", "Space", "Tab", "Escape", "Enter"} {
+	for _, k := range []string{"g", "space", "tab", "escape", "enter"} {
 		if h.Key(k) {
 			t.Errorf("%s was used after a prefix", k)
 		}
@@ -1222,38 +1222,38 @@ func TestPrefix(t *testing.T) {
 	}
 	h.drain()
 	send(h, hotty.Focus("x", ""))
-	if h.Prefix() != "" || !h.Key("Space") {
+	if h.Prefix() != "" || !h.Key("space") {
 		t.Error("a=focus ends the prefix")
 	}
 	expect(t, sent(h), "ev click t=b")
 	h.Key("g")
 	send(h, hotty.Blur("x"))
 	send(h, hotty.Focus("x", "b"))
-	if h.Prefix() != "" || !h.Key("Tab") {
+	if h.Prefix() != "" || !h.Key("tab") {
 		t.Error("a=blur ends the prefix")
 	}
-	h.Key("Shift+Tab")
+	h.Key("shift+tab")
 	// A press that focuses an element ends it; so does losing the keyboard.
 	send(h, hotty.Focus("x", "b"))
 	h.Key("g")
 	_ = h.Click("x", "c")
-	if h.Prefix() != "" || !h.Key("Space") {
+	if h.Prefix() != "" || !h.Key("space") {
 		t.Error("a press ends the prefix")
 	}
 	send(h, hotty.Focus("x", "b"))
 	h.Key("g")
 	_ = h.Blur("x")
 	send(h, hotty.Focus("x", "c"))
-	if !h.Key("Space") {
+	if !h.Key("space") {
 		t.Error("losing the keyboard ends the prefix")
 	}
 	// In a text field: nothing is typed or edited after it.
 	h.drain()
 	send(h, hotty.Focus("x", "f"))
 	h.Key("a")
-	h.Key("Control+k")
+	h.Key("ctrl+k")
 	h.Key("b")
-	h.Key("Backspace")
+	h.Key("backspace")
 	send(h, hotty.Focus("x", "f"))
 	h.Key("c")
 	if v, _ := h.Surface("x").Value("f"); v != "ac" {
@@ -1266,9 +1266,9 @@ func TestPrefix(t *testing.T) {
 // (SPEC §10.7).
 func TestMenu(t *testing.T) {
 	menu := &hotty.MenuTree{Label: "Files", Items: []hotty.MenuItem{
-		{Key: "Space", Label: "Leader", Enabled: true, Items: []hotty.MenuItem{
+		{Key: "space", Label: "Leader", Enabled: true, Items: []hotty.MenuItem{
 			{Key: "f", Label: "+file", Enabled: true, Items: []hotty.MenuItem{{Key: "n", Label: "New", Name: "new", Enabled: true}}},
-			{Key: "Mod+q", Label: "Quit", Name: "quit", Enabled: true},
+			{Key: "mod+q", Label: "Quit", Name: "quit", Enabled: true},
 			{Label: "Sort", Name: "sort", Enabled: true},
 		}},
 	}}
@@ -1279,14 +1279,14 @@ func TestMenu(t *testing.T) {
 		h.drain()
 		send(h, hotty.Menu(menu, hotty.N(1)))
 		expect(t, sent(h), "ok re=menu")
-		if got := h.Menu(); got == nil || got.Items[0].Key != "Space" {
+		if got := h.Menu(); got == nil || got.Items[0].Key != "space" {
 			t.Fatalf("Menu() = %+v", got)
 		}
 		if h.Shown() != nil {
 			t.Fatalf("a menu shows nothing: %+v", h.Shown())
 		}
-		send(h, hotty.MenuShow([]string{"Space"}))
-		if got := h.Shown(); len(got) != 2 || got[0].Key != "f" || got[1].Key != "Mod+q" {
+		send(h, hotty.MenuShow([]string{"space"}))
+		if got := h.Shown(); len(got) != 2 || got[0].Key != "f" || got[1].Key != "mod+q" {
 			t.Fatalf("Shown() = %+v", got)
 		}
 	}
@@ -1296,16 +1296,16 @@ func TestMenu(t *testing.T) {
 		t.Error("show=0 hides the level, not the menu")
 	}
 	send(h, hotty.MenuShow(nil))
-	if got := h.Shown(); len(got) != 1 || got[0].Key != "Space" {
+	if got := h.Shown(); len(got) != 1 || got[0].Key != "space" {
 		t.Errorf("the top level: %+v", got)
 	}
-	send(h, hotty.MenuShow([]string{"Space", "q"}))
+	send(h, hotty.MenuShow([]string{"space", "q"}))
 	if h.Shown() != nil {
 		t.Error("keys that reach no group")
 	}
 	show()
 	h.Key("f") // listed: the level stays until the program shows another
-	h.Key("Control+q")
+	h.Key("ctrl+q")
 	if h.Shown() == nil {
 		t.Error("a key it lists hides it")
 	}
@@ -1314,9 +1314,9 @@ func TestMenu(t *testing.T) {
 		t.Error("a key it does not list")
 	}
 	show()
-	h.Key("Escape")
+	h.Key("escape")
 	if h.Shown() != nil {
-		t.Error("Escape")
+		t.Error("escape")
 	}
 	show()
 	h.Type("z")
@@ -1326,7 +1326,7 @@ func TestMenu(t *testing.T) {
 	// A new menu shows the same keys' level of it, and one that no longer
 	// has the group shows nothing; a hidden level stays hidden.
 	show()
-	next := &hotty.MenuTree{Items: []hotty.MenuItem{{Key: "Space", Enabled: true, Items: []hotty.MenuItem{{Key: "w", Label: "Write"}}}}}
+	next := &hotty.MenuTree{Items: []hotty.MenuItem{{Key: "space", Enabled: true, Items: []hotty.MenuItem{{Key: "w", Label: "Write"}}}}}
 	send(h, hotty.Menu(next))
 	if got := h.Shown(); len(got) != 1 || got[0].Key != "w" {
 		t.Errorf("a new menu: %+v", got)
@@ -1365,7 +1365,7 @@ func TestMenu(t *testing.T) {
 	// a host without the feature.
 	lenient := New(t, Lenient())
 	for _, c := range []hotty.Control{{{K: "a", V: "menu"}, {K: "n", V: "2"}}, {{K: "a", V: "menu"}, {K: "n", V: "2"}, {K: "show", V: "1"}}} {
-		send(lenient, hotty.Encode(c, Body(`["Space"]`)))
+		send(lenient, hotty.Encode(c, Body(`["space"]`)))
 		if r := lenient.sentR(); len(r) != 1 || r[0].Code != hotty.EINVAL {
 			t.Errorf("a body that is none: %+v", r)
 		}
@@ -1425,19 +1425,19 @@ func TestPick(t *testing.T) {
 // program last heard (SPEC §4, §9); a zoom says nothing.
 func TestChangeCaps(t *testing.T) {
 	h := New(t)
-	h.Change(func(c *hotty.Caps) { c.Mod = "Meta" })
+	h.Change(func(c *hotty.Caps) { c.Mod = "super" })
 	expect(t, sent(h)) // the program has not asked
 	send(h, hotty.Query(1))
 	h.drain()
 	h.Change(func(c *hotty.Caps) { c.Scale = 2 })
 	expect(t, sent(h))
-	h.Change(func(c *hotty.Caps) { c.CellCSS = hotty.Size{W: 10, H: 20}; c.Mod = "Control"; c.Features = nil })
+	h.Change(func(c *hotty.Caps) { c.CellCSS = hotty.Size{W: 10, H: 20}; c.Mod = "ctrl"; c.Features = nil })
 	evs := h.sentEvents()
 	if len(evs) != 1 || evs[0].Kind != hotty.EventCaps || evs[0].Surface != "" || evs[0].Changed == nil {
 		t.Fatalf("events %+v", evs)
 	}
 	got := evs[0].Changed
-	if got.CellCSS != (hotty.Size{W: 10, H: 20}) || got.Mod != "Control" || got.Scale != 2 || len(got.Features) != 0 {
+	if got.CellCSS != (hotty.Size{W: 10, H: 20}) || got.Mod != "ctrl" || got.Scale != 2 || len(got.Features) != 0 {
 		t.Errorf("changed %+v", got)
 	}
 	// The scale rode along; it is heard now, and the features are empty.
@@ -1445,7 +1445,7 @@ func TestChangeCaps(t *testing.T) {
 	if merged.CellCSS.H != 20 || merged.Features != nil || merged.Scale != 2 {
 		t.Errorf("merged %+v", merged)
 	}
-	h.Change(func(c *hotty.Caps) { c.Edit = map[string][]string{"copy": {"Meta+c"}} })
+	h.Change(func(c *hotty.Caps) { c.Edit = map[string][]string{"copy": {"super+c"}} })
 	if evs := h.sentEvents(); len(evs) != 1 || len(evs[0].Changed.Edit["copy"]) != 1 {
 		t.Errorf("edit: %+v", evs)
 	}
@@ -1469,11 +1469,11 @@ func TestMods(t *testing.T) {
 	h := New(t)
 	send(h, hotty.Doc("m", `<button id=b>b</button>`), hotty.Place("m", hotty.Placement{Cols: 10, Rows: 1, Press: hotty.On}))
 	h.drain()
-	_ = h.Click("m", "b", "shift", "meta")
+	_ = h.Click("m", "b", "shift", "super")
 	_ = h.Press("m", "", "ctrl")
 	_ = h.Click("m", "b", "alt")
 	expect(t, sent(h), `ev press t=b {"mods":9}`, "ev focus t=b", `ev click t=b {"mods":9}`, `ev press t= {"mods":4}`)
-	h.Key("Shift+Enter")
+	h.Key("shift+enter")
 	expect(t, sent(h), `ev click t=b {"mods":1}`)
 }
 

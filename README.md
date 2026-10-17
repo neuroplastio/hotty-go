@@ -6,15 +6,17 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks HOTTY 0.3: a host's replies and events carry msgpack bodies
-(SPEC §3.3), a delta carries a list of ops (SPEC §6), and its query lists
-the version it speaks (`a=q:n=1:v=0.3`, SPEC §4). A terminal of another
-HOTTY version is no host to it, and the program draws in cells. A program
-written for 0.2 ports as hotty's
+It speaks HOTTY 0.4: a key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
+name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
+events carry msgpack bodies (SPEC §3.3), and its query lists the version it
+speaks (`a=q:n=1:v=0.4`, SPEC §4). A terminal of another HOTTY version is no
+host to it, and the program draws in cells. A program written for 0.3 ports
+as hotty's
 [CHANGES.md](https://github.com/neuroplastio/hotty/blob/main/CHANGES.md)
-says: the changes of a frame go in one `hotty.Delta` of `hotty.Op`s, a
-host's optional features are asked with `hotty.HasFeature`, and a submit's
-fields are an ordered list.
+says: its `data-keys`, menu keys and tests move to the new names, a
+`hotty.Platform`'s `Mod` is `"ctrl"` or `"super"`, a key is read with
+`hotty.ParseKey` or `Platform.ReadKey`, and `hotty.ModControl` and
+`hotty.ModMeta` are `hotty.ModCtrl` and `hotty.ModSuper`.
 
 The SDK:
 

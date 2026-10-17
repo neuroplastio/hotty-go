@@ -253,7 +253,7 @@ func (h *Host) Click(surface, id string, keys ...string) error
 
 Click clicks the element with an id, as the user does (SPEC §9): a press first, if the placement asks for presses; the keyboard, if the element takes focus, or else back to the terminal from the surface that had it (blur, SPEC §10.1); then click, reported by the nearest element from it outward that reports clicks, if that has an id. A link reports its href, and a hyperlink (target=\_blank) is opened by the terminal and reports nothing (Opened). A submit button then submits its form.
 
-keys are the modifier keys held ("shift", "ctrl", "alt", "meta"); the click carries those held at its release (SPEC §9). A press with Alt is the program's own gesture (SPEC §9.2): the surface hears nothing of it, and the pointer is out of its window.
+keys are the modifier keys held ("shift", "ctrl", "alt", "super"); the click carries those held at its release (SPEC §9). A press with Alt is the program's own gesture (SPEC §9.2): the surface hears nothing of it, and the pointer is out of its window.
 
 On a detached surface the click does what is local and reports nothing: ErrDetached.
 
@@ -351,7 +351,7 @@ DragOver is DragMove with the pointer at step tx, ty of t, for a t with drop in 
 func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error
 ```
 
-DragStart presses a mouse's primary button on the element with an id and starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier keys held ("shift", "ctrl", "alt", "meta"). The press is a press like any other: press first, if the placement asks for presses; then dragstart, from the nearest element from it outward with drag in its data-on; then the keyboard, as a click moves it. ErrNoReport, and no drag, if no element opts in or the one that does has no id.
+DragStart presses a mouse's primary button on the element with an id and starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier keys held ("shift", "ctrl", "alt", "super"). The press is a press like any other: press first, if the placement asks for presses; then dragstart, from the nearest element from it outward with drag in its data-on; then the keyboard, as a click moves it. ErrNoReport, and no drag, if no element opts in or the one that does has no id.
 
 The host lays nothing out, so a test names what is under the pointer: DragMove for each element or cell crossed, then DragEnd.
 
@@ -427,20 +427,20 @@ Invalid counts the malformed messages the program sent.
 func (h *Host) Key(key string) (used bool)
 ```
 
-Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it: a W3C UI Events key value after its modifiers, joined by "+": "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown", "Escape", "Control+s".
+Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it, as myelin key names do: its modifiers, joined by "+", and a character, a physical key or a modifier key: "a", "shift+a", "space", "enter", "tab", "shift+tab", "backspace", "arrow\_down", "escape", "ctrl+s". A press has one name here, as the program would read it (SPEC §10.4): a binding of a physical key (ctrl+key\_w) holds only where the test gives that name. A name that does not parse is no key; the program gets nothing of it.
 
-Tab and Shift+Tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); a move whose key has Shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit commits the value and submits its form.
+tab and shift+tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); a move whose key has shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit commits the value and submits its form.
 
-Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with Shift only:
+Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with shift only:
 
-  - a button, a link, a summary: Space and Enter click it (another element that reports clicks, data-on~=click, uses no keys);
-  - a checkbox or a radio button: Space checks it, Enter submits its form;
+  - a button, a link, a summary: space and enter click it (another element that reports clicks, data-on~=click, uses no keys);
+  - a checkbox or a radio button: space checks it, enter submits its form;
   - a date or time input: the keys a text input's default keymap binds, and characters; the arrows up and down and the page keys are used;
-  - a select: the arrows, Home and End pick an option, the page keys as far as Home and End, a character the next option its label starts, past disabled ones; a pick sends input (with data-on~=input) and change at once. Space and Enter do nothing: this host shows no list.
+  - a select: the arrows, home and end pick an option, the page keys as far as home and end, a character the next option its label starts, past disabled ones; a pick sends input (with data-on~=input) and change at once. space and enter do nothing: this host shows no list.
 
-With no element focused there is no keymap: the data-keys of the document are not read, and every key but Tab is the program's.
+With no element focused there is no keymap: the data-keys of the document are not read, and every key but tab is the program's.
 
-Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, Enter, Tab, Escape, Backspace, the arrows and the editing keys, and Control or Alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
+Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, enter, tab, escape, backspace, the arrows and the editing keys, and ctrl or alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
 
 ### <a id="Host.Lines"></a>func (*Host) Lines
 

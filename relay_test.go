@@ -92,21 +92,21 @@ func TestHostReplies(t *testing.T) {
 	}
 	// The capabilities go as they came, fields this package does not know
 	// included, and uncompressed however long.
-	raw := body(`{"v":"0.3","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
+	raw := body(`{"v":"0.4","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
 	enc := ReplyCaps("1", Caps{Raw: raw})
 	if strings.Contains(enc, "o=z") {
 		t.Error("a caps reply compressed")
 	}
 	r, _ = ReplyOf(decodeOne(t, enc))
-	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.3" {
+	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.4" {
 		t.Errorf("ReplyCaps: %+v", caps)
 	}
 	// Written, Caps has only what it has.
-	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.3", Host: "h"})))
-	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e33a4686f7374a168" { // {"v":"0.3","host":"h"}
+	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.4", Host: "h"})))
+	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e34a4686f7374a168" { // {"v":"0.4","host":"h"}
 		t.Errorf("written: %x", r.Message.Payload)
 	}
-	if caps, ok := CapsOf(raw); !ok || caps.V != "0.3" || !bytes.Equal(caps.Raw, raw) {
+	if caps, ok := CapsOf(raw); !ok || caps.V != "0.4" || !bytes.Equal(caps.Raw, raw) {
 		t.Errorf("CapsOf: %+v", caps)
 	}
 	if _, ok := CapsOf(body(`{"v":2}`)); ok {
@@ -117,8 +117,8 @@ func TestHostReplies(t *testing.T) {
 func TestReplyQuery(t *testing.T) {
 	caps := Caps{V: Version, Host: "h"}
 	for v, speaks := range map[string]bool{
-		"0.3": true, "0.2,0.3": true, "99.0,0.3": true,
-		"": false, "0.2": false, "0.30": false, "00.3": false, "0.3.0": false,
+		"0.4": true, "0.3,0.4": true, "99.0,0.4": true,
+		"": false, "0.3": false, "0.40": false, "00.4": false, "0.4.0": false,
 	} {
 		q := Control{{"a", "q"}, {"n", "4"}}
 		if v != "" {

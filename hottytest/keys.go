@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/neuroplastio/myelin/myelinkey"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
@@ -15,11 +16,15 @@ import (
 
 // Key types a key as the user does, and does with it what SPEC §10.2 has a
 // host do while a surface has the keyboard. The key is named as SPEC §10.4
-// names it: a W3C UI Events key value after its modifiers, joined by "+":
-// "a", "A", "Space", "Enter", "Tab", "Shift+Tab", "Backspace", "ArrowDown",
-// "Escape", "Control+s".
+// names it, as myelin key names do: its modifiers, joined by "+", and a
+// character, a physical key or a modifier key: "a", "shift+a", "space",
+// "enter", "tab", "shift+tab", "backspace", "arrow_down", "escape", "ctrl+s".
+// A press has one name here, as the program would read it (SPEC §10.4): a
+// binding of a physical key (ctrl+key_w) holds only where the test gives
+// that name. A name that does not parse is no key; the program gets nothing
+// of it.
 //
-// Tab and Shift+Tab move focus from the focused element to the next or the
+// tab and shift+tab move focus from the focused element to the next or the
 // previous of the surface's focusable elements in tree order, those with a
 // negative tabindex and those in an inert subtree left out (an element
 // focused with a negative tabindex is where they start from); past the
@@ -27,7 +32,7 @@ import (
 // its keymap says (hotty.Resolve, with the data-keys of the elements from
 // the root to it): it edits its value at a caret and a selection this host
 // keeps, as hottyedit.Field does, with an input event for each edit
-// (data-on~=input); a move whose key has Shift selects
+// (data-on~=input); a move whose key has shift selects
 // (hotty.Keymap.Selects), select-all selects the value, characters type in
 // place of the selection, and submit commits the value and submits its
 // form.
@@ -37,25 +42,25 @@ import (
 // the program, and its other bindings do nothing. This host does not
 // scroll, so a key bound to a scroll action goes on as if the keymap did
 // not bind it (SPEC §10.2). The element takes the other keys of its row of
-// the table, unmodified or with Shift only:
-//   - a button, a link, a summary: Space and Enter click it (another
+// the table, unmodified or with shift only:
+//   - a button, a link, a summary: space and enter click it (another
 //     element that reports clicks, data-on~=click, uses no keys);
-//   - a checkbox or a radio button: Space checks it, Enter submits its
+//   - a checkbox or a radio button: space checks it, enter submits its
 //     form;
 //   - a date or time input: the keys a text input's default keymap binds,
 //     and characters; the arrows up and down and the page keys are used;
-//   - a select: the arrows, Home and End pick an option, the page keys
-//     as far as Home and End, a character the next option its label
+//   - a select: the arrows, home and end pick an option, the page keys
+//     as far as home and end, a character the next option its label
 //     starts, past disabled ones; a pick sends input (with data-on~=input)
-//     and change at once. Space and Enter do nothing: this host shows no
+//     and change at once. space and enter do nothing: this host shows no
 //     list.
 //
 // With no element focused there is no keymap: the data-keys of the
-// document are not read, and every key but Tab is the program's.
+// document are not read, and every key but tab is the program's.
 //
 // Every other key reaches the program, as typed (Type) when it has a
-// terminal encoding here: characters, Enter, Tab, Escape, Backspace, the
-// arrows and the editing keys, and Control or Alt with a character. So
+// terminal encoding here: characters, enter, tab, escape, backspace, the
+// arrows and the editing keys, and ctrl or alt with a character. So
 // does every key while no surface has the keyboard. used reports whether
 // a surface used the key.
 func (h *Host) Key(key string) (used bool) {
@@ -74,10 +79,14 @@ func (h *Host) Key(key string) (used bool) {
 }
 
 func (h *Host) useKey(s *Surface, key string) bool {
-	mods, name := splitKey(key)
-	shiftOnly := !slices.ContainsFunc(mods, func(m string) bool { return m != "Shift" })
-	if name == "Tab" && shiftOnly {
-		h.tab(s, len(mods) > 0)
+	k, err := myelinkey.Parse(key)
+	if err != nil {
+		return false
+	}
+	mods, name, kind := myelinkey.Split(k)
+	shiftOnly := mods&^myelinkey.Shift == 0
+	if name == "tab" && kind == myelinkey.Physical && shiftOnly {
+		h.tab(s, mods != 0)
 		return true
 	}
 	el := s.focused
@@ -106,22 +115,26 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	if !shiftOnly {
 		return false
 	}
-	char := utf8.RuneCountInString(name) == 1
+	// A physical key's name is its own: only a character types.
+	text, types := "", false
+	if kind == myelinkey.Character {
+		text, types = hotty.KeyText(string(k))
+	}
 	switch {
 	case textInput(el):
 		// A date or time input.
 		switch name {
-		case "ArrowUp", "ArrowDown", "PageUp", "PageDown":
+		case "arrow_up", "arrow_down", "page_up", "page_down":
 			return true
 		}
 		return h.fieldKey(s, el, key)
 	case el.DataAtom == atom.Select:
-		return h.selectKey(s, el, name, char)
+		return h.selectKey(s, el, name, text, types)
 	case box(el):
 		switch name {
-		case " ":
+		case "space":
 			h.toggle(s, el)
-		case "Enter":
+		case "enter":
 			if form := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form }); form != nil {
 				h.submit(s, form, nil)
 			}
@@ -130,11 +143,11 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		}
 		return true
 	case button(el) && (el.DataAtom != atom.A || !hyperlink(el)):
-		if name != " " && name != "Enter" {
+		if name != "space" && name != "enter" {
 			return false
 		}
 		bits := 0
-		if slices.Contains(mods, "Shift") {
+		if mods&myelinkey.Shift != 0 {
 			bits = hotty.ModShift
 		}
 		_ = h.click(s, el, false, 1, bits)
@@ -144,7 +157,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 }
 
 // menuKey hides the level a program shows (a=menu:show=1) when a key makes
-// it stale: Escape, or a key it does not list (SPEC §10.7). A key it lists
+// it stale: escape, or a key it does not list (SPEC §10.7). A key it lists
 // keeps it: the program shows the next level. The key still goes where it
 // would without the level.
 func (h *Host) menuKey(key string) {
@@ -153,7 +166,7 @@ func (h *Host) menuKey(key string) {
 	}
 	p := hotty.PlatformOf(h.caps)
 	k, ok := p.ReadKey(key)
-	if ok && k != "Escape" {
+	if ok && k != "escape" {
 		for _, it := range h.level() {
 			if c, ok := p.ReadKey(it.Key); ok && c == k {
 				return
@@ -323,7 +336,7 @@ func (h *Host) toggle(s *Surface, el *html.Node) {
 }
 
 // selectKey is a key on a select.
-func (h *Host) selectKey(s *Surface, el *html.Node, name string, char bool) bool {
+func (h *Host) selectKey(s *Surface, el *html.Node, name, text string, types bool) bool {
 	var vals, labels []string
 	walk(el, func(o *html.Node) {
 		if o.DataAtom != atom.Option {
@@ -345,22 +358,22 @@ func (h *Host) selectKey(s *Surface, el *html.Node, name string, char bool) bool
 	i := slices.Index(vals, s.valueOf(el))
 	pick := -1
 	switch {
-	case char && name != " ":
+	case types:
 		for k := 1; k <= len(vals); k++ {
-			if j := (i + k) % len(vals); strings.HasPrefix(strings.ToLower(labels[j]), strings.ToLower(name)) {
+			if j := (i + k) % len(vals); strings.HasPrefix(strings.ToLower(labels[j]), strings.ToLower(text)) {
 				pick = j
 				break
 			}
 		}
-	case name == "ArrowDown":
+	case name == "arrow_down":
 		pick = min(i+1, len(vals)-1)
-	case name == "ArrowUp":
+	case name == "arrow_up":
 		pick = max(i-1, 0)
-	case name == "Home" || name == "PageUp":
+	case name == "home" || name == "page_up":
 		pick = 0
-	case name == "End" || name == "PageDown":
+	case name == "end" || name == "page_down":
 		pick = len(vals) - 1
-	case name == " " || name == "Enter":
+	case name == "space" || name == "enter":
 	default:
 		return false
 	}
@@ -397,57 +410,41 @@ func textInput(n *html.Node) bool {
 	return false
 }
 
-// splitKey splits a key into its modifiers and its key value; " " may be
-// written "Space".
-func splitKey(key string) (mods []string, name string) {
-	parts := strings.Split(key, "+")
-	if strings.HasSuffix(key, "++") || key == "+" {
-		parts = append(strings.Split(strings.TrimSuffix(key, "++"), "+"), "+")
-		if key == "+" {
-			parts = []string{"+"}
-		}
-	}
-	name = parts[len(parts)-1]
-	if name == "Space" {
-		name = " "
-	}
-	return parts[:len(parts)-1], name
-}
-
 // keySequence is a key as a terminal sends it, in the legacy encoding; ""
 // when it has none here.
 func keySequence(key string) string {
-	mods, name := splitKey(key)
-	var ctrl, alt, shift bool
-	for _, m := range mods {
-		switch m {
-		case "Control":
-			ctrl = true
-		case "Alt":
-			alt = true
-		case "Shift":
-			shift = true
-		default:
-			return ""
-		}
+	k, err := myelinkey.Parse(key)
+	if err != nil {
+		return ""
 	}
-	seq := map[string]string{"Enter": "\r", "Tab": "\t", "Escape": "\x1b", "Backspace": "\x7f",
-		"ArrowUp": "\x1b[A", "ArrowDown": "\x1b[B", "ArrowRight": "\x1b[C", "ArrowLeft": "\x1b[D",
-		"Home": "\x1b[H", "End": "\x1b[F", "Insert": "\x1b[2~", "Delete": "\x1b[3~", "PageUp": "\x1b[5~", "PageDown": "\x1b[6~"}[name]
+	mods, name, kind := myelinkey.Split(k)
+	if mods&myelinkey.Super != 0 || kind == myelinkey.Modifier {
+		return ""
+	}
+	ctrl, alt, shift := mods&myelinkey.Ctrl != 0, mods&myelinkey.Alt != 0, mods&myelinkey.Shift != 0
+	seq := map[string]string{"enter": "\r", "tab": "\t", "escape": "\x1b", "backspace": "\x7f", "space": " ",
+		"arrow_up": "\x1b[A", "arrow_down": "\x1b[B", "arrow_right": "\x1b[C", "arrow_left": "\x1b[D",
+		"home": "\x1b[H", "end": "\x1b[F", "insert": "\x1b[2~", "delete": "\x1b[3~", "page_up": "\x1b[5~", "page_down": "\x1b[6~"}[name]
 	switch {
-	case name == "Tab" && shift:
+	case name == "tab" && shift:
 		seq = "\x1b[Z"
+	case name == "space" && ctrl:
+		seq = "\x00"
 	case seq != "":
-	case utf8.RuneCountInString(name) != 1:
+	case kind != myelinkey.Character:
 		return ""
 	case ctrl:
-		c := strings.ToLower(name)[0]
-		if c < '@' || c > 0x7e {
+		c := name[0]
+		if utf8.RuneCountInString(name) != 1 || c < '@' || c > 0x7e {
 			return ""
 		}
 		seq = string(rune(c & 0x1f))
 	default:
-		seq = name
+		typed := name
+		if shift {
+			typed = "shift+" + name
+		}
+		seq, _ = hotty.KeyText(typed)
 	}
 	if alt {
 		seq = "\x1b" + seq

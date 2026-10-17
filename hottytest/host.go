@@ -959,7 +959,7 @@ func (h *Host) element(s *Surface, id string) (*html.Node, error) {
 // and a hyperlink (target=_blank) is opened by the terminal and reports
 // nothing (Opened). A submit button then submits its form.
 //
-// keys are the modifier keys held ("shift", "ctrl", "alt", "meta"); the
+// keys are the modifier keys held ("shift", "ctrl", "alt", "super"); the
 // click carries those held at its release (SPEC §9). A press with Alt is
 // the program's own gesture (SPEC §9.2): the surface hears nothing of it,
 // and the pointer is out of its window.
@@ -1030,7 +1030,7 @@ func (h *Host) ClickLink(surface, href string, keys ...string) error {
 }
 
 // modBits are the modifier keys held, as the bits of a detail's mods
-// (SPEC §9): "shift", "alt", "ctrl" and "meta".
+// (SPEC §9): "shift", "alt", "ctrl" and "super".
 func modBits(keys []string) int {
 	bits := 0
 	for _, k := range keys {
@@ -1040,9 +1040,9 @@ func modBits(keys []string) int {
 		case "alt":
 			bits |= hotty.ModAlt
 		case "ctrl":
-			bits |= hotty.ModControl
-		case "meta":
-			bits |= hotty.ModMeta
+			bits |= hotty.ModCtrl
+		case "super":
+			bits |= hotty.ModSuper
 		}
 	}
 	return bits
@@ -1156,7 +1156,7 @@ type drag struct {
 
 // DragStart presses a mouse's primary button on the element with an id and
 // starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier
-// keys held ("shift", "ctrl", "alt", "meta"). The press is a press like
+// keys held ("shift", "ctrl", "alt", "super"). The press is a press like
 // any other: press first, if the placement asks for presses; then
 // dragstart, from the nearest element from it outward with drag in its
 // data-on; then the keyboard, as a click moves it. ErrNoReport, and no

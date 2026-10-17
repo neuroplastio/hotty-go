@@ -39,7 +39,7 @@ func (f *fake) readQuery(t *testing.T) {
 
 func capsReply() string {
 	return hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "1"}},
-		hottytest.Body(`{"v":"0.3","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64}}`))
+		hottytest.Body(`{"v":"0.4","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64}}`))
 }
 
 func TestDetectHost(t *testing.T) {
@@ -123,10 +123,10 @@ func TestEventsMessage(t *testing.T) {
 
 // A caps event changes the capabilities (SPEC §4), and still reaches Events.
 func TestCapsEventsAreMerged(t *testing.T) {
-	f := newFake(&Known{Native: true, Caps: hotty.Caps{V: hotty.Version, Mod: "Control", Scheme: "dark", CellCSS: hotty.Size{W: 9, H: 18}}})
+	f := newFake(&Known{Native: true, Caps: hotty.Caps{V: hotty.Version, Mod: "ctrl", Scheme: "dark", CellCSS: hotty.Size{W: 9, H: 18}}})
 	f.t.Detect(context.Background())
 	evs := f.t.Events(context.Background())
-	ev := hotty.Encode(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: "caps"}}, hottytest.Body(`{"mod":"Meta","cellcss":{"w":10.0,"h":20.0}}`))
+	ev := hotty.Encode(hotty.Control{{K: "a", V: "ev"}, {K: "e", V: "caps"}}, hottytest.Body(`{"mod":"super","cellcss":{"w":10.0,"h":20.0}}`))
 	go func() { _, _ = io.WriteString(f.answer, ev) }()
 	m, ok := (<-evs).(Message)
 	if !ok {
@@ -135,7 +135,7 @@ func TestCapsEventsAreMerged(t *testing.T) {
 	if e, _ := hotty.EventOf(m.Message); e.Kind != hotty.EventCaps || e.Changed == nil {
 		t.Errorf("event %+v", e)
 	}
-	if c := f.t.Caps(); c.Mod != "Meta" || c.CellCSS.H != 20 || c.Scheme != "dark" {
+	if c := f.t.Caps(); c.Mod != "super" || c.CellCSS.H != 20 || c.Scheme != "dark" {
 		t.Errorf("caps %+v", c)
 	}
 }
@@ -211,7 +211,7 @@ func TestDetectIgnoresAnotherNumber(t *testing.T) {
 	f := newFake(nil)
 	go func() {
 		f.readQuery(t)
-		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, hottytest.Body(`{"v":"0.3"}`))
+		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, hottytest.Body(`{"v":"0.4"}`))
 		_, _ = io.WriteString(f.answer, other+"\x1b[?62;22c")
 	}()
 	if f.t.Detect(context.Background()) {

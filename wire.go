@@ -12,7 +12,7 @@ package hotty
 // Caps is what a host says about itself in its reply to a query (SPEC §4),
 // and, with only the fields that changed, in a caps event (SPEC §9).
 type Caps struct {
-	// V is the protocol version the host implements: "0.3".
+	// V is the protocol version the host implements: "0.4".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -22,8 +22,8 @@ type Caps struct {
 	Scale float64 `msg:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
 	Scheme string `msg:"scheme,omitempty"`
-	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
-	// (SPEC §10.4); "" when the host did not say, which is Control.
+	// Mod is the modifier mod stands for in bindings, "ctrl" or "super"
+	// (SPEC §10.4); "" when the host did not say, which is ctrl.
 	Mod string `msg:"mod,omitempty"`
 	// Features are the optional features the host has (SPEC §4): see
 	// HasFeature.

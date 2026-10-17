@@ -100,7 +100,7 @@ func TestEditVectors(t *testing.T) {
 }
 
 func TestKey(t *testing.T) {
-	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys, "Control+s=submit")
+	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys, "ctrl+s=submit")
 	f := Field{Value: "foo bar"}
 	f.Caret = len("foo bar")
 	for _, c := range []struct {
@@ -111,25 +111,25 @@ func TestKey(t *testing.T) {
 		caret   int
 		anchor  int // the caret when nothing is selected
 	}{
-		{"Control+w", hotty.DeleteWordBackward, true, "foo ", 4, 4},
-		{"Space", hotty.Insert, true, "foo  ", 5, 5},
-		{"Shift+b", hotty.Insert, true, "foo  B", 6, 6},
+		{"ctrl+w", hotty.DeleteWordBackward, true, "foo ", 4, 4},
+		{"space", hotty.Insert, true, "foo  ", 5, 5},
+		{"shift+b", hotty.Insert, true, "foo  B", 6, 6},
 		{"+", hotty.Insert, true, "foo  B+", 7, 7},
-		{"Home", hotty.LineStart, false, "foo  B+", 0, 0},
-		{"Control+x", hotty.Cut, false, "foo  B+", 0, 0},
-		{"Escape", "", false, "foo  B+", 0, 0},
-		{"Control+s", hotty.Submit, false, "foo  B+", 0, 0},
-		{"Control+n", "", false, "foo  B+", 0, 0},
-		{"Control+e", hotty.LineEnd, false, "foo  B+", 7, 7},
+		{"home", hotty.LineStart, false, "foo  B+", 0, 0},
+		{"ctrl+x", hotty.Cut, false, "foo  B+", 0, 0},
+		{"escape", "", false, "foo  B+", 0, 0},
+		{"ctrl+s", hotty.Submit, false, "foo  B+", 0, 0},
+		{"ctrl+n", "", false, "foo  B+", 0, 0},
+		{"ctrl+e", hotty.LineEnd, false, "foo  B+", 7, 7},
 		// Shift selects as it moves; submit keeps the selection, and
 		// typing replaces it.
-		{"Shift+ArrowLeft", hotty.CharBackward, false, "foo  B+", 6, 7},
-		{"Control+Shift+ArrowLeft", hotty.WordBackward, false, "foo  B+", 5, 7},
-		{"Control+s", hotty.Submit, false, "foo  B+", 5, 7},
-		{"Shift+ArrowUp", "", false, "foo  B+", 5, 7},
+		{"shift+arrow_left", hotty.CharBackward, false, "foo  B+", 6, 7},
+		{"ctrl+shift+arrow_left", hotty.WordBackward, false, "foo  B+", 5, 7},
+		{"ctrl+s", hotty.Submit, false, "foo  B+", 5, 7},
+		{"shift+arrow_up", "", false, "foo  B+", 5, 7},
 		{"x", hotty.Insert, true, "foo  x", 6, 6},
-		{"Control+a", hotty.SelectAll, false, "foo  x", 6, 0},
-		{"Backspace", hotty.DeleteCharBackward, true, "", 0, 0},
+		{"ctrl+a", hotty.SelectAll, false, "foo  x", 6, 0},
+		{"backspace", hotty.DeleteCharBackward, true, "", 0, 0},
 	} {
 		a, changed := f.Key(km, c.key)
 		anchor, _ := f.Anchor()

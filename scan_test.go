@@ -137,7 +137,7 @@ func TestDetector(t *testing.T) {
 	if q := d.Start(at(0)); q != Query(1) || d.Deadline != at(1500) {
 		t.Fatalf("Start: %q, deadline %v", q, d.Deadline)
 	}
-	if !d.Reply(reply(`{"v":"0.3","host":"h","version":"0.0.10","features":["passthrough"]}`), at(10)) ||
+	if !d.Reply(reply(`{"v":"0.4","host":"h","version":"0.0.10","features":["passthrough"]}`), at(10)) ||
 		d.State != Native || !d.Decided || d.Done || d.Caps.Version != "0.0.10" || !HasFeature(d.Caps, FeaturePassthrough) {
 		t.Fatalf("the host's reply: %+v", d)
 	}
@@ -152,7 +152,7 @@ func TestDetector(t *testing.T) {
 	var late Detector
 	late.Start(at(0))
 	late.Tick(at(1500))
-	if !late.Reply(reply(`{"v":"0.3"}`), at(1600)) || late.State != Text {
+	if !late.Reply(reply(`{"v":"0.4"}`), at(1600)) || late.State != Text {
 		t.Errorf("a late reply: %+v", late)
 	}
 	other, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`))
@@ -167,7 +167,7 @@ func TestDetector(t *testing.T) {
 		"another version":         reply(`{"v":"0.2"}`),
 		"no capabilities":         reply(``),
 		"EVERSION": func() Reply {
-			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.3"}`))
+			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.4"}`))
 			return r
 		}(),
 	} {
@@ -182,7 +182,7 @@ func TestDetector(t *testing.T) {
 	}
 	var native Detector
 	native.Start(at(0))
-	native.Reply(reply(`{"v":"0.3"}`), at(5))
+	native.Reply(reply(`{"v":"0.4"}`), at(5))
 	native.End(at(6))
 	if !native.Done || native.State != Native {
 		t.Errorf("End after native: %+v", native)

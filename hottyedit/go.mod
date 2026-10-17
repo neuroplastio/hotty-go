@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/neuroplastio/myelin/myelinkey v0.1.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
 )

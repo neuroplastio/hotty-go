@@ -881,15 +881,18 @@ func TestDetectVectors(t *testing.T) {
 }
 
 type keysVector struct {
-	Name     string    `json:"name"`
-	Requires []string  `json:"requires"`
-	Input    *string   `json:"input"`
-	Keys     []*string `json:"keys"`
-	Key      string    `json:"key"`
-	Canon    *string   `json:"canon"`
+	Name     string          `json:"name"`
+	Requires []string        `json:"requires"`
+	Input    *string         `json:"input"`
+	Keys     []*string       `json:"keys"`
+	Key      string          `json:"key"`
+	Mod      string          `json:"mod"`
+	Canon    *string         `json:"canon"`
+	Text     json.RawMessage `json:"text"`
 }
 
-// TestKeysVectors decodes each vector's input, or reads its key's name.
+// TestKeysVectors decodes each vector's input, reads its key's name, with
+// a Platform's mod where it has one, or asks for the text it types.
 func TestKeysVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keys {
 		t.Run(v.Name, func(t *testing.T) {
@@ -908,12 +911,26 @@ func TestKeysVectors(t *testing.T) {
 				}
 				return
 			}
-			got, ok := ParseKey(v.Key)
+			call, got, ok, want := "ParseKey", "", false, v.Canon
 			switch {
-			case v.Canon == nil && ok:
-				t.Errorf("ParseKey(%q) = %q, want none", v.Key, got)
-			case v.Canon != nil && (!ok || got != *v.Canon):
-				t.Errorf("ParseKey(%q) = %q, %v, want %q", v.Key, got, ok, *v.Canon)
+			case v.Text != nil:
+				var text *string
+				if err := json.Unmarshal(v.Text, &text); err != nil {
+					t.Fatal(err)
+				}
+				call, want = "KeyText", text
+				got, ok = KeyText(v.Key)
+			case v.Mod != "":
+				call = "ReadKey"
+				got, ok = Platform{Mod: v.Mod}.ReadKey(v.Key)
+			default:
+				got, ok = ParseKey(v.Key)
+			}
+			switch {
+			case want == nil && ok:
+				t.Errorf("%s(%q) = %q, want none", call, v.Key, got)
+			case want != nil && (!ok || got != *want):
+				t.Errorf("%s(%q) = %q, %v, want %q", call, v.Key, got, ok, *want)
 			}
 		})
 	}

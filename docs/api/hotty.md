@@ -53,6 +53,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Has(c Control, k string) bool`](#Has)
 - [`func HasFeature(c Caps, feature string) bool`](#HasFeature)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
+- [`func KeyText(key string) (text string, ok bool)`](#KeyText)
 - [`func Light(c Caps) bool`](#Light)
 - [`func Lookup(c Control, k string) (string, bool)`](#Lookup)
 - [`func Menu(tree *MenuTree, opts ...ReplyOption) string`](#Menu)
@@ -129,6 +130,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func ParseKeymap(p Platform, value string) *Keymap`](#ParseKeymap)
   - [`func Resolve(p Platform, multiline bool, values ...string) *Keymap`](#Resolve)
   - [`func (m *Keymap) Bind(name string, a Action) bool`](#Keymap.Bind)
+  - [`func (m *Keymap) Binds(name string) bool`](#Keymap.Binds)
   - [`func (m *Keymap) Format() string`](#Keymap.Format)
   - [`func (m *Keymap) Lookup(name string) Action`](#Keymap.Lookup)
   - [`func (m *Keymap) Prefix(name string) bool`](#Keymap.Prefix)
@@ -240,18 +242,18 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.3"
+	Version = "0.4"
 )
 ```
 
-<a id="ModShift"></a><a id="ModAlt"></a><a id="ModControl"></a><a id="ModMeta"></a>
+<a id="ModShift"></a><a id="ModAlt"></a><a id="ModCtrl"></a><a id="ModSuper"></a>
 
 ```go
 const (
-	ModShift   = 1
-	ModAlt     = 2
-	ModControl = 4
-	ModMeta    = 8
+	ModShift = 1
+	ModAlt   = 2
+	ModCtrl  = 4
+	ModSuper = 8
 )
 ```
 
@@ -343,23 +345,23 @@ MenuDepth is how deep a menu's items nest, the top level's being one deep (SPEC 
 <a id="TerminalKeys"></a>
 
 ```go
-const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
-	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
-	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
-	"Home=line-start End=line-end Control+e=line-end " +
-	"Backspace=delete-char-backward Control+h=delete-char-backward " +
-	"Delete=delete-char-forward Control+d=delete-char-forward " +
-	"Alt+Backspace=delete-word-backward Control+w=delete-word-backward Control+Backspace=delete-word-backward " +
-	"Alt+Delete=delete-word-forward Alt+d=delete-word-forward Control+Delete=delete-word-forward " +
-	"Control+u=delete-to-line-start Control+k=delete-to-line-end " +
-	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
-	"PageUp=page-up PageDown=page-down " +
-	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
-	"Mod+a=select-all " +
-	"Control+m=newline"
+const TerminalKeys = "arrow_left=char-backward ctrl+b=char-backward arrow_right=char-forward ctrl+f=char-forward " +
+	"alt+arrow_left=word-backward ctrl+arrow_left=word-backward alt+b=word-backward " +
+	"alt+arrow_right=word-forward ctrl+arrow_right=word-forward alt+f=word-forward " +
+	"home=line-start end=line-end ctrl+e=line-end " +
+	"backspace=delete-char-backward ctrl+h=delete-char-backward " +
+	"delete=delete-char-forward ctrl+d=delete-char-forward " +
+	"alt+backspace=delete-word-backward ctrl+w=delete-word-backward ctrl+backspace=delete-word-backward " +
+	"alt+delete=delete-word-forward alt+d=delete-word-forward ctrl+delete=delete-word-forward " +
+	"ctrl+u=delete-to-line-start ctrl+k=delete-to-line-end " +
+	"arrow_up=line-previous ctrl+p=line-previous arrow_down=line-next ctrl+n=line-next " +
+	"page_up=page-up page_down=page-down " +
+	"alt+<=input-start ctrl+home=input-start alt+>=input-end ctrl+end=input-end " +
+	"mod+a=select-all " +
+	"ctrl+m=newline"
 ```
 
-TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for Mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: Control+a on Linux, while on macOS Control+a stays the line's start. A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(platform, multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves Enter to SPEC §10.2's default.
+TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(platform, multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves enter to SPEC §10.2's default.
 
 ## <a id="Blur"></a>func Blur
 
@@ -383,7 +385,7 @@ CursorBelow is the cursor's move a placement without KeepCursor makes (SPEC §5.
 func DecodeKeys(input []byte) []string
 ```
 
-DecodeKeys reads input from the terminal, the bytes a program reads, as SPEC §10.4 names the keys in it: one entry for each key, its canonical name, or "" for input that is no key it names (a mouse report, a sequence it does not know, a key's release). It reads the input whole: an ESC at its end is Escape.
+DecodeKeys reads input from the terminal, the bytes a program reads, as SPEC §10.4 names the keys in it: one entry for each key, its name, or "" for input that is no key it names (a mouse report, a sequence it does not know, a key's release). It reads the input whole: an ESC at its end is escape.
 
 ## <a id="DefaultEdit"></a>func DefaultEdit
 
@@ -391,7 +393,7 @@ DecodeKeys reads input from the terminal, the bytes a program reads, as SPEC §1
 func DefaultEdit(mod string) map[string][]string
 ```
 
-DefaultEdit is the default edit shortcuts for a Mod (SPEC §10.2), "Control" or "Meta", the keys canonical with Mod read.
+DefaultEdit is the default edit shortcuts for a mod (SPEC §10.2), "ctrl" or "super", each key read: ctrl+shift+z and ctrl+y for redo where it is ctrl.
 
 ## <a id="Del"></a>func Del
 
@@ -513,7 +515,7 @@ Has reports whether a control has a key.
 func HasFeature(c Caps, feature string) bool
 ```
 
-HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything else a 0.3 host does, it does.
+HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything else a 0.4 host does, it does.
 
 ## <a id="Hide"></a>func Hide
 
@@ -522,6 +524,14 @@ func Hide(surface string, opts ...ReplyOption) string
 ```
 
 Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Deltas still apply to it.
+
+## <a id="KeyText"></a>func KeyText
+
+```go
+func KeyText(key string) (text string, ok bool)
+```
+
+KeyText is the text a key types in a field (SPEC §10.2): a character's, a letter with shift as its capital, a space for space. ok is false for any other key, a key with ctrl, alt or super, and a name that does not parse.
 
 ## <a id="Light"></a>func Light
 
@@ -585,7 +595,7 @@ MorphTo morphs an element into html, or with no target, each top-level element o
 func ParseKey(name string) (canonical string, ok bool)
 ```
 
-ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any order ("Shift+Control+a", "Control+ "), and returns its canonical name ("Control+A", "Control+Space"): the modifiers in the order Mod, Control, Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a space. A binding's Mod is kept: a Keymap reads it as its Platform's. ok is false for a name that does not parse.
+ParseKey reads a key's name as SPEC §10.4 has hosts read one, with myelin key names' default reading ("Shift+Ctrl+A", "PageDown", "esc"), and returns its canonical name ("ctrl+shift+a", "page\_down", "escape"). ok is false for a name the reading refuses (empty, "meta+a", "ctrl+", a modifier given twice), and for one with "mod", which only a Platform reads (ReadKey).
 
 ## <a id="Place"></a>func Place
 
@@ -900,7 +910,7 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements: "0.3".
+	// V is the protocol version the host implements: "0.4".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -910,8 +920,8 @@ type Caps struct {
 	Scale float64 `msg:"scale,omitempty"`
 	// Scheme is the terminal's colour scheme: "dark" or "light".
 	Scheme string `msg:"scheme,omitempty"`
-	// Mod is the modifier Mod stands for in bindings, "Control" or "Meta"
-	// (SPEC §10.4); "" when the host did not say, which is Control.
+	// Mod is the modifier mod stands for in bindings, "ctrl" or "super"
+	// (SPEC §10.4); "" when the host did not say, which is ctrl.
 	Mod string `msg:"mod,omitempty"`
 	// Features are the optional features the host has (SPEC §4): see
 	// HasFeature.
@@ -1394,7 +1404,7 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Program says whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
+Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Binds says whether it binds a key, Program whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
@@ -1402,7 +1412,7 @@ Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap read
 func ParseKeymap(p Platform, value string) *Keymap
 ```
 
-ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and Tab, Shift+Tab and Escape. Mod reads as the Platform's: on Control, Mod+a and Control+a are one key.
+ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and tab, shift+tab and escape. Mod reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
 
 ### <a id="Resolve"></a>func Resolve
 
@@ -1420,13 +1430,21 @@ func (m *Keymap) Bind(name string, a Action) bool
 
 Bind binds a key to an action, and reports whether it did: a host ignores the bindings ParseKeymap drops, and so does Bind.
 
+### <a id="Keymap.Binds"></a>func (*Keymap) Binds
+
+```go
+func (m *Keymap) Binds(name string) bool
+```
+
+Binds reports whether the keymap binds a key: its own binding, or, for a key with shift that is not a character and that no binding names, the binding without shift (SPEC §10.2). A host that has two names for a press (SPEC §10.4) asks of the physical one first, and of the other only where the keymap does not bind it.
+
 ### <a id="Keymap.Format"></a>func (*Keymap) Format
 
 ```go
 func (m *Keymap) Format() string
 ```
 
-Format writes the keymap as a data-keys value: each key once, where it was first bound, as its last binding wrote it (Mod kept), with its last action.
+Format writes the keymap as a data-keys value: each key once, where it was first bound, as its last binding wrote it (mod kept), with its last action.
 
 ### <a id="Keymap.Lookup"></a>func (*Keymap) Lookup
 
@@ -1434,7 +1452,7 @@ Format writes the keymap as a data-keys value: each key once, where it was first
 func (m *Keymap) Lookup(name string) Action
 ```
 
-Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a character it types; or "" when the key is not the field's, and reaches the program (or, for Tab, moves focus). A key with Shift that no binding names is looked up without Shift.
+Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a key it types (KeyText); or "" when the key is not the field's, and reaches the program (or, for tab, moves focus). A key with shift that is not a character and that no binding names is looked up without shift.
 
 ### <a id="Keymap.Prefix"></a>func (*Keymap) Prefix
 
@@ -1442,7 +1460,7 @@ Lookup says what a field with this keymap does with a key (SPEC §10.2): an acti
 func (m *Keymap) Prefix(name string) bool
 ```
 
-Prefix reports whether the keymap binds a key to prefix, or, for a key with Shift that no binding names, binds it without Shift. A host asks it of a key Program gives the program, and from then on gives the program every key, Tab, Shift+Tab and Escape too, until the program sends a=focus or a=blur, the surface loses the keyboard, or the user focuses an element of it with a press (SPEC §10.5).
+Prefix reports whether the keymap binds a key to prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift. A host asks it of a key Program gives the program, and from then on gives the program every key, tab, shift+tab and escape too, until the program sends a=focus or a=blur, the surface loses the keyboard, or the user focuses an element of it with a press (SPEC §10.5).
 
 ### <a id="Keymap.Program"></a>func (*Keymap) Program
 
@@ -1450,7 +1468,7 @@ Prefix reports whether the keymap binds a key to prefix, or, for a key with Shif
 func (m *Keymap) Program(name string) bool
 ```
 
-Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with Shift that no binding names, binds it without Shift (SPEC §10.2, keys for the program).
+Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift (SPEC §10.2, keys for the program).
 
 Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds to program or prefix to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
 
@@ -1460,9 +1478,9 @@ Every focused element has a keymap, and outside a text field program and the scr
 func (m *Keymap) Scroll(name string) Action
 ```
 
-Scroll is the scroll action the keymap binds a key to, or "" for none: the key's own binding, or, for a key with Shift that no binding names, the binding without Shift (SPEC §10.2, scrolling keys).
+Scroll is the scroll action the keymap binds a key to, or "" for none: the key's own binding, or, for a key with shift that is not a character and that no binding names, the binding without shift (SPEC §10.2, scrolling keys).
 
-A host asks it of the keymap it asks Program of, for a key the focused element does not use (Space on a button, a character on a select are the element's). A key bound to one scrolls the nearest element that scrolls, from the focused one outward, never the terminal; along an axis the document does not scroll (Scroll, SPEC §5.1), it goes on as if the keymap did not bind it.
+A host asks it of the keymap it asks Program of, for a key the focused element does not use (space on a button, a character on a select are the element's). A key bound to one scrolls the nearest element that scrolls, from the focused one outward, never the terminal; along an axis the document does not scroll (Scroll, SPEC §5.1), it goes on as if the keymap did not bind it.
 
 ### <a id="Keymap.Selects"></a>func (*Keymap) Selects
 
@@ -1470,7 +1488,7 @@ A host asks it of the keymap it asks Program of, for a key the focused element d
 func (m *Keymap) Selects(name string) bool
 ```
 
-Selects reports whether a field with this keymap selects with a key (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves), and its canonical name has Shift, bound so or looked up without it ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+\<"). The field then keeps its anchor and moves the caret (hottyedit.Field.Extend).
+Selects reports whether a field with this keymap selects with a key (SPEC §10.2, Shift selects): Lookup returns a move for it, and its name has shift, bound so or looked up without it ("shift+arrow\_left", "ctrl+shift+end", not "alt+\<"). The field then keeps its anchor and moves the caret (hottyedit.Field.Extend).
 
 ## <a id="Link"></a>type Link
 
@@ -1838,7 +1856,7 @@ Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 
 
 ```go
 type Platform struct {
-	// Mod is "Control" or "Meta" (SPEC §10.4); "" is Control.
+	// Mod is "ctrl" or "super" (SPEC §10.4); "" is ctrl.
 	Mod string
 	// Edit is the host's edit shortcuts, from each action to its keys
 	// (SPEC §10.2); nil is DefaultEdit(Mod).
@@ -1846,7 +1864,7 @@ type Platform struct {
 }
 ```
 
-Platform is how a host reads bindings (SDK.md §3.10): the modifier Mod stands for, and its edit shortcuts. The zero Platform is Control with the default edit shortcuts.
+Platform is how a host reads bindings (SDK.md §3.10): the modifier mod stands for, and its edit shortcuts. The zero Platform is ctrl with the default edit shortcuts.
 
 ### <a id="PlatformOf"></a>func PlatformOf
 
@@ -1862,7 +1880,7 @@ PlatformOf is the Platform of a host's capabilities: its Mod and Edit, the zero 
 func (p Platform) ReadKey(name string) (canonical string, ok bool)
 ```
 
-ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its canonical name (ParseKey) with Mod read as the Platform's, so that where Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta they are two keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys typed this way. ok is false for a name that does not parse.
+ReadKey reads a key's name as the Platform reads it (SPEC §10.4): as ParseKey does, with mod standing for the Platform's, so that where Mod is ctrl "mod+a" and "ctrl+a" read alike, and where it is super they are two keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys typed this way. ok is false for a name that does not parse, "mod+ctrl+a" among them.
 
 ## <a id="QueryOption"></a>type QueryOption
 

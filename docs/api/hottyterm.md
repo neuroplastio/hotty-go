@@ -115,7 +115,7 @@ IsTerminal reports whether f is a terminal: whether output written to it is seen
 func KeyName(k uv.Key) string
 ```
 
-KeyName is a key as SPEC §10.4 names it, so that a program that reads keys from Events (uv.KeyPressEvent) looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "A", "Space", "Control+a", "Alt+ArrowLeft", "Shift+Enter". ultraviolet reads the bytes as SPEC §10.4 does, so a key has the name a host gives it. "" for a key with no name there.
+KeyName is a key as SPEC §10.4 names it from the bytes a program reads, so that a program that reads keys from Events (uv.KeyPressEvent) looks it up in the keymap it gives its surfaces (hotty.Keymap.Lookup, hottyedit.Field.Key): "a", "shift+a", "space", "ctrl+a", "alt+arrow\_left", "shift+enter". ultraviolet reads the bytes as SPEC §10.4 does, so a key has the name hotty.DecodeKeys gives it: one name, the character the bytes carry or the physical key. "" for a key with no name there.
 
 ## <a id="Event"></a>type Event
 

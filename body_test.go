@@ -120,7 +120,7 @@ func TestEncodedBodiesWellFormed(t *testing.T) {
 		&pressDetail{}, &pressDetail{Area: area, Mods: ModAlt},
 		&changeDetail{}, &changeDetail{Checked: &yes, Value: "on"},
 		&inputDetail{}, &fitDetail{R: 3},
-		&dragDetail{}, &dragDetail{C: 1, R: 2, Mods: ModMeta, X: &one, Y: &one},
+		&dragDetail{}, &dragDetail{C: 1, R: 2, Mods: ModSuper, X: &one, Y: &one},
 		&hoverDetail{}, &hoverDetail{C: &one, R: &one}, &hoverDetail{Out: true},
 		&submitDetail{}, &submitDetail{Fields: []FormField{{"name", "Ada"}, {"name", ""}}},
 		&Size{}, &Size{W: 720, H: 36},

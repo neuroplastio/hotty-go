@@ -25,6 +25,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/neuroplastio/hotty-go/hottyedit v0.0.0-20261013194809-99f55be7a2bd // indirect
+	github.com/neuroplastio/myelin/myelinkey v0.1.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect

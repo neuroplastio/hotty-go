@@ -11,16 +11,16 @@ import (
 func ExampleField_Key() {
 	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 	f := hottyedit.Field{Value: "hello wrld", Caret: 10}
-	f.Key(km, "Alt+b")     // word-backward: hello |wrld
-	f.Key(km, "Control+f") // char-forward: hello w|rld
-	f.Key(km, "o")         // types it
+	f.Key(km, "alt+b")  // word-backward: hello |wrld
+	f.Key(km, "ctrl+f") // char-forward: hello w|rld
+	f.Key(km, "o")      // types it
 	fmt.Printf("%q %d\n", f.Value, f.Caret)
-	f.Key(km, "Control+w") // delete-word-backward
+	f.Key(km, "ctrl+w") // delete-word-backward
 	fmt.Printf("%q %d\n", f.Value, f.Caret)
-	f.Key(km, "Shift+End") // line-end, selecting: hello [rld]
+	f.Key(km, "shift+end") // line-end, selecting: hello [rld]
 	start, end := f.Selection()
 	fmt.Println(start, end)
-	f.Key(km, "Z") // types in place of the selection
+	f.Key(km, "shift+z") // types in place of the selection
 	fmt.Printf("%q %d\n", f.Value, f.Caret)
 	// Output:
 	// "hello world" 8

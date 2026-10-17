@@ -1,6 +1,7 @@
 package hotty
 
 import (
+	"github.com/neuroplastio/myelin/myelinkey"
 	"strconv"
 	"strings"
 	"unicode"
@@ -115,172 +116,84 @@ func (a Action) Scrolls() bool {
 
 // TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value:
 // the keys of Bubble Tea's text input and text area (bubbles), but for
-// Mod+a, which selects all, as in a GUI field and SPEC §10.2's default
-// keymap: Control+a on Linux, while on macOS Control+a stays the line's
-// start. A program puts it in the data-keys of an element that holds its
-// fields, and edits its fields in cells with Resolve(platform, multiline,
-// TerminalKeys), so that they edit the same on a surface and in cells. It
-// leaves Enter to SPEC §10.2's default.
-const TerminalKeys = "ArrowLeft=char-backward Control+b=char-backward ArrowRight=char-forward Control+f=char-forward " +
-	"Alt+ArrowLeft=word-backward Control+ArrowLeft=word-backward Alt+b=word-backward " +
-	"Alt+ArrowRight=word-forward Control+ArrowRight=word-forward Alt+f=word-forward " +
-	"Home=line-start End=line-end Control+e=line-end " +
-	"Backspace=delete-char-backward Control+h=delete-char-backward " +
-	"Delete=delete-char-forward Control+d=delete-char-forward " +
-	"Alt+Backspace=delete-word-backward Control+w=delete-word-backward Control+Backspace=delete-word-backward " +
-	"Alt+Delete=delete-word-forward Alt+d=delete-word-forward Control+Delete=delete-word-forward " +
-	"Control+u=delete-to-line-start Control+k=delete-to-line-end " +
-	"ArrowUp=line-previous Control+p=line-previous ArrowDown=line-next Control+n=line-next " +
-	"PageUp=page-up PageDown=page-down " +
-	"Alt+<=input-start Control+Home=input-start Alt+>=input-end Control+End=input-end " +
-	"Mod+a=select-all " +
-	"Control+m=newline"
+// mod+a, which selects all, as in a GUI field and SPEC §10.2's default
+// keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A
+// program puts it in the data-keys of an element that holds its fields, and
+// edits its fields in cells with Resolve(platform, multiline, TerminalKeys),
+// so that they edit the same on a surface and in cells. It leaves enter to
+// SPEC §10.2's default.
+const TerminalKeys = "arrow_left=char-backward ctrl+b=char-backward arrow_right=char-forward ctrl+f=char-forward " +
+	"alt+arrow_left=word-backward ctrl+arrow_left=word-backward alt+b=word-backward " +
+	"alt+arrow_right=word-forward ctrl+arrow_right=word-forward alt+f=word-forward " +
+	"home=line-start end=line-end ctrl+e=line-end " +
+	"backspace=delete-char-backward ctrl+h=delete-char-backward " +
+	"delete=delete-char-forward ctrl+d=delete-char-forward " +
+	"alt+backspace=delete-word-backward ctrl+w=delete-word-backward ctrl+backspace=delete-word-backward " +
+	"alt+delete=delete-word-forward alt+d=delete-word-forward ctrl+delete=delete-word-forward " +
+	"ctrl+u=delete-to-line-start ctrl+k=delete-to-line-end " +
+	"arrow_up=line-previous ctrl+p=line-previous arrow_down=line-next ctrl+n=line-next " +
+	"page_up=page-up page_down=page-down " +
+	"alt+<=input-start ctrl+home=input-start alt+>=input-end ctrl+end=input-end " +
+	"mod+a=select-all " +
+	"ctrl+m=newline"
 
-// The modifiers, in the order a key's name writes them. Mod is a binding's
-// platform modifier (SPEC §10.4), which a keymap reads as its Platform's.
-var modifiers = [...]string{"Mod", "Control", "Alt", "Meta", "Shift"}
-
-// mods is a set of modifiers, a bit for each of modifiers.
-type mods uint8
-
-const (
-	modMod mods = 1 << iota
-	modControl
-	modAlt
-	modMeta
-	modShift
-)
-
-// readMod is the key with Mod read as m, modControl or modMeta.
-func (k key) readMod(m mods) key {
-	if k.mods&modMod != 0 {
-		k.mods = k.mods&^modMod | m
-	}
-	return k
-}
-
-// key is a key's name, split.
-type key struct {
-	mods  mods
-	value string // " " for the space bar
-}
-
-// String is the key's canonical name (SPEC §10.4).
-func (k key) String() string {
+// join writes a key from its modifiers and its value, as myelin key names
+// do: the modifiers in the order super, ctrl, alt, shift.
+func join(m myelinkey.Mods, value string) string {
 	var b strings.Builder
-	for i, m := range modifiers {
-		if k.mods&(1<<i) != 0 {
-			b.WriteString(m)
-			b.WriteByte('+')
+	for _, mod := range [...]struct {
+		bit  myelinkey.Mods
+		name string
+	}{{myelinkey.Super, "super+"}, {myelinkey.Ctrl, "ctrl+"}, {myelinkey.Alt, "alt+"}, {myelinkey.Shift, "shift+"}} {
+		if m&mod.bit != 0 {
+			b.WriteString(mod.name)
 		}
 	}
-	if k.value == " " {
-		b.WriteString("Space")
-	} else {
-		b.WriteString(k.value)
-	}
+	b.WriteString(value)
 	return b.String()
 }
 
-// canonical shows Shift in a letter where it can: Shift with a small letter
-// is its capital, and Shift with a capital is the capital.
-func (k key) canonical() key {
-	if k.mods&modShift == 0 || !isChar(k.value) {
-		return k
-	}
-	r, n := utf8.DecodeRuneInString(k.value)
-	if n != len(k.value) {
-		return k
-	}
-	if up := unicode.ToUpper(r); up != r {
-		return key{k.mods &^ modShift, string(up)}
-	}
-	if unicode.ToLower(r) != r {
-		return key{k.mods &^ modShift, k.value}
-	}
-	return k
-}
-
-// isChar reports whether a key's value is a character: one grapheme
-// cluster that is not a control.
-func isChar(v string) bool {
-	if v == "" || clusterLen(v) != len(v) {
-		return false
-	}
-	r, _ := utf8.DecodeRuneInString(v)
-	return r != utf8.RuneError && !unicode.IsControl(r)
-}
-
-// isNamed reports whether a key's value is a named key value: a capital,
-// then letters and digits ("Enter", "ArrowLeft", "F12").
-func isNamed(v string) bool {
-	if len(v) < 2 || v[0] < 'A' || v[0] > 'Z' {
-		return false
-	}
-	for i := 1; i < len(v); i++ {
-		c := v[i]
-		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9') {
-			return false
-		}
-	}
-	return true
-}
-
-// splitKey reads a key's name, its modifiers in any order.
-func splitKey(name string) (key, bool) {
-	var head, value string
-	switch i := strings.LastIndexByte(name, '+'); {
-	case name == "+":
-		value = "+"
-	case strings.HasSuffix(name, "++") && len(name) > 2:
-		head, value = name[:len(name)-2], "+"
-	case i >= 0:
-		head, value = name[:i], name[i+1:]
-	default:
-		value = name
-	}
-	var k key
-	if head != "" {
-	next:
-		for _, m := range strings.Split(head, "+") {
-			for i, known := range modifiers {
-				if m == known && k.mods&(1<<i) == 0 {
-					k.mods |= 1 << i
-					continue next
-				}
-			}
-			return key{}, false
-		}
-	}
-	if value == "Space" {
-		value = " "
-	}
-	if !isChar(value) && !isNamed(value) {
-		return key{}, false
-	}
-	k.value = value
-	return k, true
-}
-
-// ParseKey reads a key's name as SPEC §10.4 writes it, its modifiers in any
-// order ("Shift+Control+a", "Control+ "), and returns its canonical name
-// ("Control+A", "Control+Space"): the modifiers in the order Mod, Control,
-// Alt, Meta, Shift; Shift shown in a letter where it can be; Space for a
-// space. A binding's Mod is kept: a Keymap reads it as its Platform's. ok is
-// false for a name that does not parse.
+// ParseKey reads a key's name as SPEC §10.4 has hosts read one, with myelin
+// key names' default reading ("Shift+Ctrl+A", "PageDown", "esc"), and
+// returns its canonical name ("ctrl+shift+a", "page_down", "escape"). ok is
+// false for a name the reading refuses (empty, "meta+a", "ctrl+", a
+// modifier given twice), and for one with "mod", which only a Platform
+// reads (ReadKey).
 func ParseKey(name string) (canonical string, ok bool) {
-	k, ok := splitKey(name)
-	if !ok {
+	k, err := myelinkey.Parse(name)
+	return string(k), err == nil
+}
+
+// KeyText is the text a key types in a field (SPEC §10.2): a character's, a
+// letter with shift as its capital, a space for space. ok is false for any
+// other key, a key with ctrl, alt or super, and a name that does not parse.
+func KeyText(key string) (text string, ok bool) {
+	k, err := myelinkey.Parse(key)
+	if err != nil {
 		return "", false
 	}
-	return k.canonical().String(), true
+	mods, value, kind := myelinkey.Split(k)
+	switch {
+	case mods&(myelinkey.Super|myelinkey.Ctrl|myelinkey.Alt) != 0:
+		return "", false
+	case value == "space":
+		return " ", true
+	case kind != myelinkey.Character:
+		return "", false
+	}
+	if r, n := utf8.DecodeRuneInString(value); mods&myelinkey.Shift != 0 && n == len(value) {
+		if up := unicode.ToUpper(r); up != r {
+			return string(up), true
+		}
+	}
+	return value, true
 }
 
 // DecodeKeys reads input from the terminal, the bytes a program reads, as
-// SPEC §10.4 names the keys in it: one entry for each key, its canonical
-// name, or "" for input that is no key it names (a mouse report, a sequence
-// it does not know, a key's release). It reads the input whole: an ESC at
-// its end is Escape.
+// SPEC §10.4 names the keys in it: one entry for each key, its name, or ""
+// for input that is no key it names (a mouse report, a sequence it does not
+// know, a key's release). It reads the input whole: an ESC at its end is
+// escape.
 func DecodeKeys(input []byte) []string {
 	var out []string
 	for i := 0; i < len(input); {
@@ -291,7 +204,7 @@ func DecodeKeys(input []byte) []string {
 			continue
 		}
 		if i+1 == len(input) {
-			out = append(out, "Escape")
+			out = append(out, "escape")
 			break
 		}
 		switch next := input[i+1]; {
@@ -323,20 +236,37 @@ func DecodeKeys(input []byte) []string {
 	return out
 }
 
-// withAlt is a key's name with Alt.
+// withAlt is a key's name with alt.
 func withAlt(name string) string {
-	k, ok := splitKey(name)
-	if !ok {
+	k, err := myelinkey.Parse(name)
+	if err != nil {
 		return ""
 	}
-	k.mods |= modAlt
-	return k.canonical().String()
+	mods, value, _ := myelinkey.Split(k)
+	return join(mods|myelinkey.Alt, value)
 }
 
-// c0Keys are the C0 controls and DEL that are not Control with a letter.
+// charKey is the key of a character with modifiers, "" for a character no
+// key is: a capital is shift with its letter (SPEC §10.4).
+func charKey(c string, m myelinkey.Mods) string {
+	if c == " " {
+		return join(m, "space")
+	}
+	value := strings.Map(unicode.ToLower, c)
+	if r, n := utf8.DecodeRuneInString(c); n == len(c) && value != c && unicode.ToUpper(unicode.ToLower(r)) == r {
+		m |= myelinkey.Shift
+	}
+	k, err := myelinkey.Parse(join(m, value))
+	if err != nil {
+		return ""
+	}
+	return string(k)
+}
+
+// c0Keys are the C0 controls and DEL that are not ctrl with a letter.
 var c0Keys = map[byte]string{
-	0x00: "Control+Space", 0x08: "Control+h", 0x09: "Tab", 0x0d: "Enter", 0x1b: "Escape", 0x7f: "Backspace",
-	0x1c: `Control+\`, 0x1d: "Control+]", 0x1e: "Control+^", 0x1f: "Control+_",
+	0x00: "ctrl+space", 0x08: "ctrl+h", 0x09: "tab", 0x0d: "enter", 0x1b: "escape", 0x7f: "backspace",
+	0x1c: `ctrl+\`, 0x1d: "ctrl+]", 0x1e: "ctrl+^", 0x1f: "ctrl+_",
 }
 
 // oneKey is the key of the control or the character input starts with, and
@@ -347,36 +277,36 @@ func oneKey(input []byte) (string, int) {
 		if k, ok := c0Keys[b]; ok {
 			return k, 1
 		}
-		return "Control+" + string(rune(b+0x60)), 1
+		return "ctrl+" + string(rune(b+0x60)), 1
 	}
 	r, n := utf8.DecodeRune(input)
 	if r == utf8.RuneError {
 		return "", 1
 	}
 	if r == ' ' {
-		return "Space", 1
+		return "space", 1
 	}
 	n = max(clusterLen(string(input[:min(len(input), 64)])), n)
-	return string(input[:n]), n
+	return charKey(string(input[:n]), 0), n
 }
 
 // csiFinals are the keys CSI and SS3 name by their final byte.
-var csiFinals = map[byte]string{'A': "ArrowUp", 'B': "ArrowDown", 'C': "ArrowRight", 'D': "ArrowLeft", 'H': "Home", 'F': "End"}
+var csiFinals = map[byte]string{'A': "arrow_up", 'B': "arrow_down", 'C': "arrow_right", 'D': "arrow_left", 'H': "home", 'F': "end"}
 
 // tildeKeys are the keys CSI n ~ names.
-var tildeKeys = map[int]string{1: "Home", 7: "Home", 4: "End", 8: "End", 2: "Insert", 3: "Delete", 5: "PageUp", 6: "PageDown"}
+var tildeKeys = map[int]string{1: "home", 7: "home", 4: "end", 8: "end", 2: "insert", 3: "delete", 5: "page_up", 6: "page_down"}
 
 // codeKeys are the codes of the kitty protocol and modifyOtherKeys that are
 // not characters.
-var codeKeys = map[int]string{9: "Tab", 13: "Enter", 27: "Escape", 8: "Backspace", 127: "Backspace"}
+var codeKeys = map[int]string{9: "tab", 13: "enter", 27: "escape", 8: "backspace", 127: "backspace", 32: "space"}
 
-// kittyKeys are the kitty protocol's codes from 57344 that name keys.
+// kittyKeys are the kitty protocol's codes from 57344 that name keys: those
+// of its keypad, as a legacy terminal sends the keys.
 var kittyKeys = map[int]string{
 	57399: "0", 57400: "1", 57401: "2", 57402: "3", 57403: "4", 57404: "5", 57405: "6", 57406: "7", 57407: "8", 57408: "9",
-	57409: ".", 57410: "/", 57411: "*", 57412: "-", 57413: "+", 57414: "Enter", 57415: "=",
-	57417: "ArrowLeft", 57418: "ArrowRight", 57419: "ArrowUp", 57420: "ArrowDown", 57421: "PageUp", 57422: "PageDown",
-	57423: "Home", 57424: "End", 57425: "Insert", 57426: "Delete",
-	57441: "Shift", 57442: "Control", 57443: "Alt", 57444: "Meta", 57447: "Shift", 57448: "Control", 57449: "Alt", 57450: "Meta",
+	57409: ".", 57410: "/", 57411: "*", 57412: "-", 57413: "+", 57414: "enter", 57415: "=",
+	57417: "arrow_left", 57418: "arrow_right", 57419: "arrow_up", 57420: "arrow_down", 57421: "page_up", 57422: "page_down",
+	57423: "home", 57424: "end", 57425: "insert", 57426: "delete",
 }
 
 // ss3Key is the key SS3 with a final byte names.
@@ -386,7 +316,7 @@ func ss3Key(final byte) string {
 
 // modsOf reads a CSI parameter m[:e]: its modifiers, and whether the event
 // is a release. ok is false when it does not parse.
-func modsOf(field string) (m mods, release, ok bool) {
+func modsOf(field string) (m myelinkey.Mods, release, ok bool) {
 	num, ev, _ := strings.Cut(field, ":")
 	n, e := 1, 1
 	var err error
@@ -402,52 +332,54 @@ func modsOf(field string) (m mods, release, ok bool) {
 	}
 	bits := max(n-1, 0)
 	if bits&1 != 0 {
-		m |= modShift
+		m |= myelinkey.Shift
 	}
 	if bits&2 != 0 {
-		m |= modAlt
+		m |= myelinkey.Alt
 	}
 	if bits&4 != 0 {
-		m |= modControl
+		m |= myelinkey.Ctrl
 	}
 	if bits&(8|32) != 0 {
-		m |= modMeta
+		m |= myelinkey.Super
 	}
 	return m, e == 3, true
+}
+
+// isLetter reports whether a character has case.
+func isLetter(r rune) bool {
+	return unicode.ToUpper(r) != r || unicode.ToLower(r) != r && unicode.ToUpper(unicode.ToLower(r)) == r
 }
 
 // codeKey is the key a code of the kitty protocol or of modifyOtherKeys
 // names, with its modifiers, its shifted key (0 when not given) and its
 // text ("" when not given).
-func codeKey(code int, m mods, shifted int, text string) string {
+func codeKey(code int, m myelinkey.Mods, shifted int, text string) string {
 	if v, ok := codeKeys[code]; ok {
-		return key{m, v}.String()
+		return join(m, v)
 	}
 	if code >= 57344 {
 		if v, ok := kittyKeys[code]; ok {
-			return key{m, v}.String()
+			return join(m, v)
 		}
 		return ""
 	}
 	if code < 0x20 || code == 0x7f || code > unicode.MaxRune {
 		return ""
 	}
-	base := string(rune(code))
-	value := base
-	if m&modShift != 0 {
+	r := rune(code)
+	if isLetter(r) {
+		return charKey(string(unicode.ToLower(r)), m)
+	}
+	if m&myelinkey.Shift != 0 {
 		switch {
 		case shifted > 0 && shifted <= unicode.MaxRune:
-			value = string(rune(shifted))
+			return charKey(string(rune(shifted)), m&^myelinkey.Shift)
 		case text != "":
-			value = text
-		default:
-			value = string(unicode.ToUpper(rune(code)))
-		}
-		if value != base {
-			m &^= modShift
+			return charKey(text, m&^myelinkey.Shift)
 		}
 	}
-	return key{m, value}.String()
+	return charKey(string(r), m)
 }
 
 // csiKey is the key a CSI sequence names, or "".
@@ -508,16 +440,16 @@ func csiKey(params string, final byte) string {
 		if !known || !ok || release {
 			return ""
 		}
-		return key{m, v}.String()
+		return join(m, v)
 	case final == 'Z':
-		return "Shift+Tab"
+		return "shift+tab"
 	}
 	v, known := csiFinals[final]
 	m, release, ok := modsOf(field(1))
 	if !known || !ok || release {
 		return ""
 	}
-	return key{m, v}.String()
+	return join(m, v)
 }
 
 // clusterLen is the length in bytes of the grapheme cluster s starts with,
@@ -560,11 +492,11 @@ func clusterLen(s string) int {
 
 func isRegional(r rune) bool { return r >= 0x1f1e6 && r <= 0x1f1ff }
 
-// Platform is how a host reads bindings (SDK.md §3.10): the modifier Mod
-// stands for, and its edit shortcuts. The zero Platform is Control with
-// the default edit shortcuts.
+// Platform is how a host reads bindings (SDK.md §3.10): the modifier mod
+// stands for, and its edit shortcuts. The zero Platform is ctrl with the
+// default edit shortcuts.
 type Platform struct {
-	// Mod is "Control" or "Meta" (SPEC §10.4); "" is Control.
+	// Mod is "ctrl" or "super" (SPEC §10.4); "" is ctrl.
 	Mod string
 	// Edit is the host's edit shortcuts, from each action to its keys
 	// (SPEC §10.2); nil is DefaultEdit(Mod).
@@ -578,65 +510,77 @@ func PlatformOf(c Caps) Platform { return Platform{Mod: c.Mod, Edit: c.Edit} }
 // The edit actions, in SPEC §10.2's order.
 var editActions = [...]Action{SelectAll, Copy, Cut, Paste, Undo, Redo}
 
-// DefaultEdit is the default edit shortcuts for a Mod (SPEC §10.2),
-// "Control" or "Meta", the keys canonical with Mod read.
+// DefaultEdit is the default edit shortcuts for a mod (SPEC §10.2), "ctrl"
+// or "super", each key read: ctrl+shift+z and ctrl+y for redo where it is
+// ctrl.
 func DefaultEdit(mod string) map[string][]string {
-	m := "Control"
-	if mod == "Meta" {
-		m = "Meta"
-	}
+	p := Platform{Mod: mod}
 	e := map[string][]string{
-		string(SelectAll): {m + "+a"}, string(Copy): {m + "+c"}, string(Cut): {m + "+x"},
-		string(Paste): {m + "+v"}, string(Undo): {m + "+z"}, string(Redo): {m + "+Z"},
+		string(SelectAll): {"mod+a"}, string(Copy): {"mod+c"}, string(Cut): {"mod+x"},
+		string(Paste): {"mod+v"}, string(Undo): {"mod+z"}, string(Redo): {"mod+shift+z"},
 	}
-	if m == "Control" {
-		e[string(Redo)] = append(e[string(Redo)], "Control+y")
+	if p.modOf() == myelinkey.Ctrl {
+		e[string(Redo)] = append(e[string(Redo)], "ctrl+y")
+	}
+	for a, keys := range e {
+		for i, k := range keys {
+			keys[i], _ = p.ReadKey(k)
+		}
+		e[a] = keys
 	}
 	return e
 }
 
-// ReadKey reads a key's name as the Platform reads it (SPEC §10.4): its
-// canonical name (ParseKey) with Mod read as the Platform's, so that where
-// Mod is Control "Mod+a" and "Control+a" read alike, and where it is Meta
-// they are two keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys
-// typed this way. ok is false for a name that does not parse.
-func (p Platform) ReadKey(name string) (canonical string, ok bool) {
-	k, ok := splitKey(name)
-	if !ok {
-		return "", false
+// modOf is the modifier mod stands for on a Platform.
+func (p Platform) modOf() myelinkey.Mods {
+	if p.Mod == "super" {
+		return myelinkey.Super
 	}
-	return k.canonical().readMod(p.modOf()).canonical().String(), true
+	return myelinkey.Ctrl
 }
 
-// modOf is the bit Mod reads as on a Platform.
-func (p Platform) modOf() mods {
-	if p.Mod == "Meta" {
-		return modMeta
+// ReadKey reads a key's name as the Platform reads it (SPEC §10.4): as
+// ParseKey does, with mod standing for the Platform's, so that where Mod is
+// ctrl "mod+a" and "ctrl+a" read alike, and where it is super they are two
+// keys. A menu's items (MenuItem.Key, MenuLevelOf) compare with the keys
+// typed this way. ok is false for a name that does not parse, "mod+ctrl+a"
+// among them.
+func (p Platform) ReadKey(name string) (canonical string, ok bool) {
+	k, err := myelinkey.ParseWith(name, myelinkey.Options{Mod: p.modOf()})
+	return string(k), err == nil
+}
+
+// written is a key's name with mod where name was written with it
+// ("mod+shift+z"), and k, the key it reads as, otherwise.
+func (p Platform) written(name string, k myelinkey.Key) string {
+	mods, value, _ := myelinkey.Split(k)
+	if !strings.Contains("+"+strings.ToLower(name)+"+", "+mod+") || mods&p.modOf() == 0 {
+		return string(k)
 	}
-	return modControl
+	return "mod+" + join(mods&^p.modOf(), value)
 }
 
 // Keymap binds keys to actions (SPEC §10.2), read on a Platform.
 // ParseKeymap reads one from a data-keys value; Resolve makes the one a
 // field uses, whose Lookup says what the field does with a key, and Selects
-// whether it selects as it moves. Program says whether any focused
-// element's keymap gives a key to the program, and Scroll which scroll
-// action it binds a key to.
+// whether it selects as it moves. Binds says whether it binds a key,
+// Program whether any focused element's keymap gives a key to the program,
+// and Scroll which scroll action it binds a key to.
 type Keymap struct {
-	keys      []string          // canonical, Mod read, in the order first bound
+	keys      []string          // canonical, mod read, in the order first bound
 	actions   map[string]Action // by key
-	written   map[string]string // by key: its last binding's key, Mod kept
+	written   map[string]string // by key: its last binding's key, mod kept
 	multiline bool
-	mod       mods
+	platform  Platform
 }
 
 // ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it:
 // bindings separated by ASCII white space, each key=action, split at its
 // last '='. It drops the bindings a host ignores: a key that does not
-// parse, an action it does not know, and Tab, Shift+Tab and Escape. Mod
-// reads as the Platform's: on Control, Mod+a and Control+a are one key.
+// parse, an action it does not know, and tab, shift+tab and escape. Mod
+// reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
 func ParseKeymap(p Platform, value string) *Keymap {
-	m := &Keymap{mod: p.modOf()}
+	m := &Keymap{platform: p}
 	bindings(value, func(k string, a Action) { m.Bind(k, a) })
 	return m
 }
@@ -654,13 +598,8 @@ func bindings(value string, f func(key string, a Action)) {
 // Bind binds a key to an action, and reports whether it did: a host
 // ignores the bindings ParseKeymap drops, and so does Bind.
 func (m *Keymap) Bind(name string, a Action) bool {
-	w, ok := splitKey(name)
-	if !ok || !actions[a] {
-		return false
-	}
-	w = w.canonical()
-	k := w.readMod(m.modBit()).canonical().String()
-	if k == "Tab" || k == "Shift+Tab" || k == "Escape" {
+	k, ok := m.platform.ReadKey(name)
+	if !ok || !actions[a] || k == "tab" || k == "shift+tab" || k == "escape" {
 		return false
 	}
 	if m.actions == nil {
@@ -670,21 +609,12 @@ func (m *Keymap) Bind(name string, a Action) bool {
 		m.keys = append(m.keys, k)
 	}
 	m.actions[k] = a
-	m.written[k] = w.String()
+	m.written[k] = m.platform.written(name, myelinkey.Key(k))
 	return true
 }
 
-// modBit is what Mod reads as: Control on a Keymap made without a
-// Platform.
-func (m *Keymap) modBit() mods {
-	if m.mod == 0 {
-		return modControl
-	}
-	return m.mod
-}
-
 // Format writes the keymap as a data-keys value: each key once, where it
-// was first bound, as its last binding wrote it (Mod kept), with its last
+// was first bound, as its last binding wrote it (mod kept), with its last
 // action.
 func (m *Keymap) Format() string {
 	var b strings.Builder
@@ -700,39 +630,39 @@ func (m *Keymap) Format() string {
 }
 
 // The default keymap (SPEC §10.2): every host's keys, then those of its
-// Mod. The edit shortcuts and Enter follow.
+// mod. The edit shortcuts and enter follow.
 var (
 	defaultKeys = [...]struct {
 		key    string
 		action Action
 	}{
-		{"ArrowLeft", CharBackward}, {"ArrowRight", CharForward},
-		{"Alt+ArrowLeft", WordBackward}, {"Alt+ArrowRight", WordForward},
-		{"Home", LineStart}, {"End", LineEnd},
-		{"Backspace", DeleteCharBackward}, {"Delete", DeleteCharForward},
-		{"Alt+Backspace", DeleteWordBackward}, {"Alt+Delete", DeleteWordForward},
-		{"ArrowUp", LinePrevious}, {"ArrowDown", LineNext}, {"PageUp", PageUp}, {"PageDown", PageDown},
+		{"arrow_left", CharBackward}, {"arrow_right", CharForward},
+		{"alt+arrow_left", WordBackward}, {"alt+arrow_right", WordForward},
+		{"home", LineStart}, {"end", LineEnd},
+		{"backspace", DeleteCharBackward}, {"delete", DeleteCharForward},
+		{"alt+backspace", DeleteWordBackward}, {"alt+delete", DeleteWordForward},
+		{"arrow_up", LinePrevious}, {"arrow_down", LineNext}, {"page_up", PageUp}, {"page_down", PageDown},
 	}
-	controlKeys = [...]struct {
+	ctrlKeys = [...]struct {
 		key    string
 		action Action
 	}{
-		{"Control+ArrowLeft", WordBackward}, {"Control+ArrowRight", WordForward},
-		{"Control+Home", InputStart}, {"Control+End", InputEnd},
-		{"Control+Backspace", DeleteWordBackward}, {"Control+Delete", DeleteWordForward},
+		{"ctrl+arrow_left", WordBackward}, {"ctrl+arrow_right", WordForward},
+		{"ctrl+home", InputStart}, {"ctrl+end", InputEnd},
+		{"ctrl+backspace", DeleteWordBackward}, {"ctrl+delete", DeleteWordForward},
 	}
-	metaKeys = [...]struct {
+	superKeys = [...]struct {
 		key    string
 		action Action
 	}{
-		{"Meta+ArrowLeft", LineStart}, {"Meta+ArrowRight", LineEnd},
-		{"Meta+ArrowUp", InputStart}, {"Meta+ArrowDown", InputEnd},
-		{"Meta+Backspace", DeleteToLineStart},
-		{"Control+a", LineStart}, {"Control+e", LineEnd},
-		{"Control+b", CharBackward}, {"Control+f", CharForward},
-		{"Control+p", LinePrevious}, {"Control+n", LineNext},
-		{"Control+h", DeleteCharBackward}, {"Control+d", DeleteCharForward},
-		{"Control+k", DeleteToLineEnd},
+		{"super+arrow_left", LineStart}, {"super+arrow_right", LineEnd},
+		{"super+arrow_up", InputStart}, {"super+arrow_down", InputEnd},
+		{"super+backspace", DeleteToLineStart},
+		{"ctrl+a", LineStart}, {"ctrl+e", LineEnd},
+		{"ctrl+b", CharBackward}, {"ctrl+f", CharForward},
+		{"ctrl+p", LinePrevious}, {"ctrl+n", LineNext},
+		{"ctrl+h", DeleteCharBackward}, {"ctrl+d", DeleteCharForward},
+		{"ctrl+k", DeleteToLineEnd},
 	}
 )
 
@@ -743,7 +673,7 @@ var (
 // binding to a scroll action where it stands, in its own value too: one
 // neither acts nor overrides an earlier binding of its key.
 func Resolve(p Platform, multiline bool, values ...string) *Keymap {
-	m := &Keymap{multiline: multiline, mod: p.modOf()}
+	m := &Keymap{multiline: multiline, platform: p}
 	for _, b := range defaultKeys {
 		m.Bind(b.key, b.action)
 	}
@@ -751,13 +681,13 @@ func Resolve(p Platform, multiline bool, values ...string) *Keymap {
 	if multiline {
 		enter = Newline
 	}
-	m.Bind("Enter", enter)
-	if m.mod == modMeta {
-		for _, b := range metaKeys {
+	m.Bind("enter", enter)
+	if p.modOf() == myelinkey.Super {
+		for _, b := range superKeys {
 			m.Bind(b.key, b.action)
 		}
 	} else {
-		for _, b := range controlKeys {
+		for _, b := range ctrlKeys {
 			m.Bind(b.key, b.action)
 		}
 	}
@@ -780,24 +710,36 @@ func Resolve(p Platform, multiline bool, values ...string) *Keymap {
 	return m
 }
 
-// bound is the action the keymap binds a key to, and the key, canonical
-// with Mod read: a key with Shift that no binding names is looked up
-// without Shift. ok is false when the name does not parse.
-func (m *Keymap) bound(name string) (k key, a Action, bound, ok bool) {
-	if k, ok = splitKey(name); !ok {
-		return key{}, "", false, false
+// bound is the action the keymap binds a key to, and the key, canonical:
+// a key with shift that is not a character and that no binding names is
+// looked up without shift (SPEC §10.2). ok is false when the name does not
+// parse, and mod is not read: no key pressed is named with it (SPEC §10.4).
+func (m *Keymap) bound(name string) (k myelinkey.Key, a Action, bound, ok bool) {
+	k, err := myelinkey.Parse(name)
+	if err != nil {
+		return "", "", false, false
 	}
-	k = k.readMod(m.modBit()).canonical()
-	a, bound = m.actions[k.String()]
-	if !bound && k.mods&modShift != 0 {
-		a, bound = m.actions[key{k.mods &^ modShift, k.value}.String()]
+	a, bound = m.actions[string(k)]
+	if mods, value, kind := myelinkey.Split(k); !bound && mods&myelinkey.Shift != 0 && kind != myelinkey.Character {
+		a, bound = m.actions[join(mods&^myelinkey.Shift, value)]
 	}
 	return k, a, bound, true
 }
 
+// Binds reports whether the keymap binds a key: its own binding, or, for a
+// key with shift that is not a character and that no binding names, the
+// binding without shift (SPEC §10.2). A host that has two names for a press
+// (SPEC §10.4) asks of the physical one first, and of the other only where
+// the keymap does not bind it.
+func (m *Keymap) Binds(name string) bool {
+	_, _, bound, _ := m.bound(name)
+	return bound
+}
+
 // Program reports whether the keymap gives a key to the program: binds it
-// to program or prefix, or, for a key with Shift that no binding names,
-// binds it without Shift (SPEC §10.2, keys for the program).
+// to program or prefix, or, for a key with shift that is not a character
+// and that no binding names, binds it without shift (SPEC §10.2, keys for
+// the program).
 //
 // Every focused element has a keymap, and outside a text field program and
 // the scroll actions are the only actions it gives. A host reads the
@@ -813,22 +755,23 @@ func (m *Keymap) Program(name string) bool {
 }
 
 // Prefix reports whether the keymap binds a key to prefix, or, for a key
-// with Shift that no binding names, binds it without Shift. A host asks it
-// of a key Program gives the program, and from then on gives the program
-// every key, Tab, Shift+Tab and Escape too, until the program sends a=focus
-// or a=blur, the surface loses the keyboard, or the user focuses an
-// element of it with a press (SPEC §10.5).
+// with shift that is not a character and that no binding names, binds it
+// without shift. A host asks it of a key Program gives the program, and
+// from then on gives the program every key, tab, shift+tab and escape too,
+// until the program sends a=focus or a=blur, the surface loses the
+// keyboard, or the user focuses an element of it with a press (SPEC §10.5).
 func (m *Keymap) Prefix(name string) bool {
 	_, a, bound, _ := m.bound(name)
 	return bound && a == Prefix
 }
 
 // Scroll is the scroll action the keymap binds a key to, or "" for none:
-// the key's own binding, or, for a key with Shift that no binding names,
-// the binding without Shift (SPEC §10.2, scrolling keys).
+// the key's own binding, or, for a key with shift that is not a character
+// and that no binding names, the binding without shift (SPEC §10.2,
+// scrolling keys).
 //
 // A host asks it of the keymap it asks Program of, for a key the focused
-// element does not use (Space on a button, a character on a select are the
+// element does not use (space on a button, a character on a select are the
 // element's). A key bound to one scrolls the nearest element that scrolls,
 // from the focused one outward, never the terminal; along an axis the
 // document does not scroll (Scroll, SPEC §5.1), it goes on as if the
@@ -841,15 +784,16 @@ func (m *Keymap) Scroll(name string) Action {
 }
 
 // Lookup says what a field with this keymap does with a key (SPEC §10.2):
-// an action; Insert for a character it types; or "" when the key is not the
-// field's, and reaches the program (or, for Tab, moves focus). A key with
-// Shift that no binding names is looked up without Shift.
+// an action; Insert for a key it types (KeyText); or "" when the key is not
+// the field's, and reaches the program (or, for tab, moves focus). A key
+// with shift that is not a character and that no binding names is looked up
+// without shift.
 func (m *Keymap) Lookup(name string) Action {
 	k, a, bound, ok := m.bound(name)
 	if !ok {
 		return ""
 	}
-	if c := k.String(); c == "Tab" || c == "Shift+Tab" || c == "Escape" {
+	if k == "tab" || k == "shift+tab" || k == "escape" {
 		return ""
 	}
 	switch {
@@ -857,18 +801,23 @@ func (m *Keymap) Lookup(name string) Action {
 		return ""
 	case bound:
 		return a
-	case isChar(k.value) && k.mods&(modControl|modAlt|modMeta) == 0:
+	}
+	if _, types := KeyText(string(k)); types {
 		return Insert
 	}
 	return ""
 }
 
 // Selects reports whether a field with this keymap selects with a key
-// (SPEC §10.2, Shift selects): Lookup returns a move for it (Action.Moves),
-// and its canonical name has Shift, bound so or looked up without it
-// ("Shift+ArrowLeft", "Control+Shift+End", not "Alt+<"). The field then
-// keeps its anchor and moves the caret (hottyedit.Field.Extend).
+// (SPEC §10.2, Shift selects): Lookup returns a move for it, and its name
+// has shift, bound so or looked up without it ("shift+arrow_left",
+// "ctrl+shift+end", not "alt+<"). The field then keeps its anchor and moves
+// the caret (hottyedit.Field.Extend).
 func (m *Keymap) Selects(name string) bool {
-	k, ok := splitKey(name)
-	return ok && k.canonical().mods&modShift != 0 && m.Lookup(name).Moves()
+	k, err := myelinkey.Parse(name)
+	if err != nil {
+		return false
+	}
+	mods, _, _ := myelinkey.Split(k)
+	return mods&myelinkey.Shift != 0 && m.Lookup(name).Moves()
 }

@@ -19,7 +19,7 @@ A program gives its surfaces a keymap in data-keys (hotty.TerminalKeys, say), an
 ```go
 km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 f := hottyedit.Field{Value: "foo bar"}
-switch a, changed := f.Key(km, "Control+w"); {
+switch a, changed := f.Key(km, "ctrl+w"); {
 case a == "":
 	// the program's key
 case a == hotty.Submit:
@@ -29,7 +29,7 @@ case changed:
 }
 ```
 
-A field has a selection, from its anchor to the caret, as a host's does: Key extends it with a move whose key has Shift (hotty.Keymap.Selects), select-all selects the whole value, and Select sets it for the pointer. Selection says what to draw as selected.
+A field has a selection, from its anchor to the caret, as a host's does: Key extends it with a move whose key has shift (hotty.Keymap.Selects), select-all selects the whole value, and Select sets it for the pointer. Selection says what to draw as selected.
 
 Characters are grapheme clusters (Unicode UAX #29): the caret counts them. A field in cells does not wrap, so its rows are its lines.
 
@@ -103,7 +103,7 @@ Extend does a move as Shift does it (SPEC §10.2, Shift selects): the anchor sta
 func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool)
 ```
 
-Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): it types a character, or does an action, with Extend when the keymap Selects with the key and with Do otherwise. It returns the action (hotty.Insert for a character), "" when the key is not the field's, and whether the value changed.
+Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): it types a character, or does an action, with Extend when the keymap Selects with the key and with Do otherwise. It returns the action (hotty.Insert for a key that types, hotty.KeyText), "" when the key is not the field's, and whether the value changed.
 
 #### <a id="example-Field.Key"></a>Example
 
@@ -112,16 +112,16 @@ A field in cells, edited with the keymap the program gives its surfaces.
 ```go
 km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 f := hottyedit.Field{Value: "hello wrld", Caret: 10}
-f.Key(km, "Alt+b")     // word-backward: hello |wrld
-f.Key(km, "Control+f") // char-forward: hello w|rld
-f.Key(km, "o")         // types it
+f.Key(km, "alt+b")  // word-backward: hello |wrld
+f.Key(km, "ctrl+f") // char-forward: hello w|rld
+f.Key(km, "o")      // types it
 fmt.Printf("%q %d\n", f.Value, f.Caret)
-f.Key(km, "Control+w") // delete-word-backward
+f.Key(km, "ctrl+w") // delete-word-backward
 fmt.Printf("%q %d\n", f.Value, f.Caret)
-f.Key(km, "Shift+End") // line-end, selecting: hello [rld]
+f.Key(km, "shift+end") // line-end, selecting: hello [rld]
 start, end := f.Selection()
 fmt.Println(start, end)
-f.Key(km, "Z") // types in place of the selection
+f.Key(km, "shift+z") // types in place of the selection
 fmt.Printf("%q %d\n", f.Value, f.Caret)
 ```
 

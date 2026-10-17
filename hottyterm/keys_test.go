@@ -39,14 +39,16 @@ func TestKeyName(t *testing.T) {
 		want string
 	}{
 		{uv.Key{Code: 'a', Text: "a"}, "a"},
-		{uv.Key{Code: 'a', ShiftedCode: 'A', Mod: uv.ModShift, Text: "A"}, "A"},
-		{uv.Key{Code: 'a', Mod: uv.ModCtrl | uv.ModShift}, "Control+A"},
-		{uv.Key{Code: '1', Mod: uv.ModShift}, "Shift+1"},
+		{uv.Key{Code: 'a', ShiftedCode: 'A', Mod: uv.ModShift, Text: "A"}, "shift+a"},
+		{uv.Key{Code: 'a', Mod: uv.ModCtrl | uv.ModShift}, "ctrl+shift+a"},
+		{uv.Key{Code: '1', Mod: uv.ModShift}, "shift+1"},
 		{uv.Key{Code: '1', Mod: uv.ModShift, Text: "!"}, "!"},
-		{uv.Key{Code: uv.KeySpace, Mod: uv.ModCtrl}, "Control+Space"},
-		{uv.Key{Code: uv.KeyEnter, Mod: uv.ModShift}, "Shift+Enter"},
-		{uv.Key{Code: uv.KeyLeft, Mod: uv.ModSuper}, "Meta+ArrowLeft"},
+		{uv.Key{Code: uv.KeySpace, Mod: uv.ModCtrl}, "ctrl+space"},
+		{uv.Key{Code: uv.KeyEnter, Mod: uv.ModShift}, "shift+enter"},
+		{uv.Key{Code: uv.KeyLeft, Mod: uv.ModSuper}, "super+arrow_left"},
 		{uv.Key{Code: uv.KeyExtended, Text: "é"}, "é"},
+		{uv.Key{Code: 'A'}, "a"},
+		{uv.Key{Code: uv.KeyLeftShift}, ""},
 		{uv.Key{Code: uv.KeyF13}, ""},
 	} {
 		if got := KeyName(c.key); got != c.want {

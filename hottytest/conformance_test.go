@@ -9,9 +9,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/neuroplastio/hotty-go"
+	"github.com/neuroplastio/myelin/myelinkey"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -88,21 +90,49 @@ type vectorEvent struct {
 	Detail json.RawMessage `json:"detail"`
 }
 
-// keyName is a key step's key as SPEC §10.4 names it: the modifiers held,
-// in its order, before the key; Shift left out before a character.
+// keyName is a key step's key as SPEC §10.4 names it, on a US layout: the
+// key value of the DOM, with the modifiers held, as myelin key names write
+// them. A character is written small, with shift before a letter or a key
+// that is only physical.
 func keyName(st vectorStep) string {
-	held := map[string]bool{}
-	for _, k := range st.Keys {
-		held[k] = true
+	var mods myelinkey.Mods
+	for _, m := range st.Keys {
+		switch m {
+		case "super":
+			mods |= myelinkey.Super
+		case "ctrl":
+			mods |= myelinkey.Ctrl
+		case "alt":
+			mods |= myelinkey.Alt
+		case "shift":
+			mods |= myelinkey.Shift
+		}
 	}
 	name := *st.Key
 	if name == " " {
-		name = "Space"
+		name = "space"
+	} else if utf8.RuneCountInString(name) != 1 {
+		// A key value ("ArrowLeft") is a physical key's W3C code.
+		k, err := myelinkey.Parse(name)
+		if err != nil {
+			return name
+		}
+		name = string(k)
+	} else if r, _ := utf8.DecodeRuneInString(name); unicode.IsUpper(r) {
+		// A capital is typed with Shift, which a character shows.
+		name, mods = string(unicode.ToLower(r)), mods|myelinkey.Shift
+	}
+	// Shift with a character that is no letter is in the character.
+	if r, _ := utf8.DecodeRuneInString(name); utf8.RuneCountInString(name) == 1 && !unicode.IsLetter(r) {
+		mods &^= myelinkey.Shift
 	}
 	var b strings.Builder
-	for _, m := range []struct{ held, name string }{{"ctrl", "Control"}, {"alt", "Alt"}, {"meta", "Meta"}, {"shift", "Shift"}} {
-		if held[m.held] && (m.held != "shift" || utf8.RuneCountInString(*st.Key) != 1) {
-			b.WriteString(m.name + "+")
+	for _, m := range []struct {
+		bit  myelinkey.Mods
+		name string
+	}{{myelinkey.Super, "super+"}, {myelinkey.Ctrl, "ctrl+"}, {myelinkey.Alt, "alt+"}, {myelinkey.Shift, "shift+"}} {
+		if mods&m.bit != 0 {
+			b.WriteString(m.name)
 		}
 	}
 	return b.String() + name

@@ -58,7 +58,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.3"
+	Version = "0.4"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
@@ -69,10 +69,10 @@ const (
 // The modifier keys held during a click, a press or a drag, as the bits of
 // Event.Mods (SPEC §9).
 const (
-	ModShift   = 1
-	ModAlt     = 2
-	ModControl = 4
-	ModMeta    = 8
+	ModShift = 1
+	ModAlt   = 2
+	ModCtrl  = 4
+	ModSuper = 8
 )
 
 // The optional features a host may have (SPEC §4), as its capabilities

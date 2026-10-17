@@ -8,7 +8,7 @@
 //
 //	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
 //	f := hottyedit.Field{Value: "foo bar"}
-//	switch a, changed := f.Key(km, "Control+w"); {
+//	switch a, changed := f.Key(km, "ctrl+w"); {
 //	case a == "":
 //		// the program's key
 //	case a == hotty.Submit:
@@ -18,7 +18,7 @@
 //	}
 //
 // A field has a selection, from its anchor to the caret, as a host's does:
-// Key extends it with a move whose key has Shift (hotty.Keymap.Selects),
+// Key extends it with a move whose key has shift (hotty.Keymap.Selects),
 // select-all selects the whole value, and Select sets it for the pointer.
 // Selection says what to draw as selected.
 //
@@ -224,23 +224,15 @@ func (f *Field) Type(text string) (changed bool) {
 // Key does what a keymap says the field does with a key (hotty.Keymap's
 // Lookup): it types a character, or does an action, with Extend when the
 // keymap Selects with the key and with Do otherwise. It returns the action
-// (hotty.Insert for a character), "" when the key is not the field's, and
-// whether the value changed.
+// (hotty.Insert for a key that types, hotty.KeyText), "" when the key is not
+// the field's, and whether the value changed.
 func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) {
 	switch a = m.Lookup(key); a {
 	case "":
 		return "", false
 	case hotty.Insert:
-		k, _ := hotty.ParseKey(key)
-		switch i := strings.LastIndexByte(k, '+'); {
-		case k == "+" || strings.HasSuffix(k, "++"):
-			k = "+"
-		case k == "Space" || strings.HasSuffix(k, "+Space"):
-			k = " "
-		case i >= 0:
-			k = k[i+1:]
-		}
-		return a, f.Type(k)
+		text, _ := hotty.KeyText(key)
+		return a, f.Type(text)
 	}
 	if m.Selects(key) {
 		return a, f.Extend(a)
