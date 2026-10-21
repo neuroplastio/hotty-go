@@ -12,7 +12,7 @@ events carry msgpack bodies (SPEC §3.3), and its query lists the version it
 speaks (`a=q:n=1:v=0.4`, SPEC §4). A terminal of another hotty version is no
 host to it, and the program draws in cells. A program written for 0.3 ports
 as hotty's
-[CHANGES.md](https://github.com/neuroplastio/hotty/blob/main/CHANGES.md)
+[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.4.0/CHANGES.md)
 says: its `data-keys`, menu keys and tests move to the new names, a
 `hotty.Platform`'s `Mod` is `"ctrl"` or `"super"`, a key is read with
 `hotty.ParseKey` or `Platform.ReadKey`, and `hotty.ModControl` and
@@ -76,6 +76,8 @@ of what it imports:
 ```
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
 ```
+
+0.4.x speaks hotty 0.4; the patch number is this repository's own.
 
 ## Packages
 
@@ -144,8 +146,12 @@ The toolchain is in `mise.toml`: run `mise install` first.
   each nested `go.mod` replaces the others with their directories. What a
   program that uses the SDK gets are the requirements between them, which
   `make pin REV=…` sets: before a release to a pushed commit, and for a
-  release to its version (`make pin REV=v0.1.0`), committed, and then every
-  module tagged at that commit (`v0.1.0`, `hottyterm/v0.1.0`, …).
+  release to its version (`make pin REV=v0.4.0`), committed and pushed.
+  `make tag V=v0.4.0` then tags every module at that commit (`v0.4.0`,
+  `hottyterm/v0.4.0`, …). It refuses unless the version's first two
+  numbers are the hotty version (`hotty.Version`, the vectors'), the tree
+  is clean and pushed, and every requirement between the modules names
+  that version.
 - `make cover` runs the tests with coverage, prints a table by package, and
   fails when a public package is under `COVER_MIN` (85%).
 - `make docs` writes the documentation.

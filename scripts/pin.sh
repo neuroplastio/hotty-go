@@ -5,8 +5,9 @@
 # the SDK gets, and each must be a version that exists: a program's
 # `go mod tidy` fetches, say, hottytest at the version hottytea requires.
 #
-#   sh scripts/pin.sh v0.1.0       # a release: tag every module (v0.1.0,
-#                                  # hottyterm/v0.1.0, …) at the commit pinning it
+#   sh scripts/pin.sh v0.4.0       # a release: then tag every module (v0.4.0,
+#                                  # hottyterm/v0.4.0, …) at the commit pinning
+#                                  # it, with scripts/tag.sh
 #   sh scripts/pin.sh origin/main  # before there is one: a pushed commit
 set -eu
 rev=${1:?usage: pin.sh VERSION|COMMIT}
