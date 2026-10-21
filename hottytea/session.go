@@ -34,7 +34,8 @@
 //
 // In a terminal that is not a host, Mode is Text and the Session sends
 // nothing: the program draws everything in cells. A Session with Late
-// asks for a late answer, and moves to Native if one comes.
+// asks for a late answer, and moves to Native if one comes. A Session with
+// Known does not ask: the program knows what the terminal is.
 package hottytea
 
 import (
@@ -112,8 +113,18 @@ type RelayoutMsg struct{}
 // it. Took runs from writing the ping to the answer.
 type PongMsg struct{ Took time.Duration }
 
+// Known is what a terminal is known to be without asking it (Session's
+// Known), such as a terminal emulated in a page that always has the hotty
+// addon.
+type Known struct {
+	Native bool
+	// Caps is what the host would have said about itself, when Native.
+	Caps hotty.Caps
+}
+
 type (
 	detectTickMsg struct{ at time.Time }
+	knownDueMsg   struct{}
 	erasedMsg     struct{}
 	pingDueMsg    struct{ seq int }
 )
@@ -232,6 +243,15 @@ type Session struct {
 	// withdraws the query (hotty.WithdrawLate), so that no answer reaches
 	// whatever reads the terminal after the program.
 	Late bool
+	// Known, if set, is what the terminal is known to be: Detect does not
+	// ask whether it is a host. It asks only for the terminal's DA1 answer,
+	// and answers ReadyMsg with Known when it comes, so that Bubble Tea has
+	// the answers to what it asked at start before the program's first
+	// frame (whether the terminal holds a frame until it is whole, mode
+	// 2026): that frame comes whole, surfaces and cells together. A
+	// terminal that does not answer within 1.5 s is taken as Known all the
+	// same. Late does nothing with Known.
+	Known *Known
 	// Limit is the most surfaces to keep, shown and hidden; 0 is
 	// DefaultLimit. To stay within it, Layout deletes the hidden surfaces
 	// seen longest ago. The terminal's own limit (Caps.Limits["surfaces"],
@@ -256,6 +276,7 @@ type Session struct {
 	// DA1 answers the Session's pings are owed.
 	det       hotty.Detector
 	detecting bool
+	fencing   bool // Known: waiting for the DA1 that answers it
 	da1       int
 	layouts   int // Layout calls
 	learned   int // a limit an EQUOTA taught
@@ -281,8 +302,13 @@ func New() *Session {
 // Detect asks the terminal whether it is a host (SPEC §4): return it from
 // Init. Update answers ReadyMsg once it knows: when the host replies, when
 // the terminal answers the fence without a reply, or after 1.5 s of
-// silence.
+// silence. With Known, it asks nothing but the fence (DA1), and answers
+// Known when the fence is answered.
 func (h *Session) Detect() tea.Cmd {
+	if h.Known != nil {
+		h.fencing = true
+		return tea.Batch(tea.Raw("\x1b[c"), tea.Tick(hotty.DetectTimeout, func(time.Time) tea.Msg { return knownDueMsg{} }))
+	}
 	h.detecting = true
 	h.det.Late = h.Late
 	return tea.Batch(tea.Raw(h.det.Start(time.Now())), h.detectTick())
@@ -318,6 +344,24 @@ func (h *Session) detected(was time.Time) (tea.Msg, tea.Cmd) {
 	return msg, cmd
 }
 
+// known answers Known as detection would have answered, once: the fence's
+// DA1 has come, or its time is up and the DA1 that comes later is the
+// Session's.
+func (h *Session) known(answered bool) tea.Msg {
+	if !h.fencing {
+		return nil
+	}
+	h.fencing = false
+	if !answered {
+		h.da1++
+	}
+	h.Mode = Text
+	if h.Known.Native {
+		h.Mode, h.Caps = Native, h.Known.Caps
+	}
+	return ReadyMsg{Mode: h.Mode, Caps: h.Caps}
+}
+
 // Update takes the program's messages first. What is hotty's comes back as
 // ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other
 // messages come back as they are. A nil message was the Session's alone.
@@ -345,6 +389,9 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 	case uv.PrimaryDeviceAttributesEvent:
 		// Until detection is done, every DA1 is its own: the query's fence,
 		// or an earlier question's (SDK.md §3.8).
+		if h.fencing {
+			return h.known(true), nil
+		}
 		if was := h.det.Deadline; h.detecting && h.det.DA1(time.Now()) {
 			return h.detected(was)
 		}
@@ -377,6 +424,9 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 			return nil, tea.Raw(ping)
 		}
 		return nil, nil
+
+	case knownDueMsg:
+		return h.known(false), nil
 
 	case detectTickMsg:
 		was := h.det.Deadline

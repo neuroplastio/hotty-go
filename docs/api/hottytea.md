@@ -24,7 +24,7 @@ A Session is the program's side. Its life in a program:
 
 Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit. So a program never returns an empty View under its surfaces (Layout).
 
-In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells. A Session with Late asks for a late answer, and moves to Native if one comes.
+In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells. A Session with Late asks for a late answer, and moves to Native if one comes. A Session with Known does not ask: the program knows what the terminal is.
 
 ### <a id="example-package"></a>Example
 
@@ -177,6 +177,7 @@ del counter
   - [`func (x *File) Fd() uintptr`](#File.Fd)
   - [`func (x *File) Read(p []byte) (int, error)`](#File.Read)
   - [`func (x *File) Write(p []byte) (int, error)`](#File.Write)
+- [`type Known`](#Known)
 - [`type Mode`](#Mode)
   - [`func (m Mode) String() string`](#Mode.String)
 - [`type PongMsg`](#PongMsg)
@@ -300,6 +301,18 @@ func (x *File) Write(p []byte) (int, error)
 
 Write writes to the terminal, and reads what was written.
 
+## <a id="Known"></a>type Known
+
+```go
+type Known struct {
+	Native bool
+	// Caps is what the host would have said about itself, when Native.
+	Caps hotty.Caps
+}
+```
+
+Known is what a terminal is known to be without asking it (Session's Known), such as a terminal emulated in a page that always has the hotty addon.
+
 ## <a id="Mode"></a>type Mode
 
 ```go
@@ -390,6 +403,15 @@ type Session struct {
 	// withdraws the query (hotty.WithdrawLate), so that no answer reaches
 	// whatever reads the terminal after the program.
 	Late bool
+	// Known, if set, is what the terminal is known to be: Detect does not
+	// ask whether it is a host. It asks only for the terminal's DA1 answer,
+	// and answers ReadyMsg with Known when it comes, so that Bubble Tea has
+	// the answers to what it asked at start before the program's first
+	// frame (whether the terminal holds a frame until it is whole, mode
+	// 2026): that frame comes whole, surfaces and cells together. A
+	// terminal that does not answer within 1.5 s is taken as Known all the
+	// same. Late does nothing with Known.
+	Known *Known
 	// Limit is the most surfaces to keep, shown and hidden; 0 is
 	// DefaultLimit. To stay within it, Layout deletes the hidden surfaces
 	// seen longest ago. The terminal's own limit (Caps.Limits["surfaces"],
@@ -464,7 +486,7 @@ return m, tea.Sequence(m.s.Flush(), tea.Quit)
 func (h *Session) Detect() tea.Cmd
 ```
 
-Detect asks the terminal whether it is a host (SPEC §4): return it from Init. Update answers ReadyMsg once it knows: when the host replies, when the terminal answers the fence without a reply, or after 1.5 s of silence.
+Detect asks the terminal whether it is a host (SPEC §4): return it from Init. Update answers ReadyMsg once it knows: when the host replies, when the terminal answers the fence without a reply, or after 1.5 s of silence. With Known, it asks nothing but the fence (DA1), and answers Known when the fence is answered.
 
 ### <a id="Session.Flush"></a>func (*Session) Flush
 

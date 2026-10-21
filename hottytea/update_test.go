@@ -111,6 +111,72 @@ func TestDetectIgnoresAnotherNumber(t *testing.T) {
 	}
 }
 
+// known is a Session that knows what the terminal is, and the command its
+// Detect returned.
+func known(k Known) (*Session, tea.Cmd) {
+	s := New()
+	s.Known = &k
+	return s, s.Detect()
+}
+
+// With Known, Detect asks the terminal nothing but its DA1 answer, and the
+// answer makes the Session ready as Known says, caps and all.
+func TestDetectKnown(t *testing.T) {
+	c := hotty.Caps{V: hotty.Version, Host: "page", Limits: map[string]int{"surfaces": 8}}
+	s, cmd := known(Known{Native: true, Caps: c})
+	// The fence alone: the first of the batch, the other its timer.
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok || len(batch) != 2 {
+		t.Fatalf("Detect's command: %#v", cmd())
+	}
+	if raw, ok := batch[0]().(tea.RawMsg); !ok || raw.Msg != "\x1b[c" {
+		t.Fatalf("Detect wrote %#v, want DA1 alone", raw.Msg)
+	}
+	if s.Mode != Detecting {
+		t.Fatalf("mode %v before the fence's answer", s.Mode)
+	}
+	msg, _ := s.Update(da1)
+	if r, ok := msg.(ReadyMsg); !ok || r.Mode != Native || r.Caps.Host != "page" || s.Mode != Native || s.Caps.Limits["surfaces"] != 8 {
+		t.Fatalf("the fence's answer gave %#v, mode %v", msg, s.Mode)
+	}
+	if msg, _ := s.Update(knownDueMsg{}); msg != nil {
+		t.Errorf("the timer after the answer: %#v", msg)
+	}
+	if msg, _ := s.Update(da1); msg == nil {
+		t.Error("the program's DA1 after it was swallowed")
+	}
+
+	s, _ = known(Known{})
+	if msg, _ := s.Update(da1); !isReady(msg, Text) || s.Mode != Text {
+		t.Errorf("a terminal known not to be a host: %#v, mode %v", msg, s.Mode)
+	}
+}
+
+// A known terminal that does not answer DA1 in time is ready all the same,
+// and its answer, when it comes, is the Session's.
+func TestDetectKnownSilence(t *testing.T) {
+	s, _ := known(Known{Native: true})
+	if msg, _ := s.Update(knownDueMsg{}); !isReady(msg, Native) {
+		t.Fatalf("at the timer: %#v", msg)
+	}
+	if msg, _ := s.Update(da1); msg != nil {
+		t.Errorf("the late fence's DA1 came back: %#v", msg)
+	}
+	if msg, _ := s.Update(da1); msg == nil {
+		t.Error("the program's DA1 after it was swallowed")
+	}
+}
+
+// Late does nothing with Known: there is no query to withdraw.
+func TestKnownIsNotLate(t *testing.T) {
+	s := New()
+	s.Known, s.Late = &Known{}, true
+	s.Detect()
+	if cmd := s.Close(); cmd != nil {
+		t.Errorf("Close wrote %#v", cmd())
+	}
+}
+
 // The Session takes only the DA1 answers its own requests are owed: one
 // the program asked for itself is the program's.
 func TestTheProgramsOwnDA1(t *testing.T) {

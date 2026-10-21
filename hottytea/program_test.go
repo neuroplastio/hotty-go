@@ -283,6 +283,27 @@ func TestAProgramOnAHost(t *testing.T) {
 	}
 }
 
+// A program that knows the terminal is a host (Known) asks it nothing, and
+// its surfaces go out as on a host it found.
+func TestAProgramOnAKnownHost(t *testing.T) {
+	h := hottytest.New(t)
+	seen, wait := run(t, h, func(s *hottytea.Session) {
+		s.Known = &hottytea.Known{Native: true, Caps: hotty.Caps{V: hotty.Version, Host: "known"}}
+	})
+	if r := next[hottytea.ReadyMsg](t, seen); r.Mode != hottytea.Native || r.Caps.Host != "known" {
+		t.Fatalf("ready: %+v", r)
+	}
+	eventually(t, "the card on a surface", func() bool {
+		s := h.Surface(cardName)
+		return s != nil && s.Placed()
+	})
+	h.Type("q")
+	wait()
+	if n := count(h, "a", "q"); n != 0 {
+		t.Errorf("%d queries, want none", n)
+	}
+}
+
 // In a terminal that is not a host, the program draws in cells and sends
 // nothing but the query: the host fails the test if it does.
 func TestAProgramInText(t *testing.T) {
