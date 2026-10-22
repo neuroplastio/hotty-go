@@ -29,7 +29,7 @@ func from(ctl hotty.Control, body string) tea.Msg {
 
 func caps(n string) tea.Msg {
 	return from(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: n}},
-		`{"v":"0.4","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64},"host":"test"}`)
+		`{"v":"0.5","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64},"host":"test"}`)
 }
 
 var da1 = uv.PrimaryDeviceAttributesEvent{62, 22}

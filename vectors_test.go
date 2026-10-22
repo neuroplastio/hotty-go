@@ -179,6 +179,8 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return Focus(str("surface"), str("target"), opts...)
 	case "blur":
 		return Blur(str("surface"), opts...)
+	case "set_field":
+		return SetField(str("surface"), str("target"), fieldChange(asMap(args["change"])), opts...)
 	case "edit":
 		names := []string{}
 		for _, n := range asSlice(args["names"]) {
@@ -222,6 +224,38 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 	}
 	t.Fatalf("no builder %q", name)
 	return ""
+}
+
+// fieldChange reads a set_field vector's change: a key it lists is a field
+// given, its value empty or 0 among them.
+func fieldChange(m map[string]any) FieldChange {
+	n := func(k string) *int {
+		f, ok := m[k].(float64)
+		if !ok {
+			return nil
+		}
+		i := int(f)
+		return &i
+	}
+	s := func(k string) *string {
+		v, ok := m[k].(string)
+		if !ok {
+			return nil
+		}
+		return &v
+	}
+	var c FieldChange
+	if rev := n("rev"); rev != nil {
+		c.Rev = *rev
+	}
+	c.Value, c.From, c.To, c.Text = s("value"), n("from"), n("to"), s("text")
+	if sel := asSlice(m["sel"]); len(sel) == 2 {
+		c.Sel = &[2]int{int(sel[0].(float64)), int(sel[1].(float64))}
+	}
+	if b, ok := m["checked"].(bool); ok {
+		c.Checked = &b
+	}
+	return c
 }
 
 // menuItems reads a menu vector's items.
@@ -554,6 +588,10 @@ func eventView(e Event) map[string]any {
 	}
 	if e.Count > 0 {
 		view["count"] = e.Count
+	}
+	view["rev"] = e.Rev
+	if e.Sel != nil {
+		view["sel"] = []int{e.Sel[0], e.Sel[1]}
 	}
 	if c := e.Command; c != nil {
 		view["command"] = map[string]any{"name": c.Name, "key": c.Key, "text": c.Text, "has_text": c.HasText}

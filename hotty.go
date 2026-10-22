@@ -58,7 +58,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.4"
+	Version = "0.5"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"

@@ -1147,7 +1147,7 @@ func TestReplies(t *testing.T) {
 
 func TestBody(t *testing.T) {
 	r, _ := hotty.ReplyOf(hotty.Message{Control: hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}},
-		Payload: Body(`{"v":"0.4","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
+		Payload: Body(`{"v":"0.5","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
 	if c := r.Caps; c == nil || c.Scale != 2 || c.CellCSS.W != 9 || c.Limits["surfaces"] != 3 {
 		t.Errorf("caps %+v", c)
 	}

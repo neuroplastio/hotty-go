@@ -1499,6 +1499,107 @@ func (z *TouchArea) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *caretDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "sel":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			if zb0002 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Sel) >= int(zb0002) {
+				z.Sel = (z.Sel)[:zb0002]
+			} else {
+				z.Sel = make([]int, zb0002)
+			}
+			for za0001 := range z.Sel {
+				z.Sel[za0001], err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
+		case "rev":
+			z.Rev, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Rev")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *caretDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 2
+	// write "sel"
+	err = en.Append(0x82, 0xa3, 0x73, 0x65, 0x6c)
+	if err != nil {
+		return
+	}
+	err = en.WriteArrayHeader(uint32(len(z.Sel)))
+	if err != nil {
+		err = msgp.WrapError(err, "Sel")
+		return
+	}
+	for za0001 := range z.Sel {
+		err = en.WriteInt(z.Sel[za0001])
+		if err != nil {
+			err = msgp.WrapError(err, "Sel", za0001)
+			return
+		}
+	}
+	// write "rev"
+	err = en.Append(0xa3, 0x72, 0x65, 0x76)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt(z.Rev)
+	if err != nil {
+		err = msgp.WrapError(err, "Rev")
+		return
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *caretDetail) Msgsize() (s int) {
+	s = 1 + 4 + msgp.ArrayHeaderSize + (len(z.Sel) * (msgp.IntSize)) + 4 + msgp.IntSize
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *changeDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -1544,6 +1645,12 @@ func (z *changeDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Value")
 				return
 			}
+		case "rev":
+			z.Rev, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Rev")
+				return
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -1558,8 +1665,8 @@ func (z *changeDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *changeDetail) EncodeMsg(en *msgp.Writer) (err error) {
 	// check for omitted fields
-	zb0001Len := uint32(2)
-	var zb0001Mask uint8 /* 2 bits */
+	zb0001Len := uint32(3)
+	var zb0001Mask uint8 /* 3 bits */
 	_ = zb0001Mask
 	if z.Checked == nil {
 		zb0001Len--
@@ -1602,6 +1709,16 @@ func (z *changeDetail) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "Value")
 			return
 		}
+		// write "rev"
+		err = en.Append(0xa3, 0x72, 0x65, 0x76)
+		if err != nil {
+			return
+		}
+		err = en.WriteInt(z.Rev)
+		if err != nil {
+			err = msgp.WrapError(err, "Rev")
+			return
+		}
 	}
 	return
 }
@@ -1614,7 +1731,7 @@ func (z *changeDetail) Msgsize() (s int) {
 	} else {
 		s += msgp.BoolSize
 	}
-	s += 6 + msgp.StringPrefixSize + len(z.Value)
+	s += 6 + msgp.StringPrefixSize + len(z.Value) + 4 + msgp.IntSize
 	return
 }
 
@@ -2480,6 +2597,384 @@ func (z errorBody) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *fieldBody) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "rev":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Rev")
+					return
+				}
+				z.Rev = nil
+			} else {
+				if z.Rev == nil {
+					z.Rev = new(int)
+				}
+				*z.Rev, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "Rev")
+					return
+				}
+			}
+		case "value":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
+				z.Value = nil
+			} else {
+				if z.Value == nil {
+					z.Value = new(string)
+				}
+				*z.Value, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
+			}
+		case "from":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "From")
+					return
+				}
+				z.From = nil
+			} else {
+				if z.From == nil {
+					z.From = new(int)
+				}
+				*z.From, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "From")
+					return
+				}
+			}
+		case "to":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "To")
+					return
+				}
+				z.To = nil
+			} else {
+				if z.To == nil {
+					z.To = new(int)
+				}
+				*z.To, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "To")
+					return
+				}
+			}
+		case "text":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+				z.Text = nil
+			} else {
+				if z.Text == nil {
+					z.Text = new(string)
+				}
+				*z.Text, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+			}
+		case "sel":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			if zb0002 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Sel) >= int(zb0002) {
+				z.Sel = (z.Sel)[:zb0002]
+			} else {
+				z.Sel = make([]int, zb0002)
+			}
+			for za0001 := range z.Sel {
+				z.Sel[za0001], err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
+		case "checked":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Checked")
+					return
+				}
+				z.Checked = nil
+			} else {
+				if z.Checked == nil {
+					z.Checked = new(bool)
+				}
+				*z.Checked, err = dc.ReadBool()
+				if err != nil {
+					err = msgp.WrapError(err, "Checked")
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *fieldBody) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(7)
+	var zb0001Mask uint8 /* 7 bits */
+	_ = zb0001Mask
+	if z.Value == nil {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.From == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.To == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	if z.Text == nil {
+		zb0001Len--
+		zb0001Mask |= 0x10
+	}
+	if z.Sel == nil {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	if z.Checked == nil {
+		zb0001Len--
+		zb0001Mask |= 0x40
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "rev"
+		err = en.Append(0xa3, 0x72, 0x65, 0x76)
+		if err != nil {
+			return
+		}
+		if z.Rev == nil {
+			err = en.WriteNil()
+			if err != nil {
+				return
+			}
+		} else {
+			err = en.WriteInt(*z.Rev)
+			if err != nil {
+				err = msgp.WrapError(err, "Rev")
+				return
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "value"
+			err = en.Append(0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
+			if err != nil {
+				return
+			}
+			if z.Value == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteString(*z.Value)
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "from"
+			err = en.Append(0xa4, 0x66, 0x72, 0x6f, 0x6d)
+			if err != nil {
+				return
+			}
+			if z.From == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.From)
+				if err != nil {
+					err = msgp.WrapError(err, "From")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "to"
+			err = en.Append(0xa2, 0x74, 0x6f)
+			if err != nil {
+				return
+			}
+			if z.To == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.To)
+				if err != nil {
+					err = msgp.WrapError(err, "To")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x10) == 0 { // if not omitted
+			// write "text"
+			err = en.Append(0xa4, 0x74, 0x65, 0x78, 0x74)
+			if err != nil {
+				return
+			}
+			if z.Text == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteString(*z.Text)
+				if err != nil {
+					err = msgp.WrapError(err, "Text")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x20) == 0 { // if not omitted
+			// write "sel"
+			err = en.Append(0xa3, 0x73, 0x65, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteArrayHeader(uint32(len(z.Sel)))
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			for za0001 := range z.Sel {
+				err = en.WriteInt(z.Sel[za0001])
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x40) == 0 { // if not omitted
+			// write "checked"
+			err = en.Append(0xa7, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x65, 0x64)
+			if err != nil {
+				return
+			}
+			if z.Checked == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteBool(*z.Checked)
+				if err != nil {
+					err = msgp.WrapError(err, "Checked")
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *fieldBody) Msgsize() (s int) {
+	s = 1 + 4
+	if z.Rev == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 6
+	if z.Value == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.StringPrefixSize + len(*z.Value)
+	}
+	s += 5
+	if z.From == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.To == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 5
+	if z.Text == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.StringPrefixSize + len(*z.Text)
+	}
+	s += 4 + msgp.ArrayHeaderSize + (len(z.Sel) * (msgp.IntSize)) + 8
+	if z.Checked == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.BoolSize
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *fitDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -2741,6 +3236,35 @@ func (z *inputDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Value")
 				return
 			}
+		case "rev":
+			z.Rev, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Rev")
+				return
+			}
+		case "sel":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			if zb0002 > z5817a858limitArrays {
+				err = msgp.ErrLimitExceeded
+				return
+			}
+			if cap(z.Sel) >= int(zb0002) {
+				z.Sel = (z.Sel)[:zb0002]
+			} else {
+				z.Sel = make([]int, zb0002)
+			}
+			for za0001 := range z.Sel {
+				z.Sel[za0001], err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -2753,24 +3277,69 @@ func (z *inputDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 }
 
 // EncodeMsg implements msgp.Encodable
-func (z inputDetail) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 1
-	// write "value"
-	err = en.Append(0x81, 0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
+func (z *inputDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(3)
+	var zb0001Mask uint8 /* 3 bits */
+	_ = zb0001Mask
+	if z.Sel == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
 	if err != nil {
 		return
 	}
-	err = en.WriteString(z.Value)
-	if err != nil {
-		err = msgp.WrapError(err, "Value")
-		return
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "value"
+		err = en.Append(0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z.Value)
+		if err != nil {
+			err = msgp.WrapError(err, "Value")
+			return
+		}
+		// write "rev"
+		err = en.Append(0xa3, 0x72, 0x65, 0x76)
+		if err != nil {
+			return
+		}
+		err = en.WriteInt(z.Rev)
+		if err != nil {
+			err = msgp.WrapError(err, "Rev")
+			return
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "sel"
+			err = en.Append(0xa3, 0x73, 0x65, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteArrayHeader(uint32(len(z.Sel)))
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			for za0001 := range z.Sel {
+				err = en.WriteInt(z.Sel[za0001])
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
+		}
 	}
 	return
 }
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z inputDetail) Msgsize() (s int) {
-	s = 1 + 6 + msgp.StringPrefixSize + len(z.Value)
+func (z *inputDetail) Msgsize() (s int) {
+	s = 1 + 6 + msgp.StringPrefixSize + len(z.Value) + 4 + msgp.IntSize + 4 + msgp.ArrayHeaderSize + (len(z.Sel) * (msgp.IntSize))
 	return
 }
 

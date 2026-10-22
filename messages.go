@@ -14,6 +14,7 @@ const (
 	EventClick  = "click"  // a button, link, summary or data-on~=click element was activated
 	EventChange = "change" // a control's value was committed, or a box toggled
 	EventInput  = "input"  // an edit of a control with data-on~=input
+	EventCaret  = "caret"  // the user moved a text field's selection, and no input says so, with data-on~=caret
 	EventSubmit = "submit" // a form was submitted; the detail is its fields
 	EventPress  = "press"  // a press anywhere in a placement made with Press
 	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
@@ -54,6 +55,14 @@ type Event struct {
 	Value string
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
+	// Rev is the control's revision (SPEC §6.4), in a change, an input and
+	// a caret: how many changes the user has made to it. SetField sends it
+	// back, so that the host changes nothing the user changed since.
+	Rev int
+	// Sel is a text field's selection, its anchor then its caret, in bytes
+	// of the value's UTF-8 (SPEC §6.4): in a caret, and in an input from a
+	// field with data-on~=caret.
+	Sel *[2]int
 	// Fields are a submitted form's fields in tree order, each its name
 	// and its value: two fields of one name are two pairs.
 	Fields []FormField
@@ -198,12 +207,17 @@ func readDetail(e *Event) {
 	case EventChange:
 		var d changeDetail
 		if decodeBody(b, &d) {
-			e.Value, e.Checked = d.Value, d.Checked
+			e.Value, e.Checked, e.Rev = d.Value, d.Checked, d.Rev
 		}
 	case EventInput:
 		var d inputDetail
-		if decodeBody(b, &d) {
-			e.Value = d.Value
+		if decodeBody(b, &d) && (d.Sel == nil || len(d.Sel) == 2) {
+			e.Value, e.Rev, e.Sel = d.Value, d.Rev, pair(d.Sel)
+		}
+	case EventCaret:
+		var d caretDetail
+		if decodeBody(b, &d) && len(d.Sel) == 2 {
+			e.Sel, e.Rev = pair(d.Sel), d.Rev
 		}
 	case EventSubmit:
 		var d submitDetail
@@ -308,9 +322,19 @@ func detailOf(e Event) []byte {
 		}
 		d = &pressDetail{Area: e.Area, Mods: e.Mods}
 	case EventChange:
-		d = &changeDetail{Checked: e.Checked, Value: e.Value}
+		d = &changeDetail{Checked: e.Checked, Value: e.Value, Rev: e.Rev}
 	case EventInput:
-		d = &inputDetail{Value: e.Value}
+		in := inputDetail{Value: e.Value, Rev: e.Rev}
+		if e.Sel != nil {
+			in.Sel = e.Sel[:]
+		}
+		d = &in
+	case EventCaret:
+		c := caretDetail{Rev: e.Rev}
+		if e.Sel != nil {
+			c.Sel = e.Sel[:]
+		}
+		d = &c
 	case EventSubmit:
 		// A submit always has its fields, none included (SPEC §9).
 		d = &submitDetail{Fields: e.Fields}
@@ -381,6 +405,7 @@ const (
 	EDETACHED = "EDETACHED" // the surface is detached (SPEC §5.5)
 	EQUOTA    = "EQUOTA"    // over one of the host's limits (SPEC §13)
 	EBUDGET   = "EBUDGET"   // the host gave up on work over its time budget
+	ESTALE    = "ESTALE"    // an a=field made against another rev than the control's: the user changed it since; the detail is its rev (SPEC §6.4)
 	EVERSION  = "EVERSION"  // a query lists no version the host speaks; the detail is those it speaks (SPEC §4)
 )
 
@@ -552,7 +577,7 @@ func (e *Error) Error() string {
 
 // HasFeature reports whether the host has an optional feature (SPEC §4):
 // FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything
-// else a 0.4 host does, it does.
+// else a 0.5 host does, it does.
 func HasFeature(c Caps, feature string) bool { return slices.Contains(c.Features, feature) }
 
 // Light reports whether the terminal's colour scheme is light.

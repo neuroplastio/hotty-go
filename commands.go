@@ -410,6 +410,58 @@ func TouchOf(m Message) ([]TouchArea, error) {
 	return t.Areas, nil
 }
 
+// FieldOf reads an a=field command's change (SPEC §6.4), as a host or a
+// relay does, checking what it can without the control: it is an *Error
+// with Code EINVAL when t is missing, the body does not decode (SPEC §3.3)
+// or is not such a map, rev is missing, no field but rev is there, Value
+// comes with Text, From or To, From or To comes without the other or
+// without Text, From is past To, or a position is under 0. The host checks
+// the rest against the control: whether each field is for it, and whether
+// each position falls inside its value, between code points.
+func FieldOf(m Message) (FieldChange, error) {
+	fail := func(detail string) (FieldChange, error) {
+		return FieldChange{}, &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
+	}
+	if Get(m.Control, "a") != "field" {
+		return fail("not a field command")
+	}
+	if Get(m.Control, "t") == "" {
+		return fail("missing t")
+	}
+	var b fieldBody
+	switch {
+	case !decodeBody(m.Payload, &b):
+		return fail("body does not decode")
+	case b.Rev == nil:
+		return fail("missing rev")
+	case b.Sel != nil && len(b.Sel) != 2:
+		return fail("sel is not two ints")
+	}
+	c := FieldChange{Rev: *b.Rev, Value: b.Value, From: b.From, To: b.To, Text: b.Text, Sel: pair(b.Sel), Checked: b.Checked}
+	text := c.Text != nil || c.From != nil || c.To != nil
+	switch {
+	case c.Value == nil && !text && c.Sel == nil && c.Checked == nil:
+		return fail("no field but rev")
+	case c.Value != nil && text:
+		return fail("value with text, from or to")
+	case (c.From == nil) != (c.To == nil) || c.From != nil && c.Text == nil:
+		return fail("from or to without the other, or without text")
+	case c.From != nil && *c.From > *c.To:
+		return fail("from past to")
+	case c.From != nil && *c.From < 0, c.Sel != nil && (c.Sel[0] < 0 || c.Sel[1] < 0):
+		return fail("a position under 0")
+	}
+	return c, nil
+}
+
+// pair is two ints as an anchor and a caret; nil unless there are two.
+func pair(ints []int) *[2]int {
+	if len(ints) != 2 {
+		return nil
+	}
+	return &[2]int{ints[0], ints[1]}
+}
+
 // touchFields reports whether a touch body that decodes gives its areas,
 // and each area all five of its fields: the codec reads a field it is not
 // given as its zero value. A body's maps give each key once (wellFormed).
@@ -652,6 +704,51 @@ const (
 // report it after (EventView).
 func Reveal(surface, target, where string, opts ...ReplyOption) string {
 	return Delta(surface, []Op{OpReveal(target, where)}, opts...)
+}
+
+// FieldChange is what an a=field changes in a control (SPEC §6.4), made
+// against the control's revision, which the program heard in its last
+// event (Event.Rev). Each field but Rev is nil when absent, so that an
+// empty Value or Text and a position 0 are sent. Positions count the bytes
+// of the value's UTF-8.
+type FieldChange struct {
+	// Rev is the control's revision the change is made against.
+	Rev int
+	// Value is the new value, of any control but a checkbox or a radio
+	// button.
+	Value *string
+	// From and To are the range of a text field's value that Text
+	// replaces.
+	From, To *int
+	// Text replaces a text field's selection, or with From and To, that
+	// range, as a paste does.
+	Text *string
+	// Sel is a text field's selection after the change: its anchor, then
+	// its caret. Without it the caret goes after the text put in, or to the
+	// end of a Value.
+	Sel *[2]int
+	// Checked checks a checkbox or a radio button, or unchecks it.
+	Checked *bool
+}
+
+// SetField changes a control as the user does (SPEC §6.4): its value, its
+// selection, whether it is checked, if the user has not changed it since
+// the revision the change is made against (FieldChange.Rev, which the
+// control's events carry). A field that completes what the user types
+// sends it, and keeps its id, its caret and its history. The host changes
+// nothing, and answers ESTALE with the control's revision, when the user
+// changed it first: the program then decides again from the event it
+// hears next, and does not resend. It answers errors, unless an option says
+// otherwise. It checks nothing in the change: the host does.
+//
+// It writes one msgpack map: rev, then the fields given, in the order
+// value, from, to, text, sel, checked.
+func SetField(surface, target string, change FieldChange, opts ...ReplyOption) string {
+	b := fieldBody{Rev: &change.Rev, Value: change.Value, From: change.From, To: change.To, Text: change.Text, Checked: change.Checked}
+	if change.Sel != nil {
+		b.Sel = change.Sel[:]
+	}
+	return command(Control{{"a", "field"}, {"s", surface}, {"t", target}}, encodeBody(&b), ReplyOnError, opts)
 }
 
 // Res stores a resource that documents refer to as cid:<id> (SPEC §7.1): a

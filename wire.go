@@ -12,7 +12,7 @@ package hotty
 // Caps is what a host says about itself in its reply to a query (SPEC §4),
 // and, with only the fields that changed, in a caps event (SPEC §9).
 type Caps struct {
-	// V is the protocol version the host implements: "0.4".
+	// V is the protocol version the host implements: "0.5".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -97,6 +97,19 @@ type TouchArea struct {
 	Drag string `msg:"drag"`
 }
 
+// fieldBody is the body of an a=field (SPEC §6.4), as FieldChange says
+// it: Rev is nil when the body has none, and Sel holds the anchor and the
+// caret.
+type fieldBody struct {
+	Rev     *int    `msg:"rev"`
+	Value   *string `msg:"value,omitempty"`
+	From    *int    `msg:"from,omitempty"`
+	To      *int    `msg:"to,omitempty"`
+	Text    *string `msg:"text,omitempty"`
+	Sel     []int   `msg:"sel,omitempty"`
+	Checked *bool   `msg:"checked,omitempty"`
+}
+
 // touchBody is the body of an a=touch (SPEC §9.6). Touch writes it;
 // TouchOf reads it, checking each area has all its fields.
 type touchBody struct {
@@ -146,10 +159,18 @@ type pressDetail struct {
 type changeDetail struct {
 	Checked *bool  `msg:"checked,omitempty"`
 	Value   string `msg:"value"`
+	Rev     int    `msg:"rev"`
 }
 
 type inputDetail struct {
 	Value string `msg:"value"`
+	Rev   int    `msg:"rev"`
+	Sel   []int  `msg:"sel,omitempty"`
+}
+
+type caretDetail struct {
+	Sel []int `msg:"sel,omitempty"`
+	Rev int   `msg:"rev"`
 }
 
 type fitDetail struct {

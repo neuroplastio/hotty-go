@@ -39,7 +39,7 @@ func (f *fake) readQuery(t *testing.T) {
 
 func capsReply() string {
 	return hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "1"}},
-		hottytest.Body(`{"v":"0.4","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64}}`))
+		hottytest.Body(`{"v":"0.5","cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":64}}`))
 }
 
 func TestDetectHost(t *testing.T) {
@@ -211,7 +211,7 @@ func TestDetectIgnoresAnotherNumber(t *testing.T) {
 	f := newFake(nil)
 	go func() {
 		f.readQuery(t)
-		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, hottytest.Body(`{"v":"0.4"}`))
+		other := hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}, {K: "n", V: "9"}}, hottytest.Body(`{"v":"0.5"}`))
 		_, _ = io.WriteString(f.answer, other+"\x1b[?62;22c")
 	}()
 	if f.t.Detect(context.Background()) {

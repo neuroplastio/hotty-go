@@ -293,7 +293,7 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.4\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.5\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }
@@ -695,7 +695,7 @@ func TestReplies(t *testing.T) {
 
 func TestCaps(t *testing.T) {
 	r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
-		`{"v":"0.4","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
+		`{"v":"0.5","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
 			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
 	caps := r.Caps
 	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
@@ -714,7 +714,7 @@ func TestCaps(t *testing.T) {
 	if HasFeature(none, FeatureHover) || Light(none) {
 		t.Error("a host that lists nothing")
 	}
-	for _, bad := range []string{`{"v":`, `{"v":"0.4","scale":2}`, `{"v":"0.4","features":["hover",3]}`, `{"v":"0.4","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
+	for _, bad := range []string{`{"v":`, `{"v":"0.5","scale":2}`, `{"v":"0.5","features":["hover",3]}`, `{"v":"0.5","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
 		if r, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, bad)); r.Caps != nil {
 			t.Errorf("caps from %s", bad)
 		}
@@ -1071,6 +1071,62 @@ func TestTouchOf(t *testing.T) {
 	} {
 		var e *Error
 		if _, err := TouchOf(m); !errors.As(err, &e) || e.Code != EINVAL {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// FieldOf reads what SetField writes, and refuses a change no control
+// could take (SPEC §6.4).
+func TestFieldOf(t *testing.T) {
+	var d Decoder
+	read := func(cmd string) Message {
+		m, r := d.Feed(cmd)
+		if r != Complete {
+			t.Fatalf("%q: %v", cmd, r)
+		}
+		return m
+	}
+	str := func(s string) *string { return &s }
+	num := func(n int) *int { return &n }
+	no := false
+	for _, c := range []FieldChange{
+		{Rev: 2, From: num(0), To: num(2), Text: str("src/")},
+		{Rev: 0, Value: str(""), Sel: &[2]int{3, 0}},
+		{Rev: 7, Checked: &no},
+		{Rev: 1, Sel: &[2]int{0, 0}},
+		{Rev: 1, Text: str("x")},
+	} {
+		got, err := FieldOf(read(SetField("s", "f", c)))
+		if err != nil || !reflect.DeepEqual(got, c) {
+			t.Errorf("%+v: %+v, %v", c, got, err)
+		}
+	}
+	field := Control{{"a", "field"}, {"s", "s"}, {"t", "f"}}
+	if got, err := FieldOf(host(field, `{"rev":1,"value":"a","more":{"x":1}}`)); err != nil || *got.Value != "a" {
+		t.Errorf("a key not known: %+v, %v", got, err)
+	}
+	for name, m := range map[string]Message{
+		"not a field":       read(Hide("s")),
+		"no t":              host(Control{{"a", "field"}, {"s", "s"}}, `{"rev":0,"value":"a"}`),
+		"no body":           host(field, ``),
+		"not a map":         host(field, `[0]`),
+		"no rev":            host(field, `{"value":"a"}`),
+		"rev a str":         host(field, `{"rev":"0","value":"a"}`),
+		"rev alone":         host(field, `{"rev":0}`),
+		"value and text":    host(field, `{"rev":0,"value":"a","text":"b"}`),
+		"value and from":    host(field, `{"rev":0,"value":"a","from":0,"to":0}`),
+		"from without to":   host(field, `{"rev":0,"from":0,"text":"b"}`),
+		"from without text": host(field, `{"rev":0,"from":0,"to":0}`),
+		"from past to":      host(field, `{"rev":0,"from":2,"to":1,"text":"b"}`),
+		"from under 0":      host(field, `{"rev":0,"from":-1,"to":1,"text":"b"}`),
+		"sel of one":        host(field, `{"rev":0,"sel":[1]}`),
+		"sel of a float":    host(field, `{"rev":0,"sel":[0,1.0]}`),
+		"sel under 0":       host(field, `{"rev":0,"sel":[0,-1]}`),
+		"checked a str":     host(field, `{"rev":0,"checked":"yes"}`),
+	} {
+		var e *Error
+		if _, err := FieldOf(m); !errors.As(err, &e) || e.Code != EINVAL {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
