@@ -415,9 +415,10 @@ func TouchOf(m Message) ([]TouchArea, error) {
 // with Code EINVAL when t is missing, the body does not decode (SPEC §3.3)
 // or is not such a map, rev is missing, no field but rev is there, Value
 // comes with Text, From or To, From or To comes without the other or
-// without Text, From is past To, or a position is under 0. The host checks
-// the rest against the control: whether each field is for it, and whether
-// each position falls inside its value, between code points.
+// without Text, or From is past To. The host checks the rest against the
+// control: whether each field is for it, then whether the change is stale,
+// and only then whether each position falls inside its value, between code
+// points, a negative one never doing so.
 func FieldOf(m Message) (FieldChange, error) {
 	fail := func(detail string) (FieldChange, error) {
 		return FieldChange{}, &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
@@ -448,8 +449,6 @@ func FieldOf(m Message) (FieldChange, error) {
 		return fail("from or to without the other, or without text")
 	case c.From != nil && *c.From > *c.To:
 		return fail("from past to")
-	case c.From != nil && *c.From < 0, c.Sel != nil && (c.Sel[0] < 0 || c.Sel[1] < 0):
-		return fail("a position under 0")
 	}
 	return c, nil
 }

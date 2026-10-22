@@ -1106,6 +1106,10 @@ func TestFieldOf(t *testing.T) {
 	if got, err := FieldOf(host(field, `{"rev":1,"value":"a","more":{"x":1}}`)); err != nil || *got.Value != "a" {
 		t.Errorf("a key not known: %+v, %v", got, err)
 	}
+	// A negative position is the host's to check, after ESTALE (SPEC §6.4).
+	if got, err := FieldOf(host(field, `{"rev":1,"from":-1,"to":0,"text":"a","sel":[0,-1]}`)); err != nil || *got.From != -1 || got.Sel[1] != -1 {
+		t.Errorf("a negative position: %+v, %v", got, err)
+	}
 	for name, m := range map[string]Message{
 		"not a field":       read(Hide("s")),
 		"no t":              host(Control{{"a", "field"}, {"s", "s"}}, `{"rev":0,"value":"a"}`),
@@ -1119,10 +1123,8 @@ func TestFieldOf(t *testing.T) {
 		"from without to":   host(field, `{"rev":0,"from":0,"text":"b"}`),
 		"from without text": host(field, `{"rev":0,"from":0,"to":0}`),
 		"from past to":      host(field, `{"rev":0,"from":2,"to":1,"text":"b"}`),
-		"from under 0":      host(field, `{"rev":0,"from":-1,"to":1,"text":"b"}`),
 		"sel of one":        host(field, `{"rev":0,"sel":[1]}`),
 		"sel of a float":    host(field, `{"rev":0,"sel":[0,1.0]}`),
-		"sel under 0":       host(field, `{"rev":0,"sel":[0,-1]}`),
 		"checked a str":     host(field, `{"rev":0,"checked":"yes"}`),
 	} {
 		var e *Error

@@ -1399,7 +1399,7 @@ FieldChange is what an a=field changes in a control (SPEC §6.4), made against t
 func FieldOf(m Message) (FieldChange, error)
 ```
 
-FieldOf reads an a=field command's change (SPEC §6.4), as a host or a relay does, checking what it can without the control: it is an \*Error with Code EINVAL when t is missing, the body does not decode (SPEC §3.3) or is not such a map, rev is missing, no field but rev is there, Value comes with Text, From or To, From or To comes without the other or without Text, From is past To, or a position is under 0. The host checks the rest against the control: whether each field is for it, and whether each position falls inside its value, between code points.
+FieldOf reads an a=field command's change (SPEC §6.4), as a host or a relay does, checking what it can without the control: it is an \*Error with Code EINVAL when t is missing, the body does not decode (SPEC §3.3) or is not such a map, rev is missing, no field but rev is there, Value comes with Text, From or To, From or To comes without the other or without Text, or From is past To. The host checks the rest against the control: whether each field is for it, then whether the change is stale, and only then whether each position falls inside its value, between code points, a negative one never doing so.
 
 ## <a id="Flag"></a>type Flag
 
