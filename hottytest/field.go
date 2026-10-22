@@ -206,8 +206,9 @@ func (h *Host) caret(s *Surface, el *html.Node, id string) {
 }
 
 // setField is a=field (SPEC §6.4): checked whole, in the order EDETACHED,
-// ENOTARGET, EINVAL, ESTALE, before it changes anything; then it changes
-// the control as the user would, and sends nothing.
+// ENOTARGET, EINVAL, ESTALE, and its positions last, before it changes
+// anything; then it changes the control as the user would, and sends
+// nothing.
 func (h *Host) setField(s *Surface, m hotty.Message) (code, detail string) {
 	if s.detached {
 		return hotty.EDETACHED, s.name
@@ -233,13 +234,18 @@ func (h *Host) setField(s *Surface, m hotty.Message) (code, detail string) {
 	case (c.Text != nil || c.Sel != nil) && !text:
 		return invalid("text or sel for what is not a text field")
 	}
+	if c.Value != nil && el.DataAtom == atom.Select && !hasOption(el, *c.Value) {
+		return invalid("no option " + *c.Value)
+	}
+	// Positions count bytes of the value the program heard, so a stale
+	// command is ESTALE whatever they are.
+	if r := s.rev(el); c.Rev != r {
+		return hotty.ESTALE, strconv.Itoa(r)
+	}
 	v := s.valueOf(el)
 	var caret int // where the caret goes without sel, in bytes of the new value
 	switch {
 	case c.Value != nil && el.DataAtom == atom.Select:
-		if !hasOption(el, *c.Value) {
-			return invalid("no option " + *c.Value)
-		}
 		v = *c.Value
 	case c.Value != nil:
 		v = sanitize(el, *c.Value)
@@ -263,9 +269,6 @@ func (h *Host) setField(s *Surface, m hotty.Message) (code, detail string) {
 	}
 	if c.Sel != nil && (!position(v, c.Sel[0]) || !position(v, c.Sel[1])) {
 		return invalid("sel not a position")
-	}
-	if r := s.rev(el); c.Rev != r {
-		return hotty.ESTALE, strconv.Itoa(r)
 	}
 	// No echo: no event, no rev, and nothing to commit (SPEC §6.4).
 	if c.Checked != nil {
