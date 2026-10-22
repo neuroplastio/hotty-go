@@ -22,8 +22,9 @@
 //
 // # Replies
 //
-// Every command asks for the replies that are usually wanted: Doc and Place
-// are answered on error (EQUOTA, ENOENT), everything else never. The
+// Every command asks for the replies that are usually wanted: Doc, Place
+// and SetField are answered on error (EQUOTA, ENOENT, ESTALE), everything
+// else never. The
 // options change that: Q sets the quiet level, and N numbers a command and
 // asks for its reply. Replies arrive on the program's input, mixed with
 // keys. A program that exits leaves unread replies to whatever reads the

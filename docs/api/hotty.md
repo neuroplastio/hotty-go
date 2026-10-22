@@ -24,7 +24,7 @@ The packages beside it do the I/O: term for a command that prints and exits or a
 
 ### <a id="hdr-Replies"></a>Replies
 
-Every command asks for the replies that are usually wanted: Doc and Place are answered on error (EQUOTA, ENOENT), everything else never. The options change that: Q sets the quiet level, and N numbers a command and asks for its reply. Replies arrive on the program's input, mixed with keys. A program that exits leaves unread replies to whatever reads the terminal next, a shell for instance, which reads them as typing.
+Every command asks for the replies that are usually wanted: Doc, Place and SetField are answered on error (EQUOTA, ENOENT, ESTALE), everything else never. The options change that: Q sets the quiet level, and N numbers a command and asks for its reply. Replies arrive on the program's input, mixed with keys. A program that exits leaves unread replies to whatever reads the terminal next, a shell for instance, which reads them as typing.
 
 ### <a id="hdr-Names_and_ids"></a>Names and ids
 
@@ -75,6 +75,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Reveal(surface, target, where string, opts ...ReplyOption) string`](#Reveal)
 - [`func Sanitize(v string) string`](#Sanitize)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
+- [`func SetField(surface, target string, change FieldChange, opts ...ReplyOption) string`](#SetField)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
 - [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
 - [`func Speaks(query Control) bool`](#Speaks)
@@ -120,6 +121,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (e *Error) Error() string`](#Error.Error)
 - [`type Event`](#Event)
   - [`func EventOf(m Message) (Event, bool)`](#EventOf)
+- [`type FieldChange`](#FieldChange)
+  - [`func FieldOf(m Message) (FieldChange, error)`](#FieldOf)
 - [`type Flag`](#Flag)
 - [`type FormField`](#FormField)
   - [`func (z *FormField) DecodeMsg(dc *msgp.Reader) (err error)`](#FormField.DecodeMsg)
@@ -248,7 +251,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.4"
+	Version = "0.5"
 )
 ```
 
@@ -278,13 +281,14 @@ const (
 
 The optional features a host may have (SPEC §4), as its capabilities list them (HasFeature).
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventCommand"></a><a id="EventCaps"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventCaret"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventCommand"></a><a id="EventCaps"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
 	EventClick  = "click"  // a button, link, summary or data-on~=click element was activated
 	EventChange = "change" // a control's value was committed, or a box toggled
 	EventInput  = "input"  // an edit of a control with data-on~=input
+	EventCaret  = "caret"  // the user moved a text field's selection, and no input says so, with data-on~=caret
 	EventSubmit = "submit" // a form was submitted; the detail is its fields
 	EventPress  = "press"  // a press anywhere in a placement made with Press
 	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
@@ -308,7 +312,7 @@ const (
 
 Event kinds (SPEC §9). A program ignores kinds it does not know: later versions add some.
 
-<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="EVERSION"></a>
+<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="ESTALE"></a><a id="EVERSION"></a>
 
 ```go
 const (
@@ -318,6 +322,7 @@ const (
 	EDETACHED = "EDETACHED" // the surface is detached (SPEC §5.5)
 	EQUOTA    = "EQUOTA"    // over one of the host's limits (SPEC §13)
 	EBUDGET   = "EBUDGET"   // the host gave up on work over its time budget
+	ESTALE    = "ESTALE"    // an a=field made against another rev than the control's: the user changed it since; the detail is its rev (SPEC §6.4)
 	EVERSION  = "EVERSION"  // a query lists no version the host speaks; the detail is those it speaks (SPEC §4)
 )
 ```
@@ -529,7 +534,7 @@ Has reports whether a control has a key.
 func HasFeature(c Caps, feature string) bool
 ```
 
-HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything else a 0.4 host does, it does.
+HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything else a 0.5 host does, it does.
 
 ## <a id="Hide"></a>func Hide
 
@@ -714,6 +719,16 @@ func SetAttr(surface, target, name, value string, opts ...ReplyOption) string
 ```
 
 SetAttr sets an attribute on an element.
+
+## <a id="SetField"></a>func SetField
+
+```go
+func SetField(surface, target string, change FieldChange, opts ...ReplyOption) string
+```
+
+SetField changes a control as the user does (SPEC §6.4): its value, its selection, whether it is checked, if the user has not changed it since the revision the change is made against (FieldChange.Rev, which the control's events carry). A field that completes what the user types sends it, and keeps its id, its caret and its history. The host changes nothing, and answers ESTALE with the control's revision, when the user changed it first: the program then decides again from the event it hears next, and does not resend. It answers errors, unless an option says otherwise. It checks nothing in the change: the host does.
+
+It writes one msgpack map: rev, then the fields given, in the order value, from, to, text, sel, checked.
 
 ## <a id="SetText"></a>func SetText
 
@@ -934,7 +949,7 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements: "0.4".
+	// V is the protocol version the host implements: "0.5".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -1294,6 +1309,14 @@ type Event struct {
 	Value string
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
+	// Rev is the control's revision (SPEC §6.4), in a change, an input and
+	// a caret: how many changes the user has made to it. SetField sends it
+	// back, so that the host changes nothing the user changed since.
+	Rev int
+	// Sel is a text field's selection, its anchor then its caret, in bytes
+	// of the value's UTF-8 (SPEC §6.4): in a caret, and in an input from a
+	// field with data-on~=caret.
+	Sel *[2]int
 	// Fields are a submitted form's fields in tree order, each its name
 	// and its value: two fields of one name are two pairs.
 	Fields []FormField
@@ -1343,6 +1366,40 @@ func EventOf(m Message) (Event, bool)
 ```
 
 EventOf returns the message as an event, if it is one, its detail read by its kind.
+
+## <a id="FieldChange"></a>type FieldChange
+
+```go
+type FieldChange struct {
+	// Rev is the control's revision the change is made against.
+	Rev int
+	// Value is the new value, of any control but a checkbox or a radio
+	// button.
+	Value *string
+	// From and To are the range of a text field's value that Text
+	// replaces.
+	From, To *int
+	// Text replaces a text field's selection, or with From and To, that
+	// range, as a paste does.
+	Text *string
+	// Sel is a text field's selection after the change: its anchor, then
+	// its caret. Without it the caret goes after the text put in, or to the
+	// end of a Value.
+	Sel *[2]int
+	// Checked checks a checkbox or a radio button, or unchecks it.
+	Checked *bool
+}
+```
+
+FieldChange is what an a=field changes in a control (SPEC §6.4), made against the control's revision, which the program heard in its last event (Event.Rev). Each field but Rev is nil when absent, so that an empty Value or Text and a position 0 are sent. Positions count the bytes of the value's UTF-8.
+
+### <a id="FieldOf"></a>func FieldOf
+
+```go
+func FieldOf(m Message) (FieldChange, error)
+```
+
+FieldOf reads an a=field command's change (SPEC §6.4), as a host or a relay does, checking what it can without the control: it is an \*Error with Code EINVAL when t is missing, the body does not decode (SPEC §3.3) or is not such a map, rev is missing, no field but rev is there, Value comes with Text, From or To, From or To comes without the other or without Text, From is past To, or a position is under 0. The host checks the rest against the control: whether each field is for it, and whether each position falls inside its value, between code points.
 
 ## <a id="Flag"></a>type Flag
 

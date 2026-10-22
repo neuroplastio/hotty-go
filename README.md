@@ -6,17 +6,23 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks hotty 0.4: a key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
+It speaks hotty 0.5: a program changes a control the user may be changing
+with `hotty.SetField` (`a=field`, SPEC §6.4), but only if the user has not
+changed it since the program last heard. A key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
 name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
 events carry msgpack bodies (SPEC §3.3), and its query lists the version it
-speaks (`a=q:n=1:v=0.4`, SPEC §4). A terminal of another hotty version is no
-host to it, and the program draws in cells. A program written for 0.3 ports
+speaks (`a=q:n=1:v=0.5`, SPEC §4). A terminal of another hotty version is no
+host to it, and the program draws in cells. A program written for 0.4 ports
 as hotty's
-[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.4.0/CHANGES.md)
-says: its `data-keys`, menu keys and tests move to the new names, a
-`hotty.Platform`'s `Mod` is `"ctrl"` or `"super"`, a key is read with
-`hotty.ParseKey` or `Platform.ReadKey`, and `hotty.ModControl` and
-`hotty.ModMeta` are `hotty.ModCtrl` and `hotty.ModSuper`.
+[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.5.0/CHANGES.md)
+says: it reads the control's `rev` from `input` and `change` (`Event.Rev`)
+and sends it back in `SetField`'s `FieldChange`; it completes a field with
+`Text`, `From` and `To` rather than a new element, which loses the caret;
+on `ESTALE` it does nothing, and decides again from the next `input`; it
+counts positions in bytes of UTF-8. A field with `data-on~=caret` reports
+the user's moves of its selection (`hotty.EventCaret`, `Event.Sel`), and
+`hottytest` reads a field's rev and selection (`Surface.Rev`,
+`Surface.Selection`).
 
 The SDK:
 
@@ -77,7 +83,7 @@ of what it imports:
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
 ```
 
-0.4.x speaks hotty 0.4; the patch number is this repository's own.
+0.5.x speaks hotty 0.5; the patch number is this repository's own.
 
 ## Packages
 
@@ -146,9 +152,9 @@ The toolchain is in `mise.toml`: run `mise install` first.
   each nested `go.mod` replaces the others with their directories. What a
   program that uses the SDK gets are the requirements between them, which
   `make pin REV=…` sets: before a release to a pushed commit, and for a
-  release to its version (`make pin REV=v0.4.0`), committed and pushed.
-  `make tag V=v0.4.0` then tags every module at that commit (`v0.4.0`,
-  `hottyterm/v0.4.0`, …). It refuses unless the version's first two
+  release to its version (`make pin REV=v0.5.0`), committed and pushed.
+  `make tag V=v0.5.0` then tags every module at that commit (`v0.5.0`,
+  `hottyterm/v0.5.0`, …). It refuses unless the version's first two
   numbers are the hotty version (`hotty.Version`, the vectors'), the tree
   is clean and pushed, and every requirement between the modules names
   that version.

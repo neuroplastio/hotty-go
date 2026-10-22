@@ -26,6 +26,8 @@ The host keeps every surface's document as the program's commands leave it, with
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
+It keeps each control's rev and each text field's selection, focused or not, as a=field reads them (SPEC §6.4; Surface.Rev, Surface.Selection), takes a=field as a host does, and sends the rev in input and change and the selection in input and caret (data-on~=caret). Its text fields keep no history of their edits: it does not claim the undo feature.
+
 It keeps the touch areas the program names (a=touch, SPEC §9.6) for each screen, as a host does, and checks them as one does (TouchAreas); no finger reaches them.
 
 It also answers the queries terminals answer: Primary Device Attributes, the cursor's position, the background colour, and, when asked to (KittyGraphics), the kitty graphics query. It keeps the cells the program printed, as rows (Screen) and as the lines it wrote (Lines), and where it left the cursor (Cursor).
@@ -111,6 +113,8 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (s *Surface) Placed() bool`](#Surface.Placed)
   - [`func (s *Surface) Placement() hotty.Placement`](#Surface.Placement)
   - [`func (s *Surface) Press() bool`](#Surface.Press)
+  - [`func (s *Surface) Rev(id string) (rev int, ok bool)`](#Surface.Rev)
+  - [`func (s *Surface) Selection(id string) (anchor, caret int, ok bool)`](#Surface.Selection)
   - [`func (s *Surface) Text() string`](#Surface.Text)
   - [`func (s *Surface) TextOf(id string) string`](#Surface.TextOf)
   - [`func (s *Surface) Value(id string) (string, bool)`](#Surface.Value)
@@ -432,7 +436,7 @@ func (h *Host) Key(key string) (used bool)
 
 Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it, as myelin key names do: its modifiers, joined by "+", and a character, a physical key or a modifier key: "a", "shift+a", "space", "enter", "tab", "shift+tab", "backspace", "arrow\_down", "escape", "ctrl+s". A press has one name here, as the program would read it (SPEC §10.4): a binding of a physical key (ctrl+key\_w) holds only where the test gives that name. A name that does not parse is no key; the program gets nothing of it.
 
-tab and shift+tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input); a move whose key has shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit commits the value and submits its form.
+tab and shift+tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input), each one more rev, and a caret event for each move and each edit no input event reports (data-on~=caret); a move whose key has shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit commits the value and submits its form.
 
 Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with shift only:
 
@@ -767,6 +771,22 @@ func (s *Surface) Press() bool
 ```
 
 Press reports whether the program asked for presses (Placement.Press): the flag belongs to the surface, and holds across placements (SPEC §5.2).
+
+### <a id="Surface.Rev"></a>func (*Surface) Rev
+
+```go
+func (s *Surface) Rev(id string) (rev int, ok bool)
+```
+
+Rev is a control's revision (SPEC §6.4): 0 when it entered the document, one more for each change the user made to its value or its checked; a radio button's is its group's. ok is false when there is no element with the id, or it is not a control a=field takes.
+
+### <a id="Surface.Selection"></a>func (*Surface) Selection
+
+```go
+func (s *Surface) Selection(id string) (anchor, caret int, ok bool)
+```
+
+Selection is a text field's selection, focused or not, as a=field counts it (SPEC §6.4): its anchor, then its caret, in bytes of its value; the two are the same when nothing is selected. ok is false when there is no element with the id, or it is not a text field.
 
 ### <a id="Surface.Text"></a>func (*Surface) Text
 
