@@ -21,6 +21,12 @@
 // A placement made on the alternate screen goes with it, and so does its
 // surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 //
+// It keeps each control's rev and each text field's selection, focused or
+// not, as a=field reads them (SPEC §6.4; Surface.Rev, Surface.Selection),
+// takes a=field as a host does, and sends the rev in input and change and
+// the selection in input and caret (data-on~=caret). Its text fields keep
+// no history of their edits: it does not claim the undo feature.
+//
 // It keeps the touch areas the program names (a=touch, SPEC §9.6) for each
 // screen, as a host does, and checks them as one does (TouchAreas); no
 // finger reaches them.
@@ -638,7 +644,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		return "", "", nil
 	}
 	switch a {
-	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur":
+	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur", "field":
 	default:
 		return hotty.EINVAL, "unknown action " + a, nil
 	}
@@ -740,6 +746,9 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if !s.detached && h.keyboard == s {
 			h.blur(s)
 		}
+	case "field":
+		code, detail := h.setField(s, m)
+		return code, detail, nil
 	}
 	return "", "", nil
 }
@@ -904,7 +913,7 @@ func (h *Host) commit(s *Surface) {
 	}
 	delete(s.dirty(), el)
 	if id, ok := attr(el, "id"); ok && !s.detached {
-		h.event(s, hotty.EventChange, id, map[string]string{"value": s.valueOf(el)})
+		h.event(s, hotty.EventChange, id, map[string]any{"value": s.valueOf(el), "rev": s.rev(el)})
 	}
 }
 
@@ -1629,11 +1638,8 @@ func (h *Host) Fill(surface, id, text string) error {
 	}
 	h.takeKeyboard(s, el, true)
 	s.values[el] = text
-	delete(s.fields, el)
-	s.dirty()[el] = true
-	if on, _ := attr(el, "data-on"); slices.Contains(strings.Fields(on), "input") {
-		h.event(s, hotty.EventInput, id, map[string]string{"value": text})
-	}
+	delete(s.fields, el) // the caret at the end, nothing selected
+	h.edited(s, el)
 	return nil
 }
 
@@ -1656,33 +1662,16 @@ func (h *Host) Check(surface, id string, on bool) error {
 	if !box(el) || !focusable(el) {
 		return ErrNotControl
 	}
-	t, _ := attr(el, "type")
-	radio := strings.EqualFold(t, "radio")
-	if radio && !on {
+	if radio(el) && !on {
 		return fmt.Errorf("%w: a radio button is unchosen by choosing another", ErrNotControl)
 	}
 	h.takeKeyboard(s, el, true)
-	if radio {
-		name, _ := attr(el, "name")
-		scope := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form })
-		if scope == nil {
-			scope = s.doc
-		}
-		walk(scope, func(n *html.Node) {
-			if n != el && box(n) {
-				if nt, _ := attr(n, "type"); strings.EqualFold(nt, "radio") {
-					if nn, _ := attr(n, "name"); nn == name && name != "" {
-						s.checked[n] = false
-					}
-				}
-			}
-		})
-	}
 	if s.isChecked(el) == on {
 		return nil
 	}
-	s.checked[el] = on
-	h.event(s, hotty.EventChange, id, map[string]any{"checked": on, "value": s.valueOf(el)})
+	s.check(el, on)
+	rev := s.bump(el)
+	h.event(s, hotty.EventChange, id, map[string]any{"checked": on, "value": s.valueOf(el), "rev": rev})
 	return nil
 }
 

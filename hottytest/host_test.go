@@ -729,16 +729,16 @@ func TestFormAndKeyboard(t *testing.T) {
 	// §10.1), after the change that focus leaving the last one commits.
 	expect(t, sent(h),
 		"ev focus t=name",
-		`ev change t=name {"value":"Ada"}`,
+		`ev change t=name {"rev":1,"value":"Ada"}`,
 		"ev focus t=notes",
-		`ev input t=notes {"value":"hi"}`,
-		`ev change t=notes {"value":"hi"}`,
+		`ev input t=notes {"rev":1,"value":"hi"}`,
+		`ev change t=notes {"rev":1,"value":"hi"}`,
 		"ev focus t=ok",
-		`ev change t=ok {"checked":true,"value":"yes"}`,
+		`ev change t=ok {"checked":true,"rev":1,"value":"yes"}`,
 		"ev focus t=r2",
-		`ev change t=r2 {"checked":true,"value":"prod"}`,
+		`ev change t=r2 {"checked":true,"rev":1,"value":"prod"}`,
 		"ev focus t=size",
-		`ev change t=size {"value":"m"}`,
+		`ev change t=size {"rev":1,"value":"m"}`,
 		`ev submit t=f {"fields":[["name","Ada"],["notes","hi"],["ok","yes"],["env","prod"],["size","m"],["hidden","h"]]}`)
 
 	// A submit button reports its click, then submits with its own value.
@@ -751,7 +751,7 @@ func TestFormAndKeyboard(t *testing.T) {
 	// Typing commits when focus leaves: here, the user's Blur.
 	_ = h.Fill("f", "name", "Grace")
 	_ = h.Blur("f")
-	expect(t, sent(h), "ev focus t=name", `ev change t=name {"value":"Grace"}`, "ev blur t=")
+	expect(t, sent(h), "ev focus t=name", `ev change t=name {"rev":2,"value":"Grace"}`, "ev blur t=")
 	_ = h.Blur("f")
 	expect(t, sent(h))
 
@@ -790,7 +790,7 @@ func TestProgramFocusAndBlur(t *testing.T) {
 	}
 	_ = h.Fill("f", "b", "x")
 	send(h, hotty.Blur("f"))
-	expect(t, sent(h), `ev change t=b {"value":"x"}`, "ev blur t=")
+	expect(t, sent(h), `ev change t=b {"rev":1,"value":"x"}`, "ev blur t=")
 	// Focus without a target: the focused element keeps it, or the first.
 	send(h, hotty.Focus("f", ""), hotty.Focus("g", ""))
 	expect(t, sent(h), "ev blur t=")
@@ -1019,7 +1019,7 @@ func TestDrag(t *testing.T) {
 	if err := h.DragStart("g", "a", 0, 0); !errors.Is(err, ErrDragging) {
 		t.Errorf("a second drag: %v", err)
 	}
-	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"r":0}`, `ev change t=f {"value":"x"}`, "ev blur t=")
+	expect(t, sent(h), "ev press t=b", `ev dragstart t=b {"c":1,"r":0}`, `ev change t=f {"rev":1,"value":"x"}`, "ev blur t=")
 
 	// A new document or a hide cuts it short at the last cell; a detach or
 	// a delete ends it with nothing.

@@ -36,8 +36,8 @@ func TestKeys(t *testing.T) {
 		t.Error("shift+a was not used")
 	}
 	expect(t, sent(h),
-		`ev input t=name {"value":"A"}`, `ev input t=name {"value":"Ad"}`, `ev input t=name {"value":"Ada"}`,
-		`ev input t=name {"value":"Ad"}`, `ev input t=name {"value":"Ad "}`, `ev input t=name {"value":"Ad A"}`)
+		`ev input t=name {"rev":1,"value":"A"}`, `ev input t=name {"rev":2,"value":"Ad"}`, `ev input t=name {"rev":3,"value":"Ada"}`,
+		`ev input t=name {"rev":4,"value":"Ad"}`, `ev input t=name {"rev":5,"value":"Ad "}`, `ev input t=name {"rev":6,"value":"Ad A"}`)
 	var order []string
 	for range 4 {
 		h.Key("tab")
@@ -46,7 +46,7 @@ func TestKeys(t *testing.T) {
 	if want := []string{"notes", "ok", "size", "go"}; !equalStrings(order, want) {
 		t.Errorf("Tab order %v, want %v", order, want)
 	}
-	expect(t, sent(h), `ev change t=name {"value":"Ad A"}`,
+	expect(t, sent(h), `ev change t=name {"rev":6,"value":"Ad A"}`,
 		"ev focus t=notes", "ev focus t=ok", "ev focus t=size", "ev focus t=go")
 
 	// shift+tab goes back; a key with ctrl is the program's.
@@ -64,7 +64,7 @@ func TestKeys(t *testing.T) {
 	h.Key("l")
 	h.Key("home")
 	h.Key("arrow_up")
-	expect(t, sent(h), `ev change t=size {"value":"medium"}`, `ev change t=size {"value":"large"}`, `ev change t=size {"value":"small"}`)
+	expect(t, sent(h), `ev change t=size {"rev":1,"value":"medium"}`, `ev change t=size {"rev":2,"value":"large"}`, `ev change t=size {"rev":3,"value":"small"}`)
 
 	// space checks a checkbox; enter on a button clicks it.
 	h.Key("shift+tab")
@@ -72,7 +72,7 @@ func TestKeys(t *testing.T) {
 	h.Key("tab")
 	h.Key("tab")
 	h.Key("enter")
-	expect(t, sent(h), "ev focus t=ok", `ev change t=ok {"checked":true,"value":"yes"}`,
+	expect(t, sent(h), "ev focus t=ok", `ev change t=ok {"checked":true,"rev":1,"value":"yes"}`,
 		"ev focus t=size", "ev focus t=go", "ev click t=go")
 
 	// Past the last element the surface loses the keyboard.
@@ -91,7 +91,7 @@ func TestKeys(t *testing.T) {
 	h.Key("arrow_up")
 	send(h, hotty.Focus("k", "name"))
 	h.Key("enter")
-	expect(t, sent(h), `ev change t=notes {"value":"h\ni"}`,
+	expect(t, sent(h), `ev change t=notes {"rev":3,"value":"h\ni"}`,
 		`ev submit t=f {"fields":[["name","Ad A"],["notes","h\ni"],["ok","yes"],["size","small"]]}`)
 
 	// escape is never the surface's.
@@ -116,8 +116,8 @@ func TestKeysSelect(t *testing.T) {
 	h.Key("shift+home")
 	h.Key("shift+arrow_right")
 	h.Key("y")
-	expect(t, sent(h), `ev input t=name {"value":"a"}`, `ev input t=name {"value":"ab"}`, `ev input t=name {"value":"abc"}`,
-		`ev input t=name {"value":"ax"}`, `ev input t=name {"value":"foo"}`, `ev input t=name {"value":"fy"}`)
+	expect(t, sent(h), `ev input t=name {"rev":1,"value":"a"}`, `ev input t=name {"rev":2,"value":"ab"}`, `ev input t=name {"rev":3,"value":"abc"}`,
+		`ev input t=name {"rev":4,"value":"ax"}`, `ev input t=name {"rev":5,"value":"foo"}`, `ev input t=name {"rev":6,"value":"fy"}`)
 }
 
 // A key the focused element's keymap binds to program reaches the program,
@@ -154,7 +154,7 @@ func TestKeysForTheProgram(t *testing.T) {
 	}
 	expect(t, sent(h), `"\x1b[B\x1b[B\x1b[F \r"`)
 	press("c", "arrow_up")
-	expect(t, sent(h), `ev change t=s {"value":"c"}`, `ev change t=s {"value":"b"}`)
+	expect(t, sent(h), `ev change t=s {"rev":1,"value":"c"}`, `ev change t=s {"rev":2,"value":"b"}`)
 
 	// tab cannot be bound: it moves focus. A nearer binding to another
 	// action takes end back, and the select uses it.
@@ -164,7 +164,7 @@ func TestKeysForTheProgram(t *testing.T) {
 	}
 	h.drain()
 	press("end", "arrow_up", "arrow_down")
-	expect(t, sent(h), `ev change t=own {"value":"c"}`, `"\x1b[A\x1b[B"`)
+	expect(t, sent(h), `ev change t=own {"rev":1,"value":"c"}`, `"\x1b[A\x1b[B"`)
 
 	// A button clicks with Enter, which it binds to an action of its own,
 	// and gives space to the program.
@@ -197,13 +197,13 @@ func TestKeysForTheProgram(t *testing.T) {
 	send(h, hotty.Focus("k", "f"))
 	h.drain()
 	press("x", "end", "arrow_left", "y")
-	expect(t, sent(h), `ev input t=f {"value":"x"}`, `"\x1b[F"`, `ev input t=f {"value":"yx"}`)
+	expect(t, sent(h), `ev input t=f {"rev":1,"value":"x"}`, `"\x1b[F"`, `ev input t=f {"rev":2,"value":"yx"}`)
 
 	// Outside the div, the keys are the select's again. The field commits
 	// as focus leaves it.
 	send(h, hotty.Focus("k", "free"))
 	press("arrow_down")
-	expect(t, sent(h), `ev change t=f {"value":"yx"}`, `ev change t=free {"value":"b"}`)
+	expect(t, sent(h), `ev change t=f {"rev":2,"value":"yx"}`, `ev change t=free {"rev":1,"value":"b"}`)
 }
 
 // With no element focused there is no keymap: a surface that has the
@@ -266,16 +266,16 @@ func TestSelectKeys(t *testing.T) {
 		}
 	}
 	expect(t, sent(h),
-		`ev input t=s {"value":"b"}`, `ev change t=s {"value":"b"}`,
-		`ev input t=s {"value":"d"}`, `ev change t=s {"value":"d"}`,
-		`ev input t=s {"value":"b"}`, `ev change t=s {"value":"b"}`,
-		`ev input t=s {"value":"d"}`, `ev change t=s {"value":"d"}`,
-		`ev input t=s {"value":"a"}`, `ev change t=s {"value":"a"}`)
+		`ev input t=s {"rev":1,"value":"b"}`, `ev change t=s {"rev":1,"value":"b"}`,
+		`ev input t=s {"rev":2,"value":"d"}`, `ev change t=s {"rev":2,"value":"d"}`,
+		`ev input t=s {"rev":3,"value":"b"}`, `ev change t=s {"rev":3,"value":"b"}`,
+		`ev input t=s {"rev":4,"value":"d"}`, `ev change t=s {"rev":4,"value":"d"}`,
+		`ev input t=s {"rev":5,"value":"a"}`, `ev change t=s {"rev":5,"value":"a"}`)
 
 	// Choosing from a list, as the user does with the pointer, is a pick
 	// too.
 	_ = h.Choose("k", "s", "d")
-	expect(t, sent(h), `ev input t=s {"value":"d"}`, `ev change t=s {"value":"d"}`)
+	expect(t, sent(h), `ev input t=s {"rev":6,"value":"d"}`, `ev change t=s {"rev":6,"value":"d"}`)
 }
 
 func TestKeySequence(t *testing.T) {
@@ -313,7 +313,7 @@ func TestKeysOnAMac(t *testing.T) {
 	h.Key("super+a")
 	h.Key("z")
 	h.Key("super+backspace")
-	expect(t, sent(h), `ev input t=t {"value":"xone two"}`, `ev input t=t {"value":"z"}`, `ev input t=t {"value":""}`)
+	expect(t, sent(h), `ev input t=t {"rev":1,"value":"xone two"}`, `ev input t=t {"rev":2,"value":"z"}`, `ev input t=t {"rev":3,"value":""}`)
 
 	h = shown(t, "k", `<input id=t data-on=input value="one two">`)
 	send(h, hotty.Focus("k", "t"))

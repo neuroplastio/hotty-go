@@ -36,6 +36,7 @@ type Surface struct {
 	checked map[*html.Node]bool
 	edited  map[*html.Node]bool             // text controls edited since their last commit
 	fields  map[*html.Node]*hottyedit.Field // text fields' carets and selections, once used
+	revs    map[*html.Node]int              // the controls' revisions, once the user changed them (SPEC §6.4)
 	focused *html.Node
 	keyb    bool // the surface has the keyboard
 }
@@ -56,6 +57,7 @@ func (s *Surface) setDoc(markup string) {
 	s.checked = map[*html.Node]bool{}
 	s.edited = map[*html.Node]bool{}
 	s.fields = map[*html.Node]*hottyedit.Field{}
+	s.revs = map[*html.Node]int{}
 	s.focused, s.keyb = nil, false
 }
 
@@ -280,6 +282,35 @@ func (s *Surface) Focused() string {
 	}
 	id, _ := attr(s.focused, "id")
 	return id
+}
+
+// Rev is a control's revision (SPEC §6.4): 0 when it entered the
+// document, one more for each change the user made to its value or its
+// checked; a radio button's is its group's. ok is false when there is no
+// element with the id, or it is not a control a=field takes.
+func (s *Surface) Rev(id string) (rev int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.byID(id)
+	if n == nil || !formControl(n) {
+		return 0, false
+	}
+	return s.rev(n), true
+}
+
+// Selection is a text field's selection, focused or not, as a=field counts
+// it (SPEC §6.4): its anchor, then its caret, in bytes of its value; the
+// two are the same when nothing is selected. ok is false when there is no
+// element with the id, or it is not a text field.
+func (s *Surface) Selection(id string) (anchor, caret int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.byID(id)
+	if n == nil || !plainField(n) {
+		return 0, 0, false
+	}
+	sel := s.sel(n)
+	return sel[0], sel[1], true
 }
 
 func (s *Surface) byID(id string) *html.Node {

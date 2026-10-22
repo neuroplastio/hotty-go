@@ -11,7 +11,6 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyedit"
 )
 
 // Key types a key as the user does, and does with it what SPEC §10.2 has a
@@ -32,7 +31,9 @@ import (
 // its keymap says (hotty.Resolve, with the data-keys of the elements from
 // the root to it): it edits its value at a caret and a selection this host
 // keeps, as hottyedit.Field does, with an input event for each edit
-// (data-on~=input); a move whose key has shift selects
+// (data-on~=input), each one more rev, and a caret event for each move and
+// each edit no input event reports (data-on~=caret); a move whose key has
+// shift selects
 // (hotty.Keymap.Selects), select-all selects the value, characters type in
 // place of the selection, and submit commits the value and submits its
 // form.
@@ -184,14 +185,8 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 	if textField(el) {
 		values = keymaps(el)
 	}
-	f := s.fields[el]
-	if f == nil {
-		v := s.valueOf(el)
-		t, _ := attr(el, "type")
-		f = &hottyedit.Field{Value: v, Caret: len(v), Multiline: multi, Password: strings.EqualFold(t, "password")}
-		s.fields[el] = f
-	}
-	f.Value = s.valueOf(el)
+	f := s.field(el)
+	was := s.sel(el)
 	a, changed := f.Key(hotty.Resolve(hotty.PlatformOf(h.caps), multi, values...), key)
 	switch {
 	case a == "":
@@ -216,6 +211,8 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 		return false
 	case changed:
 		h.typeInto(s, el, f.Value)
+	default:
+		h.moved(s, el, was)
 	}
 	return true
 }
@@ -297,52 +294,37 @@ func (h *Host) tab(s *Surface, back bool) {
 	h.takeKeyboard(s, order[i], true)
 }
 
-// typeInto sets a text control's value as typing does.
+// typeInto sets a text control's value as typing does: one edit of the
+// user's (SPEC §6.4, §9).
 func (h *Host) typeInto(s *Surface, el *html.Node, v string) {
 	s.values[el] = v
-	s.dirty()[el] = true
-	if on, _ := attr(el, "data-on"); slices.Contains(strings.Fields(on), "input") {
-		if id, ok := attr(el, "id"); ok {
-			h.event(s, hotty.EventInput, id, map[string]string{"value": v})
-		}
-	}
+	h.edited(s, el)
 }
 
 // toggle is Space on a box: a checkbox flips, a radio button is chosen.
 func (h *Host) toggle(s *Surface, el *html.Node) {
-	t, _ := attr(el, "type")
 	on := !s.isChecked(el)
-	if strings.EqualFold(t, "radio") {
-		if !on {
-			return
-		}
-		name, _ := attr(el, "name")
-		scope := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form })
-		if scope == nil {
-			scope = s.doc
-		}
-		walk(scope, func(n *html.Node) {
-			if nt, _ := attr(n, "type"); n != el && box(n) && strings.EqualFold(nt, "radio") {
-				if nn, _ := attr(n, "name"); nn == name && name != "" {
-					s.checked[n] = false
-				}
-			}
-		})
+	if radio(el) && !on {
+		return
 	}
-	s.checked[el] = on
+	s.check(el, on)
+	rev := s.bump(el)
 	if id, ok := attr(el, "id"); ok {
-		h.event(s, hotty.EventChange, id, map[string]any{"checked": on, "value": s.valueOf(el)})
+		h.event(s, hotty.EventChange, id, map[string]any{"checked": on, "value": s.valueOf(el), "rev": rev})
 	}
 }
 
-// selectKey is a key on a select.
+// selectKey is a key on a select. It steps from the option picked, a
+// disabled one too (a=field picks those, SPEC §6.4), to the options the
+// user can pick.
 func (h *Host) selectKey(s *Surface, el *html.Node, name, text string, types bool) bool {
-	var vals, labels []string
+	type option struct {
+		value, label string
+		disabled     bool
+	}
+	var opts []option
 	walk(el, func(o *html.Node) {
 		if o.DataAtom != atom.Option {
-			return
-		}
-		if _, dis := attr(o, "disabled"); dis {
 			return
 		}
 		v, ok := attr(o, "value")
@@ -353,61 +335,77 @@ func (h *Host) selectKey(s *Surface, el *html.Node, name, text string, types boo
 		if !ok {
 			label = textOf(o)
 		}
-		vals, labels = append(vals, v), append(labels, label)
+		_, dis := attr(o, "disabled")
+		opts = append(opts, option{v, label, dis})
 	})
-	i := slices.Index(vals, s.valueOf(el))
+	cur := s.valueOf(el)
+	i := slices.IndexFunc(opts, func(o option) bool { return o.value == cur })
+	// from is the first option from j on, going by step, the user can
+	// pick; -1 when there is none.
+	from := func(j, step int) int {
+		for ; j >= 0 && j < len(opts); j += step {
+			if !opts[j].disabled {
+				return j
+			}
+		}
+		return -1
+	}
 	pick := -1
 	switch {
 	case types:
-		for k := 1; k <= len(vals); k++ {
-			if j := (i + k) % len(vals); strings.HasPrefix(strings.ToLower(labels[j]), strings.ToLower(text)) {
+		for k := 1; k <= len(opts); k++ {
+			if j := (i + k + len(opts)) % len(opts); !opts[j].disabled && strings.HasPrefix(strings.ToLower(opts[j].label), strings.ToLower(text)) {
 				pick = j
 				break
 			}
 		}
 	case name == "arrow_down":
-		pick = min(i+1, len(vals)-1)
+		pick = from(i+1, 1)
 	case name == "arrow_up":
-		pick = max(i-1, 0)
+		pick = from(i-1, -1)
 	case name == "home" || name == "page_up":
-		pick = 0
+		pick = from(0, 1)
 	case name == "end" || name == "page_down":
-		pick = len(vals) - 1
+		pick = from(len(opts)-1, -1)
 	case name == "space" || name == "enter":
 	default:
 		return false
 	}
-	if pick >= 0 && pick < len(vals) && pick != i {
-		h.pick(s, el, vals[pick])
+	if pick >= 0 && pick != i {
+		h.pick(s, el, opts[pick].value)
 	}
 	return true
 }
 
 // pick picks a select's option by its value: input, with data-on~=input,
 // and change come at once, as a browser's select sends them (SPEC §10.2).
+// It is one more rev (SPEC §6.4).
 func (h *Host) pick(s *Surface, el *html.Node, v string) {
 	s.values[el] = v
+	rev := s.bump(el)
 	id, ok := attr(el, "id")
 	if !ok {
 		return
 	}
+	d := map[string]any{"value": v, "rev": rev}
 	if listens("input")(el) {
-		h.event(s, hotty.EventInput, id, map[string]string{"value": v})
+		h.event(s, hotty.EventInput, id, d)
 	}
-	h.event(s, hotty.EventChange, id, map[string]string{"value": v})
+	h.event(s, hotty.EventChange, id, d)
 }
 
-// textInput: an input that takes text.
+// textInput: an input that takes text, of a type that does, or of one
+// HTML does not know, which is text.
 func textInput(n *html.Node) bool {
 	if n.DataAtom != atom.Input {
 		return false
 	}
 	t, _ := attr(n, "type")
 	switch strings.ToLower(t) {
-	case "", "text", "search", "email", "url", "tel", "password", "number", "date", "time", "datetime-local", "month", "week":
-		return true
+	case "hidden", "checkbox", "radio", "file", "submit", "image", "reset", "button", "color", "range":
+		return false
 	}
-	return false
+	return true
 }
 
 // keySequence is a key as a terminal sends it, in the legacy encoding; ""
