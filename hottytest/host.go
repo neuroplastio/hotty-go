@@ -440,11 +440,13 @@ func (h *Host) altScreen(on bool) {
 	h.alt = on
 }
 
-// reset is RIS: a full reset deletes every surface (SPEC §5.4), drops both
+// reset is RIS: a full reset deletes every surface (SPEC §5.4) and ends the
+// session, with the resources it stored (SPEC §2, §7.1), drops both
 // screens' touch areas (SPEC §9.6), and forgets a query held for a late
 // answer (SPEC §4).
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
+	h.res = map[string]resource{}
 	h.keyboard = nil
 	h.held = nil
 	h.menus, h.shown = [2]*hotty.MenuTree{}, false
@@ -2116,6 +2118,18 @@ func (h *Host) Prefix() string {
 		return h.prefix.name
 	}
 	return ""
+}
+
+// Forget drops every surface and resource behind the program's back, as a
+// host does that restarts behind a relay: the program is not told, and
+// finds out from the ENOENT its next placement gets. The screen stays as
+// it is.
+func (h *Host) Forget() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.surfaces = map[string]*Surface{}
+	h.res = map[string]resource{}
+	h.keyboard, h.hovered, h.prefix, h.drag = nil, nil, nil, nil
 }
 
 // --- inspection ---------------------------------------------------------------

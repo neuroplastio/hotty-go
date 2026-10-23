@@ -26,12 +26,23 @@ type cardApp struct {
 
 const cardName = "app-card"
 
+// cardStyle is the card's stylesheet, a resource sent once (SPEC §7.1).
+var cardStyle = hotty.Res("app-css", "text/css", []byte("p { color: teal }"))
+
 func (m *cardApp) Init() tea.Cmd { return m.s.Detect() }
 
 func (m *cardApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	msg, cmd := m.s.Update(msg)
 	switch msg := msg.(type) {
-	case hottytea.ReadyMsg, hottytea.ErrorMsg, hottytea.RelayoutMsg:
+	case hottytea.ReadyMsg:
+		m.tell(msg)
+		m.s.Send(cardStyle) // nothing unless the terminal is a host
+	case hottytea.RelayoutMsg:
+		m.tell(msg)
+		if msg.Lost {
+			m.s.Send(cardStyle) // ahead of the card, which goes with the frame
+		}
+	case hottytea.ErrorMsg:
 		m.tell(msg)
 	case hottytea.EventMsg:
 		m.tell(msg)
@@ -71,7 +82,7 @@ func (m *cardApp) draw() tea.Cmd {
 	if m.s.Mode == hottytea.Native {
 		m.s.Layout([]hottytea.Surface{{Name: cardName, Rect: hottytea.Rect{X: 2, Y: m.y, W: 20, H: 3}, Press: true,
 			Doc: func() string {
-				return `<p id="status">` + m.status + `</p><button id="go">Go</button>`
+				return `<link rel="stylesheet" href="cid:app-css"><p id="status">` + m.status + `</p><button id="go">Go</button>`
 			}}})
 	} else {
 		lines = append(lines, "  ["+m.status+"] (g)o")
@@ -280,6 +291,61 @@ func TestAProgramOnAHost(t *testing.T) {
 	}
 	if n := count(h, "a", "doc"); n != 2 {
 		t.Errorf("%d documents sent, want 2 (the first, and after it was lost)", n)
+	}
+}
+
+// The host loses every document and resource behind the program's back, as
+// one that restarts behind a relay does. The renderer erases the screen,
+// which asks for a plain relayout; the card's placement then finds the card
+// gone, and the program hears of the loss once, sends its stylesheet again,
+// and the card follows it.
+func TestAProgramOnAHostThatLostItsDocuments(t *testing.T) {
+	h := hottytest.New(t)
+	seen, wait := run(t, h)
+	next[hottytea.ReadyMsg](t, seen)
+	eventually(t, "the card is placed", func() bool {
+		s := h.Surface(cardName)
+		return s != nil && s.Placed()
+	})
+	if _, _, ok := h.Resource("app-css"); !ok {
+		t.Fatal("no stylesheet")
+	}
+	drain(seen)
+	h.Forget()
+	before := len(h.Commands())
+	h.Type("c")
+	if r := next[hottytea.RelayoutMsg](t, seen); r.Lost {
+		t.Error("an erase lost nothing")
+	}
+	if r := next[hottytea.RelayoutMsg](t, seen); !r.Lost {
+		t.Error("the loss was not reported")
+	}
+	eventually(t, "the card is back", func() bool {
+		s := h.Surface(cardName)
+		return s != nil && s.Placed()
+	})
+	if _, _, ok := h.Resource("app-css"); !ok {
+		t.Error("the stylesheet was not sent again")
+	}
+	var sent []string
+	for _, m := range h.Commands()[before:] {
+		sent = append(sent, hotty.Get(m.Control, "a"))
+	}
+	if strings.Join(sent, " ") != "place res doc place" {
+		t.Errorf("after the loss the program sent %v, want the placement that found it, the stylesheet, the card", sent)
+	}
+	h.Type("q")
+	wait()
+	for {
+		select {
+		case msg := <-seen:
+			if r, ok := msg.(hottytea.RelayoutMsg); ok && r.Lost {
+				t.Error("the loss was reported again")
+			}
+			continue
+		default:
+		}
+		break
 	}
 }
 

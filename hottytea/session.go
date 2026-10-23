@@ -12,7 +12,9 @@
 //     back as ReadyMsg once the Session knows the terminal (Mode Native or
 //     Text), EventMsg for what the user did in a surface, ErrorMsg for a
 //     command the host refused, AckMsg for the ok of a command the program
-//     numbered, and RelayoutMsg when the surfaces must be placed again.
+//     numbered, and RelayoutMsg when the surfaces must be placed again
+//     (with Lost when the host lost documents, so that the program sends
+//     their resources again).
 //     Anything else comes back as it was, and nil when it was the
 //     Session's alone.
 //   - When the program draws its frame (in Update, since View cannot
@@ -107,7 +109,17 @@ type AckMsg struct{ hotty.Reply }
 // RelayoutMsg asks the program to lay its surfaces out again: the screen
 // was erased or scrolled under them, or a document went missing. Draw a
 // frame; its Layout puts the surfaces back.
-type RelayoutMsg struct{}
+type RelayoutMsg struct {
+	// Lost: the host lost a document, which Layout sends again, and it may
+	// have lost the resources (hotty.Res) the document refers to as well,
+	// since a full reset ends the session that stored them (SPEC §2,
+	// §7.1). Send them again before Layout, so that they reach the host
+	// ahead of the document; sending one again replaces it. One loss is
+	// reported once, however many documents it took: an ENOENT for a
+	// placement sent before the report is taken as the same loss's, and
+	// gives a plain RelayoutMsg.
+	Lost bool
+}
 
 // PongMsg answers a Ping: the terminal has taken everything written before
 // it. Took runs from writing the ping to the answer.
@@ -272,6 +284,11 @@ type Session struct {
 	keep    map[string]bool
 	seen    map[string]int  // the last layout that wanted a surface
 	refused map[string]bool // documents refused with EQUOTA, whose placement will fail too
+	// lost counts the losses reported (RelayoutMsg's Lost), and placedIn
+	// is what it was when each surface was last placed: an ENOENT for a
+	// placement sent before the last report is that loss's.
+	lost     int
+	placedIn map[string]int
 	// det decides what the terminal is, from Detect on; da1 counts the
 	// DA1 answers the Session's pings are owed.
 	det       hotty.Detector
@@ -296,7 +313,7 @@ type Session struct {
 // New returns a Session that has not detected the terminal yet.
 func New() *Session {
 	return &Session{placed: map[string]placement{}, flags: map[string]flags{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
-		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}}
+		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}, placedIn: map[string]int{}}
 }
 
 // Detect asks the terminal whether it is a host (SPEC §4): return it from
@@ -470,11 +487,17 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		delete(h.refused, r.Surface)
 		return nil, nil
 	case r.Re == "place" && r.Code == hotty.ENOENT && h.hasDoc[r.Surface]:
-		// The host dropped the document with its placement: send both.
+		// The host dropped the document with its placement: send both, and
+		// have the program send the resources again, unless the placement
+		// went before the last loss was reported.
+		lost := h.placedIn[r.Surface] == h.lost
+		if lost {
+			h.lost++
+		}
 		delete(h.hasDoc, r.Surface)
 		delete(h.placed, r.Surface)
 		delete(h.flags, r.Surface)
-		return RelayoutMsg{}, nil
+		return RelayoutMsg{Lost: lost}, nil
 	}
 	return ErrorMsg{r}, nil
 }
@@ -557,6 +580,7 @@ func (h *Session) Layout(want []Surface) {
 			h.Count.Places++
 			h.placed[s.Name] = p
 			h.flags[s.Name] = now
+			h.placedIn[s.Name] = h.lost
 		}
 	}
 	for _, name := range h.names() {
@@ -640,6 +664,7 @@ func (h *Session) Delete(name string) {
 	delete(h.keep, name)
 	delete(h.seen, name)
 	delete(h.scroll, name)
+	delete(h.placedIn, name)
 }
 
 // Close ends the Session, on the program's way out: it deletes every

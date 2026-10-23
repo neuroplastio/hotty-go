@@ -477,18 +477,41 @@ func TestSurfacesAndReset(t *testing.T) {
 	if strings.Join(names, ",") != "b,a" || h.Surface("b").Text() != "B" {
 		t.Errorf("Surfaces %v, b %q", names, h.Surface("b").Text())
 	}
+	send(h, hotty.Res("css", "text/css", []byte("p{}")))
 	send(h, "\x1bc")
 	if len(h.Surfaces()) != 0 {
 		t.Error("a full reset deletes every surface")
+	}
+	if _, _, ok := h.Resource("css"); ok {
+		t.Error("a full reset ends the session, and its resources with it")
 	}
 	send(h, hotty.Doc("x", "<p>x</p>"), hotty.DelAll(hotty.N(1)))
 	expect(t, sent(h), "ok re=del")
 	if len(h.Surfaces()) != 0 {
 		t.Error("DelAll")
 	}
-	if len(h.Commands()) != 6 {
+	if len(h.Commands()) != 7 {
 		t.Errorf("%d commands", len(h.Commands()))
 	}
+}
+
+// A host that forgets drops every surface and resource without a word, and
+// the program's next placement finds its surface gone.
+func TestForget(t *testing.T) {
+	h := New(t)
+	send(h, hotty.Res("css", "text/css", []byte("p{}")), hotty.Doc("a", "<button id=b>b</button>"), hotty.Place("a", hotty.Placement{Cols: 10}),
+		hotty.Focus("a", "b"))
+	sent(h)
+	replies, events := len(h.Replies()), len(h.Events())
+	h.Forget()
+	if len(h.Surfaces()) != 0 || len(h.Replies()) != replies || len(h.Events()) != events {
+		t.Errorf("after Forget: %d surfaces, replies %v, events %v", len(h.Surfaces()), h.Replies(), h.Events())
+	}
+	if _, _, ok := h.Resource("css"); ok {
+		t.Error("the resource outlived Forget")
+	}
+	send(h, hotty.Place("a", hotty.Placement{Cols: 10}))
+	expect(t, sent(h), "err re=place s=a ENOENT")
 }
 
 // A placement made on the alternate screen belongs to it: leaving the

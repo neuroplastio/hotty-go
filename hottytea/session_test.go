@@ -62,9 +62,9 @@ func TestErasedScreenPlacesEverySurfaceAgain(t *testing.T) {
 	want := []Surface{{Name: "x", Rect: Rect{0, 1, 10, 3}, Doc: func() string { return "<p>x</p>" }}}
 	h.Layout(want)
 	flushed(h)
-	msg, _ := h.Update(erasedMsg{})
-	if _, ok := msg.(RelayoutMsg); !ok {
-		t.Fatalf("erasedMsg gave %T", msg)
+	// The host keeps its documents through an erase: nothing was lost.
+	if msg, _ := h.Update(erasedMsg{}); msg != (RelayoutMsg{}) {
+		t.Fatalf("erasedMsg gave %#v", msg)
 	}
 	h.Layout(want)
 	if out := flushed(h); strings.Contains(out, "a=doc") || !strings.Contains(out, "a=place:s=x") {
@@ -110,15 +110,60 @@ func TestAMissingDocumentIsSentAgain(t *testing.T) {
 	want := []Surface{{Name: "x", Rect: Rect{0, 1, 10, 3}, Doc: func() string { return "<p>x</p>" }}}
 	h.Layout(want)
 	flushed(h)
-	reply := hotty.Encode(hotty.Control{{K: "a", V: "err"}, {K: "s", V: "x"}, {K: "re", V: "place"}},
-		hottytest.Body(`{"code":"ENOENT","detail":"no surface x"}`))
-	msg, _ := h.Update(uv.UnknownOscEvent(reply))
-	if _, ok := msg.(RelayoutMsg); !ok {
-		t.Fatalf("ENOENT on place gave %T", msg)
+	if msg, _ := h.Update(gone("x")); msg != (RelayoutMsg{Lost: true}) {
+		t.Fatalf("ENOENT on place gave %#v", msg)
 	}
 	h.Layout(want)
 	if out := flushed(h); !strings.Contains(out, "a=doc:s=x") || !strings.Contains(out, "a=place:s=x") {
 		t.Fatalf("after ENOENT: %q", out)
+	}
+}
+
+// gone is the host's ENOENT for a placement of a surface it does not have.
+func gone(name string) uv.UnknownOscEvent {
+	return uv.UnknownOscEvent(hotty.Encode(hotty.Control{{K: "a", V: "err"}, {K: "s", V: name}, {K: "re", V: "place"}},
+		hottytest.Body(`{"code":"ENOENT","detail":"no surface `+name+`"}`)))
+}
+
+// A host that loses its documents loses them all at once, and the program
+// sends its resources again once: the first ENOENT reports the loss, and
+// one for a placement sent before the report is the same loss's. A
+// placement sent after the report that finds its document gone is a loss
+// of its own.
+func TestALossIsReportedOnce(t *testing.T) {
+	h := native()
+	var want []Surface
+	for _, name := range []string{"a", "b", "c"} {
+		want = append(want, Surface{Name: name, Rect: Rect{0, len(want) * 3, 10, 3}, Doc: func() string { return "<p>" + name + "</p>" }})
+	}
+	h.Layout(want)
+	flushed(h)
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
+		t.Fatalf("the first ENOENT gave %#v", msg)
+	}
+	h.Layout(want)
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=a") || strings.Contains(out, "a=doc:s=b") {
+		t.Fatalf("after a's ENOENT: %q", out)
+	}
+	for _, name := range []string{"b", "c"} {
+		if msg, _ := h.Update(gone(name)); msg != (RelayoutMsg{}) {
+			t.Errorf("%s's ENOENT gave %#v", name, msg)
+		}
+	}
+	h.Layout(want)
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=b") || !strings.Contains(out, "a=doc:s=c") || strings.Contains(out, "a=doc:s=a") {
+		t.Fatalf("after b's and c's: %q", out)
+	}
+	// They are lost again: the placements after the erase went after the
+	// report.
+	h.Update(erasedMsg{})
+	h.Layout(want)
+	flushed(h)
+	if msg, _ := h.Update(gone("b")); msg != (RelayoutMsg{Lost: true}) {
+		t.Errorf("a second loss gave %#v", msg)
+	}
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{}) {
+		t.Errorf("a's ENOENT in the second loss gave %#v", msg)
 	}
 }
 

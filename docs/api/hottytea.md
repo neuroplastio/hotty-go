@@ -18,7 +18,7 @@ A Session is the program's side. Its life in a program:
 
   - Before the program runs, its output goes through the Session (Watch, or WatchFile for a terminal), and Attach gives it the program.
   - Init returns s.Detect().
-  - Update hands every message to s.Update first. What is hotty's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again. Anything else comes back as it was, and nil when it was the Session's alone.
+  - Update hands every message to s.Update first. What is hotty's comes back as ReadyMsg once the Session knows the terminal (Mode Native or Text), EventMsg for what the user did in a surface, ErrorMsg for a command the host refused, AckMsg for the ok of a command the program numbered, and RelayoutMsg when the surfaces must be placed again (with Lost when the host lost documents, so that the program sends their resources again). Anything else comes back as it was, and nil when it was the Session's alone.
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
   - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that hotty commands stay in order with Bubble Tea's frames.
 
@@ -380,7 +380,17 @@ Intersect is the part of r inside o; W or H is 0 or less if none is.
 ## <a id="RelayoutMsg"></a>type RelayoutMsg
 
 ```go
-type RelayoutMsg struct{}
+type RelayoutMsg struct {
+	// Lost: the host lost a document, which Layout sends again, and it may
+	// have lost the resources (hotty.Res) the document refers to as well,
+	// since a full reset ends the session that stored them (SPEC §2,
+	// §7.1). Send them again before Layout, so that they reach the host
+	// ahead of the document; sending one again replaces it. One loss is
+	// reported once, however many documents it took: an ENOENT for a
+	// placement sent before the report is taken as the same loss's, and
+	// gives a plain RelayoutMsg.
+	Lost bool
+}
 ```
 
 RelayoutMsg asks the program to lay its surfaces out again: the screen was erased or scrolled under them, or a document went missing. Draw a frame; its Layout puts the surfaces back.

@@ -70,6 +70,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Errors() []string`](#Host.Errors)
   - [`func (h *Host) Events() []hotty.Event`](#Host.Events)
   - [`func (h *Host) Fill(surface, id, text string) error`](#Host.Fill)
+  - [`func (h *Host) Forget()`](#Host.Forget)
   - [`func (h *Host) Hover(surface, id string, c, r int) error`](#Host.Hover)
   - [`func (h *Host) Invalid() int`](#Host.Invalid)
   - [`func (h *Host) Key(key string) (used bool)`](#Host.Key)
@@ -409,6 +410,14 @@ func (h *Host) Fill(surface, id, text string) error
 ```
 
 Fill types text into a text control, as the user does: the surface takes the keyboard there (a focus event, if it did not have it), the control's value becomes text (an input event, with data-on~=input), the caret goes to its end with nothing selected, and the change is committed when focus leaves it (Blur, another control, Submit).
+
+### <a id="Host.Forget"></a>func (*Host) Forget
+
+```go
+func (h *Host) Forget()
+```
+
+Forget drops every surface and resource behind the program's back, as a host does that restarts behind a relay: the program is not told, and finds out from the ENOENT its next placement gets. The screen stays as it is.
 
 ### <a id="Host.Hover"></a>func (*Host) Hover
 
