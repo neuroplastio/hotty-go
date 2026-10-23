@@ -46,6 +46,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -222,16 +223,33 @@ func Encode(ctl Control, payload []byte) string { return encode(ctl, payload, tr
 // (SPEC §3.3).
 func EncodePlain(ctl Control, payload []byte) string { return encode(ctl, payload, false) }
 
+// A zipper compresses one payload at a time. A new zlib writer allocates
+// some 800 KB of state, so encode takes one from zippers rather than
+// making one per message. body may be its buffer, so encode gives it back
+// only when it returns, after the buffer has gone into base64.
+type zipper struct {
+	buf bytes.Buffer
+	w   *zlib.Writer
+}
+
+var zippers = sync.Pool{New: func() any {
+	z := &zipper{}
+	z.w = zlib.NewWriter(&z.buf)
+	return z
+}}
+
 func encode(ctl Control, payload []byte, compress bool) string {
 	body := payload
 	var zipped bool
 	if compress && len(payload) >= compressFrom {
-		var z bytes.Buffer
-		w := zlib.NewWriter(&z)
-		_, _ = w.Write(payload)
-		_ = w.Close()
-		if z.Len() < len(payload) {
-			zipped, body = true, z.Bytes()
+		z := zippers.Get().(*zipper)
+		defer zippers.Put(z)
+		z.buf.Reset()
+		z.w.Reset(&z.buf)
+		_, _ = z.w.Write(payload)
+		_ = z.w.Close()
+		if z.buf.Len() < len(payload) {
+			zipped, body = true, z.buf.Bytes()
 		}
 	}
 	b64 := base64.StdEncoding.EncodeToString(body)

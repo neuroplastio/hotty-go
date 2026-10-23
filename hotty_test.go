@@ -347,6 +347,45 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 	}
 }
 
+// Encode reuses its compressors: each message, one after another or at
+// once, carries its own payload and nothing of another's, including one
+// that did not compress.
+func TestEncodeReusesCompressors(t *testing.T) {
+	payloads := []string{
+		strings.Repeat("<li>row</li>", 500),
+		strings.Repeat("<p>x</p>", 40),
+		noise(3000, 7),
+		strings.Repeat("<td>cell</td>", 2000),
+		strings.Repeat("<li>row</li>", 30),
+	}
+	check := func(p string) error {
+		if m, invalid := decodeAll(Doc("s", p)); len(m) != 1 || invalid != 0 || string(m[0].Payload) != p {
+			return fmt.Errorf("a %d-byte payload did not come back", len(p))
+		}
+		return nil
+	}
+	for range 2 {
+		for _, p := range payloads {
+			if err := check(p); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	errs := make(chan error, 8*len(payloads))
+	for i := range 8 {
+		go func() {
+			for j := range payloads {
+				errs <- check(payloads[(i+j)%len(payloads)])
+			}
+		}()
+	}
+	for range 8 * len(payloads) {
+		if err := <-errs; err != nil {
+			t.Error(err)
+		}
+	}
+}
+
 // A document the program only shows is detached in the command that sends
 // it; chunked, d=1 is the first chunk's alone.
 func TestDocDetachedChunked(t *testing.T) {
