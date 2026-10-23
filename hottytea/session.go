@@ -487,8 +487,10 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		if h.marking && r.N == h.markN && r.Surface == h.markDoc {
 			h.marking = false // the loss's late answers have all come
 		}
-		if r.OK {
-			return nil, nil // a mark is the Session's, even one answered late
+		if r.OK || r.Code == hotty.ENOTERM {
+			// A mark is the Session's, even one answered late, or kept
+			// unchecked for a terminal not yet attached (SPEC §3.6).
+			return nil, nil
 		}
 	}
 	switch {

@@ -354,6 +354,46 @@ func TestAProgramOnAHostThatLostItsDocuments(t *testing.T) {
 	}
 }
 
+// The same loss behind a multiplexer with no terminal attached: the
+// documents go again, the mark among them is kept unchecked, and its
+// ENOTERM is the Session's, not the program's.
+func TestAProgramThatLostItsDocumentsWithNoTerminal(t *testing.T) {
+	h := hottytest.New(t)
+	seen, wait := run(t, h)
+	next[hottytea.ReadyMsg](t, seen)
+	eventually(t, "the card is placed", func() bool {
+		s := h.Surface(cardName)
+		return s != nil && s.Placed()
+	})
+	drain(seen)
+	h.DetachTerminal()
+	h.Forget()
+	h.Type("c")
+	if r := next[hottytea.RelayoutMsg](t, seen); r.Lost {
+		t.Error("an erase lost nothing")
+	}
+	if r := next[hottytea.RelayoutMsg](t, seen); !r.Lost {
+		t.Error("the loss was not reported")
+	}
+	eventually(t, "the card again, marked", func() bool {
+		m, ok := command(h, "a", "doc", "s", cardName)
+		return ok && hotty.Get(m.Control, "n") != ""
+	})
+	h.Type("q")
+	wait()
+	for {
+		select {
+		case msg := <-seen:
+			if e, ok := msg.(hottytea.ErrorMsg); ok {
+				t.Errorf("the program heard %+v", e.Reply)
+			}
+			continue
+		default:
+		}
+		break
+	}
+}
+
 // A program that knows the terminal is a host (Known) asks it nothing, and
 // its surfaces go out as on a host it found.
 func TestAProgramOnAKnownHost(t *testing.T) {
