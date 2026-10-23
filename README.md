@@ -145,9 +145,9 @@ no doc comment.
 
 The toolchain is in `mise.toml`: run `mise install` first.
 
-- `make check` is the gate: formatting, tidy modules, vet, staticcheck,
-  the tests with the race detector, coverage, and the documentation being
-  current, in every module.
+- `make check` is the gate: formatting, tidy modules, vet, a build with a
+  32-bit int (TinyGo's wasm has one), staticcheck, the tests with the race
+  detector, coverage, and the documentation being current, in every module.
 - The modules build against each other as they are in the repository:
   each nested `go.mod` replaces the others with their directories. What a
   program that uses the SDK gets are the requirements between them, which

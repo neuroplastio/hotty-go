@@ -239,8 +239,9 @@ const DefaultLimit = 48
 
 const (
 	// markBase numbers a loss's marks (Session.marking) above any number a
-	// program picks for its own commands.
-	markBase = 1 << 40
+	// program picks for its own commands. It fits a 32-bit int, as TinyGo's
+	// wasm has.
+	markBase = 1 << 30
 	// markTimeout is how long a mark's answer may take: past it, the
 	// answer is taken as lost with the host that would have sent it, and
 	// an ENOENT is a loss again.

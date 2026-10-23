@@ -22,8 +22,9 @@ fmt:   ## fails, listing them, when gofmt would change files
 tidy:   ## fails when a module's go.mod or go.sum is not what go mod tidy makes
 	@for m in $(MODULES); do echo "$$m: go mod tidy -diff"; (cd $$m && $(GO) mod tidy -diff) || exit 1; done
 
-vet:
+vet:   ## go vet, and the SDK built with a 32-bit int, as TinyGo's wasm has it
 	@for m in $(MODULES); do echo "$$m: go vet"; (cd $$m && $(GO) vet ./...) || exit 1; done
+	@for m in $(SDK); do echo "$$m: go build, 32-bit"; (cd $$m && GOARCH=386 $(GO) build ./...) || exit 1; done
 
 lint:   ## staticcheck, pinned
 	@for m in $(MODULES); do echo "$$m: staticcheck"; (cd $$m && $(GO) run $(STATICCHECK) ./...) || exit 1; done
