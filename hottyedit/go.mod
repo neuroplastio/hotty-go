@@ -6,7 +6,7 @@ go 1.24.0
 
 require (
 	github.com/clipperhouse/uax29/v2 v2.7.0
-	github.com/neuroplastio/hotty-go v0.5.0
+	github.com/neuroplastio/hotty-go v0.5.1
 )
 
 require (
