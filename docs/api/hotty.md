@@ -312,7 +312,7 @@ const (
 
 Event kinds (SPEC §9). A program ignores kinds it does not know: later versions add some.
 
-<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="ESTALE"></a><a id="EVERSION"></a>
+<a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="ENOTERM"></a><a id="ESTALE"></a><a id="EVERSION"></a>
 
 ```go
 const (
@@ -322,6 +322,7 @@ const (
 	EDETACHED = "EDETACHED" // the surface is detached (SPEC §5.5)
 	EQUOTA    = "EQUOTA"    // over one of the host's limits (SPEC §13)
 	EBUDGET   = "EBUDGET"   // the host gave up on work over its time budget
+	ENOTERM   = "ENOTERM"   // nothing can lay the document out yet: a multiplexer with no terminal attached; the rows come as fit (SPEC §5.2)
 	ESTALE    = "ESTALE"    // an a=field made against another rev than the control's: the user changed it since; the detail is its rev (SPEC §6.4)
 	EVERSION  = "EVERSION"  // a query lists no version the host speaks; the detail is those it speaks (SPEC §4)
 )
