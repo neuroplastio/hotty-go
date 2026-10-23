@@ -955,6 +955,13 @@ func TestNoTerminal(t *testing.T) {
 	if got := h.Surface("b").TextOf("x"); got != "one\ntwo" {
 		t.Errorf("the delta kept: %q", got)
 	}
+	// A detached surface needs no document to refuse focus or a field.
+	v := "?"
+	send(h, hotty.Doc("d", "<input id=i>"), hotty.Place("d", hotty.Placement{Cols: 10, Rows: 1}), hotty.Detach("d"),
+		hotty.Focus("d", "i", hotty.N(9)), hotty.SetField("d", "i", hotty.FieldChange{Value: &v}))
+	expect(t, sent(h), "err re=focus s=d EDETACHED", "err re=field s=d EDETACHED")
+	send(h, hotty.Del("d"))
+	sent(h)
 
 	// A terminal attaches: a, which heard no rows, hears them; b, placed
 	// at rows its document does not need, hears the ones it does; c did

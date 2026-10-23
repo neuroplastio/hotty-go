@@ -153,7 +153,7 @@ func (h *Host) BecomeHost() {
 // NoTerminal makes the host a multiplexer running the program's pane with
 // no terminal attached, until AttachTerminal (SPEC §3.6, §5.2). It carries
 // out every command, as the terminal that attaches will, and answers what
-// it can tell as a host would. What needs the document, an a=doc, a=delta,
+// it can tell as a host would: ENOENT, EINVAL, EDETACHED. What needs the document, an a=doc, a=delta,
 // a=field, a=focus or a=blur, and the rows of a placement with auto rows,
 // it keeps unchecked: answered ENOTERM where the program asks for every
 // answer (q=0), and not at all with q=1. Such a placement moves the cursor
@@ -613,10 +613,11 @@ func (h *Host) command(m hotty.Message) {
 			q = "0"
 		}
 	}
-	if h.noTerm && code != hotty.EINVAL && code != hotty.ENOENT && code != hotty.EQUOTA &&
+	if h.noTerm && code != hotty.EINVAL && code != hotty.ENOENT && code != hotty.EQUOTA && code != hotty.EDETACHED &&
 		(code == hotty.ENOTERM || slices.Contains([]string{"doc", "delta", "field", "focus", "blur"}, a)) {
 		// What needs the document is kept unchecked, and answered ENOTERM
-		// only where the program asks for every answer (SPEC §3.6).
+		// only where the program asks for every answer (SPEC §3.6). A
+		// detached surface needs none: the multiplexer holds what detached it.
 		code, detail, h.faultOp = hotty.ENOTERM, "", -1
 		if q != "0" {
 			return
