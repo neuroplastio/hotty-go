@@ -117,7 +117,8 @@ type RelayoutMsg struct {
 	// ahead of the document; sending one again replaces it. One loss is
 	// reported once, however many documents it took: an ENOENT for a
 	// placement sent before the report is taken as the same loss's, and
-	// gives a plain RelayoutMsg.
+	// gives a plain RelayoutMsg, and a hidden surface's document goes again
+	// with its next placement.
 	Lost bool
 }
 
@@ -493,6 +494,16 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		lost := h.placedIn[r.Surface] == h.lost
 		if lost {
 			h.lost++
+			// A host loses its documents together (a full reset, a restart
+			// behind a relay): the hidden ones go again with their next
+			// placement, which would find them gone and report this loss
+			// again. One on the screen answers its own placement.
+			for name := range h.hasDoc {
+				if _, on := h.placed[name]; !on {
+					delete(h.hasDoc, name)
+					delete(h.flags, name)
+				}
+			}
 		}
 		delete(h.hasDoc, r.Surface)
 		delete(h.placed, r.Surface)

@@ -167,6 +167,30 @@ func TestALossIsReportedOnce(t *testing.T) {
 	}
 }
 
+// A hidden surface brought back after a loss goes with its document, rather
+// than finding it gone and reporting the loss again.
+func TestAHiddenSurfaceGoesAgainAfterALoss(t *testing.T) {
+	h := native()
+	a := Surface{Name: "a", Rect: Rect{0, 0, 10, 3}, Doc: func() string { return "<p>a</p>" }}
+	b := Surface{Name: "b", Rect: Rect{0, 3, 10, 3}, Keep: true, Doc: func() string { return "<p>b</p>" }}
+	h.Layout([]Surface{a, b})
+	flushed(h)
+	h.Layout([]Surface{a})
+	if out := flushed(h); !strings.Contains(out, "a=hide:s=b") {
+		t.Fatalf("b not hidden: %q", out)
+	}
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
+		t.Fatalf("a's ENOENT gave %#v", msg)
+	}
+	if h.Has("b") {
+		t.Error("b's document is taken as kept after the loss")
+	}
+	h.Layout([]Surface{a, b})
+	if out := flushed(h); !strings.Contains(out, "a=doc:s=a") || !strings.Contains(out, "a=doc:s=b") {
+		t.Fatalf("after the loss: %q", out)
+	}
+}
+
 func TestAClippedSurfaceShowsTheWindowInView(t *testing.T) {
 	h := native()
 	region := Rect{0, 1, 80, 20}

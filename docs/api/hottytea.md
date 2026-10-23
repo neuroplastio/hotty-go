@@ -388,7 +388,8 @@ type RelayoutMsg struct {
 	// ahead of the document; sending one again replaces it. One loss is
 	// reported once, however many documents it took: an ENOENT for a
 	// placement sent before the report is taken as the same loss's, and
-	// gives a plain RelayoutMsg.
+	// gives a plain RelayoutMsg, and a hidden surface's document goes again
+	// with its next placement.
 	Lost bool
 }
 ```
