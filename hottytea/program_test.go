@@ -26,6 +26,9 @@ type cardApp struct {
 
 const cardName = "app-card"
 
+// clearedMsg follows a clear of the screen, once Bubble Tea has taken it.
+type clearedMsg struct{}
+
 // cardStyle is the card's stylesheet, a resource sent once (SPEC §7.1).
 var cardStyle = hotty.Res("app-css", "text/css", []byte("p { color: teal }"))
 
@@ -44,6 +47,8 @@ func (m *cardApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case hottytea.ErrorMsg:
 		m.tell(msg)
+	case clearedMsg:
+		m.clears++
 	case hottytea.EventMsg:
 		m.tell(msg)
 		if msg.Kind == hotty.EventClick && msg.Target == "go" {
@@ -56,9 +61,9 @@ func (m *cardApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Sequence(m.s.Close(), tea.Quit)
 		case "c":
 			// Bubble Tea redraws a cleared screen with the next frame
-			// that differs.
-			m.clears++
-			return m, tea.Batch(cmd, tea.ClearScreen, m.draw())
+			// that differs: the frame changes once the clear is taken,
+			// or one drawn before it leaves the clear waiting.
+			return m, tea.Batch(cmd, tea.Sequence(tea.ClearScreen, func() tea.Msg { return clearedMsg{} }))
 		case "d":
 			// Behind the Session's back, the surface goes; then it moves,
 			// and its placement finds it gone.

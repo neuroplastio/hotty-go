@@ -482,10 +482,12 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 	if was := h.det.Deadline; h.detecting && h.det.Reply(r, time.Now()) {
 		return h.detected(was) // nothing for a late answer, unless Late
 	}
-	if h.marking && h.markN != 0 && r.N == h.markN && r.Re == "doc" && r.Surface == h.markDoc {
-		h.marking = false // the loss's late answers have all come
+	if r.N >= markBase && r.Re == "doc" {
+		if h.marking && r.N == h.markN && r.Surface == h.markDoc {
+			h.marking = false // the loss's late answers have all come
+		}
 		if r.OK {
-			return nil, nil
+			return nil, nil // a mark is the Session's, even one answered late
 		}
 	}
 	switch {

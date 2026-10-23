@@ -230,8 +230,18 @@ func TestALostMarkTimesOut(t *testing.T) {
 	h.Layout(want)
 	flushed(h)
 	h.markAt = time.Now().Add(-markTimeout)
+	late := marked(h)
 	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
 		t.Errorf("an ENOENT past the mark gave %#v", msg)
+	}
+	h.Layout(want)
+	flushed(h)
+	// The first mark's answer, come at last, is the Session's too.
+	if msg, _ := h.Update(late); msg != nil || !h.marking {
+		t.Errorf("the late mark gave %#v (marking %v)", msg, h.marking)
+	}
+	if msg, _ := h.Update(marked(h)); msg != nil || h.marking {
+		t.Errorf("the second mark gave %#v (marking %v)", msg, h.marking)
 	}
 }
 
