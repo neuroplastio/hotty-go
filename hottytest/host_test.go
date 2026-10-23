@@ -932,6 +932,47 @@ func TestFit(t *testing.T) {
 	expect(t, sent(h))
 }
 
+// No terminal attached (SPEC §5.2): auto rows are answered ENOTERM, the
+// placement stands, and the rows come as fit when a terminal lays it out.
+func TestNoTerminal(t *testing.T) {
+	h := New(t, NoTerminal())
+	send(h, hotty.Doc("a", "<p>one\ntwo\nthree</p>"),
+		hotty.Place("a", hotty.Placement{Cols: 10, Fit: hotty.On}, hotty.N(1)),
+		hotty.Doc("b", "<p id=x>one</p>"), hotty.Place("b", hotty.Placement{Cols: 10, Rows: 3, Fit: hotty.On}),
+		hotty.Doc("c", "<p>one</p>"), hotty.Place("c", hotty.Placement{Cols: 10}))
+	expect(t, sent(h), "err re=place s=a ENOTERM", "err re=place s=c ENOTERM")
+	if a := h.Surface("a"); !a.Placed() || a.Placement().Rows != 0 {
+		t.Errorf("answered ENOTERM: placed %v, rows %d", a.Placed(), a.Placement().Rows)
+	}
+	if c, r, _ := h.Cursor(); c != 0 || r != 3 {
+		t.Errorf("the cursor moves only below the rows it knows: %d,%d", c, r)
+	}
+	// Nothing lays the document out, so a delta tells nothing.
+	send(h, hotty.SetText("b", "x", "one\ntwo"))
+	expect(t, sent(h))
+
+	// A terminal attaches: a, which heard no rows, hears them; b, placed
+	// at rows its document does not need, hears the ones it does; c did
+	// not ask.
+	h.AttachTerminal()
+	expect(t, sent(h), `ev fit t= {"r":3}`, `ev fit t= {"r":2}`)
+	if r := h.Surface("c").Placement().Rows; r != 1 {
+		t.Errorf("rows chosen when the terminal attached: %d", r)
+	}
+	send(h, hotty.Place("a", hotty.Placement{Cols: 10}, hotty.N(2)))
+	expect(t, sent(h), "ok re=place s=a")
+
+	// It leaves: what is placed keeps its rows, and auto is ENOTERM again.
+	h.DetachTerminal()
+	send(h, hotty.Place("a", hotty.Placement{Cols: 10, Window: hotty.Window{W: 1, H: 1}}, hotty.N(3)))
+	expect(t, sent(h), "err re=place s=a ENOTERM")
+	h.AttachTerminal()
+	expect(t, sent(h), `ev fit t= {"r":3}`)
+	if w := h.Surface("a").Placement().Window; w.H != 1 {
+		t.Errorf("the window it asked for: %+v", w)
+	}
+}
+
 // Hover (SPEC §9.4): each change of the element under the pointer, out
 // when it leaves, only to a placement that asked.
 func TestHover(t *testing.T) {

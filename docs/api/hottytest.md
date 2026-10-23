@@ -34,6 +34,8 @@ It also answers the queries terminals answer: Primary Device Attributes, the cur
 
 A Host made with Text is a terminal that is not a hotty host: the program's commands get no answer, as in any other terminal.
 
+A Host made with NoTerminal is a multiplexer running the program's pane with no terminal attached: it answers ENOTERM to a placement with auto rows, and lays the surfaces out when AttachTerminal attaches one (SPEC §5.2).
+
 Unless Lenient, a program that breaks the protocol fails the test: a malformed command, one the host refuses as invalid (EINVAL), or a hotty command other than the query sent to a terminal that is not a host.
 
 ## <a id="pkg-index"></a>Index
@@ -45,6 +47,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 - [`type Element`](#Element)
 - [`type Host`](#Host)
   - [`func New(tb testing.TB, opts ...Option) *Host`](#New)
+  - [`func (h *Host) AttachTerminal()`](#Host.AttachTerminal)
   - [`func (h *Host) BecomeHost()`](#Host.BecomeHost)
   - [`func (h *Host) Blur(surface string) error`](#Host.Blur)
   - [`func (h *Host) Buffered() int`](#Host.Buffered)
@@ -56,6 +59,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
+  - [`func (h *Host) DetachTerminal()`](#Host.DetachTerminal)
   - [`func (h *Host) DoubleClick(surface, id string, keys ...string) error`](#Host.DoubleClick)
   - [`func (h *Host) DragEnd(id string, c, r int, keys ...string) error`](#Host.DragEnd)
   - [`func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error`](#Host.DragEndOver)
@@ -99,6 +103,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func Caps(c hotty.Caps) Option`](#Caps)
   - [`func KittyGraphics() Option`](#KittyGraphics)
   - [`func Lenient() Option`](#Lenient)
+  - [`func NoTerminal() Option`](#NoTerminal)
   - [`func Size(cols, rows int) Option`](#Size)
   - [`func Text() Option`](#Text)
 - [`type Surface`](#Surface)
@@ -205,6 +210,14 @@ func New(tb testing.TB, opts ...Option) *Host
 
 New makes a host for a test, closed when the test ends. tb may be nil outside a test: then nothing fails, and Errors lists what would have.
 
+### <a id="Host.AttachTerminal"></a>func (*Host) AttachTerminal
+
+```go
+func (h *Host) AttachTerminal()
+```
+
+AttachTerminal attaches a terminal to the pane of a host made with NoTerminal, or one DetachTerminal left without. The terminal lays every surface out: a placement answered ENOTERM gets its rows, and one with f=1 hears them as fit, as it does any rows that differ from the ones it last heard (SPEC §5.2).
+
 ### <a id="Host.BecomeHost"></a>func (*Host) BecomeHost
 
 ```go
@@ -296,6 +309,14 @@ func (h *Host) Cursor() (col, row int, shown bool)
 ```
 
 Cursor is where the cursor is, and whether it is on show (DECTCEM: ESC \[ ?25 l hides it): where the program leaves it for what prints next. row is a line of Screen, as a placement's (Surface.At).
+
+### <a id="Host.DetachTerminal"></a>func (*Host) DetachTerminal
+
+```go
+func (h *Host) DetachTerminal()
+```
+
+DetachTerminal detaches the terminal from the pane, as when the user leaves the multiplexer: from now on the host is as NoTerminal makes it. The placements made keep their rows.
 
 ### <a id="Host.DoubleClick"></a>func (*Host) DoubleClick
 
@@ -658,6 +679,14 @@ func Lenient() Option
 
 Lenient keeps protocol errors from failing the test; Errors still lists them.
 
+### <a id="NoTerminal"></a>func NoTerminal
+
+```go
+func NoTerminal() Option
+```
+
+NoTerminal makes the host a multiplexer running the program's pane with no terminal attached, until AttachTerminal (SPEC §5.2). It has nothing to lay a document out with: a placement with auto rows is made, and answered ENOTERM where its rows would be; the cursor stays where it was, below rows nobody knows yet; and no placement hears fit.
+
 ### <a id="Size"></a>func Size
 
 ```go
@@ -771,7 +800,7 @@ Placed reports whether the surface is placed: on screen, not hidden.
 func (s *Surface) Placement() hotty.Placement
 ```
 
-Placement is the surface's last placement, as the program sent it; Rows is the rows the host chose when the program asked for auto.
+Placement is the surface's last placement, as the program sent it; Rows is the rows the host chose when the program asked for auto, 0 while no terminal has laid it out (NoTerminal).
 
 ### <a id="Surface.Press"></a>func (*Surface) Press
 

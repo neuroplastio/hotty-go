@@ -40,6 +40,11 @@
 // A Host made with Text is a terminal that is not a hotty host: the
 // program's commands get no answer, as in any other terminal.
 //
+// A Host made with NoTerminal is a multiplexer running the program's pane
+// with no terminal attached: it answers ENOTERM to a placement with auto
+// rows, and lays the surfaces out when AttachTerminal attaches one (SPEC
+// §5.2).
+//
 // Unless Lenient, a program that breaks the protocol fails the test: a
 // malformed command, one the host refuses as invalid (EINVAL), or a hotty
 // command other than the query sent to a terminal that is not a host.
@@ -145,6 +150,46 @@ func (h *Host) BecomeHost() {
 	h.held = nil
 }
 
+// NoTerminal makes the host a multiplexer running the program's pane with
+// no terminal attached, until AttachTerminal (SPEC §5.2). It has nothing to
+// lay a document out with: a placement with auto rows is made, and
+// answered ENOTERM where its rows would be; the cursor stays where it was,
+// below rows nobody knows yet; and no placement hears fit.
+func NoTerminal() Option { return func(h *Host) { h.noTerm = true } }
+
+// AttachTerminal attaches a terminal to the pane of a host made with
+// NoTerminal, or one DetachTerminal left without. The terminal lays every
+// surface out: a placement answered ENOTERM gets its rows, and one with
+// f=1 hears them as fit, as it does any rows that differ from the ones it
+// last heard (SPEC §5.2).
+func (h *Host) AttachTerminal() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.noTerm {
+		return
+	}
+	h.noTerm = false
+	for _, name := range slices.Sorted(maps.Keys(h.surfaces)) {
+		s := h.surfaces[name]
+		if p := &s.place; s.placed && p.Rows == 0 {
+			p.Rows = max(1, min(hotty.MaxSize, h.autoRows(s, p.Cols)))
+			if p.Window != (hotty.Window{}) && p.Window.H == 0 {
+				p.Window.H = max(1, p.Rows-p.Window.Y) // auto: to the bottom
+			}
+		}
+		h.refitSurface(s)
+	}
+}
+
+// DetachTerminal detaches the terminal from the pane, as when the user
+// leaves the multiplexer: from now on the host is as NoTerminal makes it.
+// The placements made keep their rows.
+func (h *Host) DetachTerminal() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.noTerm = true
+}
+
 // Lenient keeps protocol errors from failing the test; Errors still lists
 // them.
 func Lenient() Option { return func(h *Host) { h.lenient = true } }
@@ -178,6 +223,7 @@ type Host struct {
 	tb       testing.TB
 	caps     hotty.Caps
 	text     bool
+	noTerm   bool // a multiplexer with no terminal attached (NoTerminal)
 	lenient  bool
 	kitty    bool
 	cols     int
@@ -772,15 +818,18 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 		return e.Code, e.Detail, nil
 	}
 	r := p.Rows
-	if r == 0 {
+	// With no terminal attached, auto rows wait for one to lay the
+	// document out: until then they are 0, none (SPEC §5.2).
+	noRows := r == 0 && h.noTerm
+	if r == 0 && !noRows {
 		r = max(1, min(hotty.MaxSize, h.autoRows(s, p.Cols)))
 	}
 	rows := r // the rows the placement covers
 	if win := &p.Window; *win != (hotty.Window{}) {
-		if win.H == 0 {
+		if win.H == 0 && !noRows {
 			win.H = r - win.Y // auto: to the bottom, now that the host knows it
 		}
-		if win.H < 1 || win.Y+win.H > r {
+		if !noRows && (win.H < 1 || win.Y+win.H > r) {
 			return hotty.EINVAL, "window out of the surface", nil
 		}
 		rows = win.H
@@ -805,12 +854,15 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 	if s.hover && !wasHover {
 		s.heard = nil // v=1 starts from out (SPEC §9.4)
 	}
-	s.fitRows = r // each placement counts from its own rows (SPEC §5.2)
+	s.fitRows = r // each placement counts from its own rows, ENOTERM's from none (SPEC §5.2)
 	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
-	if !p.KeepCursor {
+	if !p.KeepCursor && rows > 0 {
 		for _, c := range []byte(hotty.CursorBelow(rows)) {
 			h.byte(c)
 		}
+	}
+	if noRows {
+		return hotty.ENOTERM, "", nil
 	}
 	return "", "", hotty.Control{{K: "c", V: strconv.Itoa(p.Cols)}, {K: "r", V: strconv.Itoa(r)}}
 }
@@ -856,7 +908,7 @@ func (h *Host) refit(a string, m hotty.Message) {
 // refitSurface sends fit if the rows the surface's document needs now
 // differ from the rows the program last heard.
 func (h *Host) refitSurface(s *Surface) {
-	if !s.placed || !s.fit || s.detached {
+	if !s.placed || !s.fit || s.detached || h.noTerm {
 		return
 	}
 	if n := max(1, min(hotty.MaxSize, h.autoRows(s, s.place.Cols))); n != s.fitRows {

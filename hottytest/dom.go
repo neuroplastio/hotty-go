@@ -105,7 +105,8 @@ func (s *Surface) Hover() bool {
 }
 
 // Placement is the surface's last placement, as the program sent it; Rows
-// is the rows the host chose when the program asked for auto.
+// is the rows the host chose when the program asked for auto, 0 while no
+// terminal has laid it out (NoTerminal).
 func (s *Surface) Placement() hotty.Placement {
 	s.mu.Lock()
 	defer s.mu.Unlock()
