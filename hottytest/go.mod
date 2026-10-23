@@ -5,8 +5,8 @@ go 1.24.0
 
 require (
 	github.com/clipperhouse/uax29/v2 v2.7.0
-	github.com/neuroplastio/hotty-go v0.5.1
-	github.com/neuroplastio/hotty-go/hottyedit v0.5.1
+	github.com/neuroplastio/hotty-go v0.5.2
+	github.com/neuroplastio/hotty-go/hottyedit v0.5.2
 	github.com/neuroplastio/myelin/myelinkey v0.1.0
 	github.com/tinylib/msgp v1.6.5
 	golang.org/x/net v0.39.0
