@@ -41,9 +41,9 @@
 // program's commands get no answer, as in any other terminal.
 //
 // A Host made with NoTerminal is a multiplexer running the program's pane
-// with no terminal attached: it answers ENOTERM to a placement with auto
-// rows, and lays the surfaces out when AttachTerminal attaches one (SPEC
-// §5.2).
+// with no terminal attached: what needs a document it keeps unchecked, and
+// answers ENOTERM for, and it lays the surfaces out when AttachTerminal
+// attaches one (SPEC §3.6, §5.2).
 //
 // Unless Lenient, a program that breaks the protocol fails the test: a
 // malformed command, one the host refuses as invalid (EINVAL), or a hotty
@@ -151,10 +151,13 @@ func (h *Host) BecomeHost() {
 }
 
 // NoTerminal makes the host a multiplexer running the program's pane with
-// no terminal attached, until AttachTerminal (SPEC §5.2). It has nothing to
-// lay a document out with: a placement with auto rows is made, and
-// answered ENOTERM where its rows would be; the cursor stays where it was,
-// below rows nobody knows yet; and no placement hears fit.
+// no terminal attached, until AttachTerminal (SPEC §3.6, §5.2). It carries
+// out every command, as the terminal that attaches will, and answers what
+// it can tell as a host would. What needs the document, an a=doc, a=delta,
+// a=field, a=focus or a=blur, and the rows of a placement with auto rows,
+// it keeps unchecked: answered ENOTERM where the program asks for every
+// answer (q=0), and not at all with q=1. Such a placement moves the cursor
+// as one row tall would, the least it can be, and no placement hears fit.
 func NoTerminal() Option { return func(h *Host) { h.noTerm = true } }
 
 // AttachTerminal attaches a terminal to the pane of a host made with
@@ -610,6 +613,15 @@ func (h *Host) command(m hotty.Message) {
 			q = "0"
 		}
 	}
+	if h.noTerm && code != hotty.EINVAL && code != hotty.ENOENT && code != hotty.EQUOTA &&
+		(code == hotty.ENOTERM || slices.Contains([]string{"doc", "delta", "field", "focus", "blur"}, a)) {
+		// What needs the document is kept unchecked, and answered ENOTERM
+		// only where the program asks for every answer (SPEC §3.6).
+		code, detail, h.faultOp = hotty.ENOTERM, "", -1
+		if q != "0" {
+			return
+		}
+	}
 	if q == "2" || q == "1" && code == "" {
 		return
 	}
@@ -856,7 +868,10 @@ func (h *Host) place(s *Surface, m hotty.Message) (code, detail string, extra ho
 	}
 	s.fitRows = r // each placement counts from its own rows, ENOTERM's from none (SPEC §5.2)
 	s.col, s.row, s.alt = h.scr.col, h.scr.row, h.alt
-	if !p.KeepCursor && rows > 0 {
+	if noRows && rows == 0 {
+		rows = 1 // to the bottom of rows nobody knows yet: the least they can be
+	}
+	if !p.KeepCursor {
 		for _, c := range []byte(hotty.CursorBelow(rows)) {
 			h.byte(c)
 		}

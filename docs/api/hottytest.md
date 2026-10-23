@@ -34,7 +34,7 @@ It also answers the queries terminals answer: Primary Device Attributes, the cur
 
 A Host made with Text is a terminal that is not a hotty host: the program's commands get no answer, as in any other terminal.
 
-A Host made with NoTerminal is a multiplexer running the program's pane with no terminal attached: it answers ENOTERM to a placement with auto rows, and lays the surfaces out when AttachTerminal attaches one (SPEC §5.2).
+A Host made with NoTerminal is a multiplexer running the program's pane with no terminal attached: what needs a document it keeps unchecked, and answers ENOTERM for, and it lays the surfaces out when AttachTerminal attaches one (SPEC §3.6, §5.2).
 
 Unless Lenient, a program that breaks the protocol fails the test: a malformed command, one the host refuses as invalid (EINVAL), or a hotty command other than the query sent to a terminal that is not a host.
 
@@ -685,7 +685,7 @@ Lenient keeps protocol errors from failing the test; Errors still lists them.
 func NoTerminal() Option
 ```
 
-NoTerminal makes the host a multiplexer running the program's pane with no terminal attached, until AttachTerminal (SPEC §5.2). It has nothing to lay a document out with: a placement with auto rows is made, and answered ENOTERM where its rows would be; the cursor stays where it was, below rows nobody knows yet; and no placement hears fit.
+NoTerminal makes the host a multiplexer running the program's pane with no terminal attached, until AttachTerminal (SPEC §3.6, §5.2). It carries out every command, as the terminal that attaches will, and answers what it can tell as a host would. What needs the document, an a=doc, a=delta, a=field, a=focus or a=blur, and the rows of a placement with auto rows, it keeps unchecked: answered ENOTERM where the program asks for every answer (q=0), and not at all with q=1. Such a placement moves the cursor as one row tall would, the least it can be, and no placement hears fit.
 
 ### <a id="Size"></a>func Size
 

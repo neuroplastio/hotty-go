@@ -932,24 +932,29 @@ func TestFit(t *testing.T) {
 	expect(t, sent(h))
 }
 
-// No terminal attached (SPEC §5.2): auto rows are answered ENOTERM, the
-// placement stands, and the rows come as fit when a terminal lays it out.
+// No terminal attached (SPEC §3.6, §5.2): what needs the document is kept
+// unchecked and answered ENOTERM where the program asks for every answer,
+// and auto rows come as fit when a terminal lays the surface out.
 func TestNoTerminal(t *testing.T) {
 	h := New(t, NoTerminal())
-	send(h, hotty.Doc("a", "<p>one\ntwo\nthree</p>"),
-		hotty.Place("a", hotty.Placement{Cols: 10, Fit: hotty.On}, hotty.N(1)),
-		hotty.Doc("b", "<p id=x>one</p>"), hotty.Place("b", hotty.Placement{Cols: 10, Rows: 3, Fit: hotty.On}),
+	send(h, hotty.Doc("a", "<p>one\ntwo\nthree</p>", hotty.N(1)),
+		hotty.Place("a", hotty.Placement{Cols: 10, Fit: hotty.On}, hotty.N(2)),
+		hotty.Doc("b", "<p id=x>one</p>"), hotty.Place("b", hotty.Placement{Cols: 10, Rows: 3, Fit: hotty.On}, hotty.N(3)),
 		hotty.Doc("c", "<p>one</p>"), hotty.Place("c", hotty.Placement{Cols: 10}))
-	expect(t, sent(h), "err re=place s=a ENOTERM", "err re=place s=c ENOTERM")
+	expect(t, sent(h), "err re=doc s=a ENOTERM", "err re=place s=a ENOTERM", "ok re=place s=b")
 	if a := h.Surface("a"); !a.Placed() || a.Placement().Rows != 0 {
 		t.Errorf("answered ENOTERM: placed %v, rows %d", a.Placed(), a.Placement().Rows)
 	}
-	if c, r, _ := h.Cursor(); c != 0 || r != 3 {
-		t.Errorf("the cursor moves only below the rows it knows: %d,%d", c, r)
+	if c, r, _ := h.Cursor(); c != 0 || r != 5 {
+		t.Errorf("auto rows move the cursor as one row would: %d,%d", c, r)
 	}
-	// Nothing lays the document out, so a delta tells nothing.
-	send(h, hotty.SetText("b", "x", "one\ntwo"))
-	expect(t, sent(h))
+	// A delta is carried out, and answered ENOTERM even where a host would
+	// refuse it: nothing can tell yet. What it can tell, it answers.
+	send(h, hotty.SetText("b", "x", "one\ntwo"), hotty.SetText("b", "y", "?", hotty.N(4)), hotty.SetText("z", "x", "?", hotty.N(5)))
+	expect(t, sent(h), "err re=delta s=b ENOTERM", "err re=delta s=z ENOENT")
+	if got := h.Surface("b").TextOf("x"); got != "one\ntwo" {
+		t.Errorf("the delta kept: %q", got)
+	}
 
 	// A terminal attaches: a, which heard no rows, hears them; b, placed
 	// at rows its document does not need, hears the ones it does; c did
@@ -959,12 +964,12 @@ func TestNoTerminal(t *testing.T) {
 	if r := h.Surface("c").Placement().Rows; r != 1 {
 		t.Errorf("rows chosen when the terminal attached: %d", r)
 	}
-	send(h, hotty.Place("a", hotty.Placement{Cols: 10}, hotty.N(2)))
-	expect(t, sent(h), "ok re=place s=a")
+	send(h, hotty.Place("a", hotty.Placement{Cols: 10}, hotty.N(6)), hotty.SetText("b", "y", "?", hotty.N(7)))
+	expect(t, sent(h), "ok re=place s=a", "err re=delta s=b ENOTARGET i=0")
 
 	// It leaves: what is placed keeps its rows, and auto is ENOTERM again.
 	h.DetachTerminal()
-	send(h, hotty.Place("a", hotty.Placement{Cols: 10, Window: hotty.Window{W: 1, H: 1}}, hotty.N(3)))
+	send(h, hotty.Place("a", hotty.Placement{Cols: 10, Window: hotty.Window{W: 1, H: 1}}, hotty.N(8)))
 	expect(t, sent(h), "err re=place s=a ENOTERM")
 	h.AttachTerminal()
 	expect(t, sent(h), `ev fit t= {"r":3}`)
