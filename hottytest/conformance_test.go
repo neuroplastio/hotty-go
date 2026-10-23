@@ -69,6 +69,7 @@ func oscs(stream string) []string {
 type vectorStep struct {
 	Send    map[string]string `json:"send"`
 	Payload *string           `json:"payload"`
+	Base64  []byte            `json:"payload_b64"` // a payload that is not UTF-8
 	Body    json.RawMessage   `json:"body"`
 	Reply   json.RawMessage   `json:"reply"`
 	Inspect []string          `json:"inspect"`
@@ -429,6 +430,9 @@ func TestConformanceVectors(t *testing.T) {
 				payload := ""
 				if st.Payload != nil {
 					payload = *st.Payload
+				}
+				if st.Base64 != nil {
+					payload = string(st.Base64)
 				}
 				if st.Body != nil {
 					payload = string(Body(string(st.Body)))

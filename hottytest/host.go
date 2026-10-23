@@ -656,6 +656,9 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	}
 	s := h.surfaces[name]
 	if a == "doc" {
+		if !utf8.Valid(m.Payload) {
+			return hotty.EINVAL, "payload is not UTF-8", nil // and nothing changes (SPEC §3.3)
+		}
 		if s == nil {
 			if limit := h.caps.Limits["surfaces"]; limit > 0 && len(h.surfaces) >= limit {
 				return hotty.EQUOTA, "surfaces", nil
