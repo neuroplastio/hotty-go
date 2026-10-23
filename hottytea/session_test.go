@@ -2,8 +2,10 @@ package hottytea
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 
@@ -125,11 +127,16 @@ func gone(name string) uv.UnknownOscEvent {
 		hottytest.Body(`{"code":"ENOENT","detail":"no surface `+name+`"}`)))
 }
 
+// marked is the host's answer to the document that marks a loss.
+func marked(h *Session) uv.UnknownOscEvent {
+	return uv.UnknownOscEvent(hotty.Encode(hotty.Control{{K: "a", V: "ok"}, {K: "n", V: strconv.Itoa(h.markN)},
+		{K: "s", V: h.markDoc}, {K: "re", V: "doc"}}, nil))
+}
+
 // A host that loses its documents loses them all at once, and the program
 // sends its resources again once: the first ENOENT reports the loss, and
-// one for a placement sent before the report is the same loss's. A
-// placement sent after the report that finds its document gone is a loss
-// of its own.
+// every document goes again, the first numbered. An ENOENT read before
+// that one's answer is for a placement sent before it: the same loss's.
 func TestALossIsReportedOnce(t *testing.T) {
 	h := native()
 	var want []Surface
@@ -141,29 +148,90 @@ func TestALossIsReportedOnce(t *testing.T) {
 	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
 		t.Fatalf("the first ENOENT gave %#v", msg)
 	}
-	h.Layout(want)
-	if out := flushed(h); !strings.Contains(out, "a=doc:s=a") || strings.Contains(out, "a=doc:s=b") {
-		t.Fatalf("after a's ENOENT: %q", out)
+	if msg, _ := h.Update(gone("b")); msg != nil {
+		t.Errorf("b's ENOENT before the documents went gave %#v", msg)
 	}
-	for _, name := range []string{"b", "c"} {
-		if msg, _ := h.Update(gone(name)); msg != (RelayoutMsg{}) {
-			t.Errorf("%s's ENOENT gave %#v", name, msg)
+	h.Layout(want)
+	out := flushed(h)
+	for _, name := range []string{"a", "b", "c"} {
+		if !strings.Contains(out, "a=doc:s="+name) {
+			t.Fatalf("%s not sent again: %q", name, out)
 		}
 	}
-	h.Layout(want)
-	if out := flushed(h); !strings.Contains(out, "a=doc:s=b") || !strings.Contains(out, "a=doc:s=c") || strings.Contains(out, "a=doc:s=a") {
-		t.Fatalf("after b's and c's: %q", out)
+	if n := strings.Count(out, ":n="); n != 1 || !strings.Contains(out, "a=doc:s=a:n=") {
+		t.Fatalf("%d documents numbered: %q", n, out)
 	}
-	// They are lost again: the placements after the erase went after the
-	// report.
+	if msg, _ := h.Update(gone("c")); msg != nil {
+		t.Errorf("c's ENOENT before the mark's answer gave %#v", msg)
+	}
+	if msg, _ := h.Update(marked(h)); msg != nil {
+		t.Errorf("the mark's answer gave %#v", msg)
+	}
+	// The placements after the erase went after the mark: a loss of its
+	// own.
 	h.Update(erasedMsg{})
 	h.Layout(want)
 	flushed(h)
 	if msg, _ := h.Update(gone("b")); msg != (RelayoutMsg{Lost: true}) {
 		t.Errorf("a second loss gave %#v", msg)
 	}
-	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{}) {
+	if msg, _ := h.Update(gone("a")); msg != nil {
 		t.Errorf("a's ENOENT in the second loss gave %#v", msg)
+	}
+}
+
+// Two frames in flight when the host loses its documents (margin's case,
+// behind a relay): the second frame's ENOENTs come after the documents went
+// again, and before the mark's answer, so they are still the first loss's.
+func TestALossBehindTwoFramesIsReportedOnce(t *testing.T) {
+	h := native()
+	at := func(y int) []Surface {
+		return []Surface{
+			{Name: "a", Rect: Rect{0, y, 10, 3}, Doc: func() string { return "<p>a</p>" }},
+			{Name: "b", Rect: Rect{0, y + 3, 10, 3}, Doc: func() string { return "<p>b</p>" }},
+		}
+	}
+	h.Layout(at(0))
+	flushed(h)
+	h.Layout(at(1))
+	if out := flushed(h); strings.Count(out, "a=place") != 2 {
+		t.Fatalf("the second frame: %q", out)
+	}
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
+		t.Fatalf("the first ENOENT gave %#v", msg)
+	}
+	h.Update(gone("b"))
+	h.Layout(at(1))
+	flushed(h)
+	for _, name := range []string{"a", "b"} {
+		if msg, _ := h.Update(gone(name)); msg != nil {
+			t.Errorf("%s's second ENOENT gave %#v", name, msg)
+		}
+	}
+	h.Update(marked(h))
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
+		t.Errorf("an ENOENT after the mark's answer gave %#v", msg)
+	}
+}
+
+// A mark whose answer never comes (the host that would have sent it went
+// away) holds for markTimeout; an ENOENT after that is a loss again.
+func TestALostMarkTimesOut(t *testing.T) {
+	h := native()
+	want := []Surface{{Name: "a", Rect: Rect{0, 0, 10, 3}, Doc: func() string { return "<p>a</p>" }}}
+	h.Layout(want)
+	flushed(h)
+	h.Update(gone("a"))
+	h.Layout(want)
+	flushed(h)
+	if msg, _ := h.Update(gone("a")); msg != nil {
+		t.Fatalf("an ENOENT inside the mark gave %#v", msg)
+	}
+	h.Layout(want)
+	flushed(h)
+	h.markAt = time.Now().Add(-markTimeout)
+	if msg, _ := h.Update(gone("a")); msg != (RelayoutMsg{Lost: true}) {
+		t.Errorf("an ENOENT past the mark gave %#v", msg)
 	}
 }
 

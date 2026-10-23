@@ -385,11 +385,11 @@ type RelayoutMsg struct {
 	// have lost the resources (hotty.Res) the document refers to as well,
 	// since a full reset ends the session that stored them (SPEC §2,
 	// §7.1). Send them again before Layout, so that they reach the host
-	// ahead of the document; sending one again replaces it. One loss is
-	// reported once, however many documents it took: an ENOENT for a
-	// placement sent before the report is taken as the same loss's, and
-	// gives a plain RelayoutMsg, and a hidden surface's document goes again
-	// with its next placement.
+	// ahead of the document; sending one again replaces it. A host loses
+	// its documents together (a full reset, a restart behind a relay), so
+	// Layout sends every one again, and one loss is reported once however
+	// many it took: an ENOENT for a placement sent before the documents
+	// went again is the same loss's, and gives nothing.
 	Lost bool
 }
 ```

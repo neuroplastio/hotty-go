@@ -114,11 +114,11 @@ type RelayoutMsg struct {
 	// have lost the resources (hotty.Res) the document refers to as well,
 	// since a full reset ends the session that stored them (SPEC §2,
 	// §7.1). Send them again before Layout, so that they reach the host
-	// ahead of the document; sending one again replaces it. One loss is
-	// reported once, however many documents it took: an ENOENT for a
-	// placement sent before the report is taken as the same loss's, and
-	// gives a plain RelayoutMsg, and a hidden surface's document goes again
-	// with its next placement.
+	// ahead of the document; sending one again replaces it. A host loses
+	// its documents together (a full reset, a restart behind a relay), so
+	// Layout sends every one again, and one loss is reported once however
+	// many it took: an ENOENT for a placement sent before the documents
+	// went again is the same loss's, and gives nothing.
 	Lost bool
 }
 
@@ -237,6 +237,16 @@ func changed(was, now bool) hotty.Flag {
 // that draws them itself).
 const DefaultLimit = 48
 
+const (
+	// markBase numbers a loss's marks (Session.marking) above any number a
+	// program picks for its own commands.
+	markBase = 1 << 40
+	// markTimeout is how long a mark's answer may take: past it, the
+	// answer is taken as lost with the host that would have sent it, and
+	// an ENOENT is a loss again.
+	markTimeout = 3 * time.Second
+)
+
 // Session is a Bubble Tea program's side of hotty (SPEC §2: a program's
 // connection to a host). Its methods are for the program's Update, which
 // Bubble Tea runs on one goroutine; the output it watches, and the
@@ -285,11 +295,16 @@ type Session struct {
 	keep    map[string]bool
 	seen    map[string]int  // the last layout that wanted a surface
 	refused map[string]bool // documents refused with EQUOTA, whose placement will fail too
-	// lost counts the losses reported (RelayoutMsg's Lost), and placedIn
-	// is what it was when each surface was last placed: an ENOENT for a
-	// placement sent before the last report is that loss's.
-	lost     int
-	placedIn map[string]int
+	// marking is a loss reported (RelayoutMsg's Lost) whose late answers
+	// may still come. The first document Layout sends again after it is
+	// numbered, markN (0 until it goes), on markDoc at markAt: the host
+	// answers in order, so an ENOENT read before that document's answer
+	// is for a placement sent before it (SDK.md §4.3).
+	marking bool
+	markN   int
+	markDoc string
+	markAt  time.Time
+	marks   int
 	// det decides what the terminal is, from Detect on; da1 counts the
 	// DA1 answers the Session's pings are owed.
 	det       hotty.Detector
@@ -314,7 +329,7 @@ type Session struct {
 // New returns a Session that has not detected the terminal yet.
 func New() *Session {
 	return &Session{placed: map[string]placement{}, flags: map[string]flags{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
-		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}, placedIn: map[string]int{}}
+		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}}
 }
 
 // Detect asks the terminal whether it is a host (SPEC §4): return it from
@@ -467,6 +482,12 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 	if was := h.det.Deadline; h.detecting && h.det.Reply(r, time.Now()) {
 		return h.detected(was) // nothing for a late answer, unless Late
 	}
+	if h.marking && h.markN != 0 && r.N == h.markN && r.Re == "doc" && r.Surface == h.markDoc {
+		h.marking = false // the loss's late answers have all come
+		if r.OK {
+			return nil, nil
+		}
+	}
 	switch {
 	case r.OK && r.N != 0 && r.Re != "q":
 		return AckMsg{r}, nil // a command the program numbered; queries are the Session's
@@ -487,28 +508,19 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 	case r.Re == "place" && r.Code == hotty.ENOENT && h.refused[r.Surface]:
 		delete(h.refused, r.Surface)
 		return nil, nil
+	case r.Re == "place" && r.Code == hotty.ENOENT && h.marking && (h.markN == 0 || time.Since(h.markAt) < markTimeout):
+		// For a placement sent before the documents went again: this
+		// loss's, and its document goes with the rest.
+		return nil, nil
 	case r.Re == "place" && r.Code == hotty.ENOENT && h.hasDoc[r.Surface]:
-		// The host dropped the document with its placement: send both, and
-		// have the program send the resources again, unless the placement
-		// went before the last loss was reported.
-		lost := h.placedIn[r.Surface] == h.lost
-		if lost {
-			h.lost++
-			// A host loses its documents together (a full reset, a restart
-			// behind a relay): the hidden ones go again with their next
-			// placement, which would find them gone and report this loss
-			// again. One on the screen answers its own placement.
-			for name := range h.hasDoc {
-				if _, on := h.placed[name]; !on {
-					delete(h.hasDoc, name)
-					delete(h.flags, name)
-				}
-			}
-		}
-		delete(h.hasDoc, r.Surface)
-		delete(h.placed, r.Surface)
-		delete(h.flags, r.Surface)
-		return RelayoutMsg{Lost: lost}, nil
+		// The host dropped the document with its placement, and with it the
+		// others: send them all again, and have the program send the
+		// resources again.
+		h.marking, h.markN = true, 0
+		clear(h.hasDoc)
+		clear(h.placed)
+		clear(h.flags)
+		return RelayoutMsg{Lost: true}, nil
 	}
 	return ErrorMsg{r}, nil
 }
@@ -571,7 +583,13 @@ func (h *Session) Layout(want []Surface) {
 			if fresh && !h.makeRoom(wanted) {
 				continue // the terminal holds no more: not until one goes
 			}
-			h.Send(hotty.Doc(s.Name, s.Doc(), hotty.Scroll(s.Scroll)))
+			opts := []hotty.DocOption{hotty.Scroll(s.Scroll)}
+			if h.marking && h.markN == 0 {
+				h.marks++
+				h.markN, h.markDoc, h.markAt = markBase+h.marks, s.Name, time.Now()
+				opts = append(opts, hotty.N(h.markN))
+			}
+			h.Send(hotty.Doc(s.Name, s.Doc(), opts...))
 			h.Count.Docs++
 			h.hasDoc[s.Name] = true
 			h.scroll[s.Name] = s.Scroll
@@ -591,7 +609,6 @@ func (h *Session) Layout(want []Surface) {
 			h.Count.Places++
 			h.placed[s.Name] = p
 			h.flags[s.Name] = now
-			h.placedIn[s.Name] = h.lost
 		}
 	}
 	for _, name := range h.names() {
@@ -675,7 +692,6 @@ func (h *Session) Delete(name string) {
 	delete(h.keep, name)
 	delete(h.seen, name)
 	delete(h.scroll, name)
-	delete(h.placedIn, name)
 }
 
 // Close ends the Session, on the program's way out: it deletes every
