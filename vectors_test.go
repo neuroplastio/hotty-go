@@ -307,9 +307,10 @@ func placement(v any) Placement {
 		return Off
 	}
 	keep, _ := m["keep_cursor"].(bool)
+	backdrop, _ := m["backdrop"].(bool)
 	p := Placement{
 		Cols: num(m, "cols"), Rows: num(m, "rows"), Z: num(m, "z"),
-		Press: flag("press"), Fit: flag("fit"), Hover: flag("hover"), KeepCursor: keep,
+		Press: flag("press"), Fit: flag("fit"), Hover: flag("hover"), KeepCursor: keep, Backdrop: backdrop,
 	}
 	if w, ok := m["window"].(map[string]any); ok {
 		p.Window = Window{X: num(w, "x"), Y: num(w, "y"), W: num(w, "w"), H: num(w, "h")}

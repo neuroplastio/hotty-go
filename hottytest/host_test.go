@@ -436,6 +436,33 @@ func TestPlacementAndCursor(t *testing.T) {
 	}
 }
 
+// This host has no backdrop: Placement keeps b=1 as the program sent it,
+// and the surface is above the cells, as a host without the feature places
+// it (SPEC §5.2), so a=focus gives it the keyboard where a backdrop's is
+// EINVAL.
+func TestBackdropIsAPlacementAboveTheCells(t *testing.T) {
+	if hotty.HasFeature(DefaultCaps(), hotty.FeatureBackdrop) {
+		t.Fatal("DefaultCaps lists backdrop")
+	}
+	h := New(t)
+	send(h, hotty.Doc("bg", `<input id=a>`), hotty.Place("bg", hotty.Placement{Cols: 10, Rows: 1, Backdrop: true}))
+	expect(t, sent(h))
+	bg := h.Surface("bg")
+	if p := bg.Placement(); !bg.Placed() || !p.Backdrop {
+		t.Errorf("a backdrop's placement: %+v", p)
+	}
+	send(h, hotty.Focus("bg", "a", hotty.N(1)))
+	expect(t, sent(h), "ok re=focus s=bg")
+	if bg.Focused() != "a" {
+		t.Errorf("focused %q", bg.Focused())
+	}
+	// b belongs to the placement: placed again without it, it is none.
+	send(h, hotty.Place("bg", hotty.Placement{Cols: 10, Rows: 1}))
+	if bg.Placement().Backdrop {
+		t.Error("placed without b=1, still a backdrop")
+	}
+}
+
 // The cursor: where a program leaves it, and whether it is on show
 // (DECTCEM), for the shell that prints next.
 func TestCursor(t *testing.T) {

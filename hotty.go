@@ -84,6 +84,7 @@ const (
 	FeatureHover       = "hover"       // it says where the pointer is, with hover events (SPEC §9.4)
 	FeatureCount       = "count"       // it says that a click repeats one before it (SPEC §9)
 	FeatureMenu        = "menu"        // it keeps a program's menu, shows its levels and lets the user pick from it (SPEC §10.7)
+	FeatureBackdrop    = "backdrop"    // it draws a placement with b=1 under the cells (Placement.Backdrop, SPEC §5.2)
 )
 
 // Flag is a surface's p, f or v (SPEC §5.2): absent, On or Off. The zero

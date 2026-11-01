@@ -147,6 +147,21 @@ func TestMessagePlacement(t *testing.T) {
 	if want := (Placement{Cols: 40, Rows: 3, Z: -2, Press: On, KeepCursor: true}); err != nil || p != want {
 		t.Errorf("%+v %v", p, err)
 	}
+	// Only b=1 makes a backdrop: any other value, as none, is above the
+	// cells (SPEC §5.2).
+	for ctl, backdrop := range map[string]bool{
+		"a=place:s=card:c=40:b=1": true, "a=place:s=card:c=40:z=-1:b=1:C=1": true,
+		"a=place:s=card:c=40": false, "a=place:s=card:c=40:b=0": false, "a=place:s=card:c=40:b=2": false, "a=place:s=card:c=40:b=": false,
+	} {
+		if p, err := place(ctl); err != nil || p.Backdrop != backdrop {
+			t.Errorf("%s: %+v %v, want Backdrop %v", ctl, p, err, backdrop)
+		}
+	}
+	// What Place writes, PlacementOf reads.
+	want := Placement{Cols: 80, Rows: 24, Z: -3, Hover: Off, KeepCursor: true, Backdrop: true}
+	if p, err := PlacementOf(decodeOne(t, Place("bg", want))); err != nil || p != want {
+		t.Errorf("Place, then PlacementOf: %+v %v", p, err)
+	}
 	// Defaults: to the right edge, and to the bottom, which with auto rows
 	// is the host's to find.
 	if p, _ := place("a=place:s=card:c=40:r=10:y=2"); p.Window != (Window{0, 2, 40, 8}) {

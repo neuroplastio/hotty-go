@@ -268,6 +268,11 @@ func TestPlacement(t *testing.T) {
 		// With auto rows nothing is whole, so a window is always sent.
 		{"window on auto", Placement{Cols: 30, Window: Window{0, 0, 1, 1}}, "c=30:r=auto:x=0:y=0:w=1:h=1"},
 		{"z, press, cursor", Placement{Cols: 5, Rows: 1, Z: 1, Press: On, KeepCursor: true}, "c=5:r=1:z=1:p=1:C=1"},
+		// A backdrop's b goes out after z, though it is the last field;
+		// false sends nothing, never b=0.
+		{"backdrop", Placement{Cols: 80, Rows: 24, Z: -1, Press: Off, KeepCursor: true, Backdrop: true}, "c=80:r=24:z=-1:b=1:p=0:C=1"},
+		{"backdrop alone", Placement{Cols: 80, Backdrop: true}, "c=80:r=auto:b=1"},
+		{"no backdrop", Placement{Cols: 80, Rows: 24, Backdrop: false}, "c=80:r=24"},
 		{"fit", Placement{Cols: 5, Press: On, Fit: On}, "c=5:r=auto:p=1:f=1"},
 		{"hover", Placement{Cols: 5, Fit: On, Hover: On}, "c=5:r=auto:f=1:v=1"},
 		// Off turns an event off, and absent leaves it as it was.
@@ -289,6 +294,9 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 	}
 	if got := PlaceAt("frame", 0, 0, Placement{Cols: 30, Rows: 10, Z: 1}, N(4)); !strings.Contains(got, "a=place:s=frame:c=30:r=10:z=1:C=1:n=4") {
 		t.Errorf("PlaceAt with z and N = %q", got)
+	}
+	if got := PlaceAt("canvas", 0, 0, Placement{Cols: 80, Rows: 24, Backdrop: true}); got != "\x1b7\x1b[1;1H\x1b]7279;a=place:s=canvas:c=80:r=24:b=1:C=1\x1b\\\x1b8" {
+		t.Errorf("PlaceAt a backdrop = %q", got)
 	}
 }
 
@@ -746,7 +754,7 @@ func TestCaps(t *testing.T) {
 	if caps.CellCSS != (Size{W: 10, H: 21}) {
 		t.Errorf("CellCSS = %+v", caps.CellCSS)
 	}
-	if !HasFeature(*caps, FeatureHover) || !HasFeature(*caps, FeatureMenu) || HasFeature(*caps, FeatureCount) || HasFeature(*caps, FeaturePassthrough) || !Light(*caps) {
+	if !HasFeature(*caps, FeatureHover) || !HasFeature(*caps, FeatureMenu) || HasFeature(*caps, FeatureCount) || HasFeature(*caps, FeaturePassthrough) || HasFeature(*caps, FeatureBackdrop) || !Light(*caps) {
 		t.Errorf("HasFeature, Light: %+v", caps)
 	}
 	var none Caps

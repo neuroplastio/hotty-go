@@ -577,8 +577,8 @@ func (e *Error) Error() string {
 }
 
 // HasFeature reports whether the host has an optional feature (SPEC §4):
-// FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything
-// else a 0.5 host does, it does.
+// FeaturePassthrough, FeatureHover, FeatureCount, FeatureMenu or
+// FeatureBackdrop. Everything else a 0.6 host does, it does.
 func HasFeature(c Caps, feature string) bool { return slices.Contains(c.Features, feature) }
 
 // Light reports whether the terminal's colour scheme is light.

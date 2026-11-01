@@ -213,7 +213,10 @@ func AutoRows(f func(s *Surface, cols int) int) Option { return func(h *Host) { 
 // otherwise. Its features are the ones it can honour: it lays nothing out,
 // so it has no passthrough, but it hears where the pointer is (hover),
 // counts clicks (count, DoubleClick) and records the menu a program shows
-// (menu, Menu).
+// (menu, Menu). It draws nothing under the cells either, so it has no
+// backdrop: it keeps a placement's Backdrop as the program sent it
+// (Surface.Placement), and does what a host without the feature does,
+// which places the surface above the cells (SPEC §5.2).
 func DefaultCaps() hotty.Caps {
 	return hotty.Caps{V: hotty.Version, CellCSS: hotty.Size{W: 9, H: 18}, Scale: 1, Scheme: "dark", Host: "hottytest",
 		Features: []string{hotty.FeatureHover, hotty.FeatureCount, hotty.FeatureMenu},

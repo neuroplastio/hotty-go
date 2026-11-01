@@ -161,7 +161,7 @@ Body is a body written as JSON, as the msgpack a host sends (SPEC §3.3): a numb
 func DefaultCaps() hotty.Caps
 ```
 
-DefaultCaps are the capabilities a Host reports unless Caps says otherwise. Its features are the ones it can honour: it lays nothing out, so it has no passthrough, but it hears where the pointer is (hover), counts clicks (count, DoubleClick) and records the menu a program shows (menu, Menu).
+DefaultCaps are the capabilities a Host reports unless Caps says otherwise. Its features are the ones it can honour: it lays nothing out, so it has no passthrough, but it hears where the pointer is (hover), counts clicks (count, DoubleClick) and records the menu a program shows (menu, Menu). It draws nothing under the cells either, so it has no backdrop: it keeps a placement's Backdrop as the program sent it (Surface.Placement), and does what a host without the feature does, which places the surface above the cells (SPEC §5.2).
 
 ## <a id="Child"></a>type Child
 

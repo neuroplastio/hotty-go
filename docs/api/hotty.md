@@ -268,7 +268,7 @@ const (
 
 The modifier keys held during a click, a press or a drag, as the bits of Event.Mods (SPEC §9).
 
-<a id="FeaturePassthrough"></a><a id="FeatureHover"></a><a id="FeatureCount"></a><a id="FeatureMenu"></a>
+<a id="FeaturePassthrough"></a><a id="FeatureHover"></a><a id="FeatureCount"></a><a id="FeatureMenu"></a><a id="FeatureBackdrop"></a>
 
 ```go
 const (
@@ -276,6 +276,7 @@ const (
 	FeatureHover       = "hover"       // it says where the pointer is, with hover events (SPEC §9.4)
 	FeatureCount       = "count"       // it says that a click repeats one before it (SPEC §9)
 	FeatureMenu        = "menu"        // it keeps a program's menu, shows its levels and lets the user pick from it (SPEC §10.7)
+	FeatureBackdrop    = "backdrop"    // it draws a placement with b=1 under the cells (Placement.Backdrop, SPEC §5.2)
 )
 ```
 
@@ -535,7 +536,7 @@ Has reports whether a control has a key.
 func HasFeature(c Caps, feature string) bool
 ```
 
-HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount or FeatureMenu. Everything else a 0.5 host does, it does.
+HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount, FeatureMenu or FeatureBackdrop. Everything else a 0.6 host does, it does.
 
 ## <a id="Hide"></a>func Hide
 
@@ -1921,6 +1922,17 @@ type Placement struct {
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool
+	// Backdrop draws the placement under the cells (b=1), as a scene
+	// behind the terminal's text: a cell with the default background is
+	// transparent over it. A backdrop takes no pointer and never has the
+	// keyboard (SPEC §5.2, §10.1). Like Z it belongs to the placement:
+	// placing the surface again without it puts it back above the cells.
+	// A host without FeatureBackdrop ignores it and draws the surface over
+	// the text, so a program sets it only where HasFeature says so.
+	//
+	// It is the last of the fields, as SDK.md's names list them (Appendix
+	// A), though b goes out after z.
+	Backdrop bool
 }
 ```
 
@@ -1932,7 +1944,7 @@ Placement is where and how a surface is shown (SPEC §5.2).
 func PlacementOf(m Message) (Placement, error)
 ```
 
-Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). A command out of range is an \*Error with Code EINVAL, as a host answers it.
+Placement reads a place command (SPEC §5.2), as a host or a relay does: Rows 0 for r=auto or none, and the window as the command gives it, its defaults filled in: w reaches the surface's right edge, and h its bottom, which with Rows 0 is the host's to find (H 0). Backdrop is b=1: any other value of b, as none, is above the cells. A command out of range is an \*Error with Code EINVAL, as a host answers it.
 
 ## <a id="Platform"></a>type Platform
 

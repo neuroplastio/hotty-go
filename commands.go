@@ -155,6 +155,17 @@ type Placement struct {
 	// KeepCursor leaves the cursor where it was (C=1). Otherwise the host
 	// moves it to the start of the line below the placement, as text would.
 	KeepCursor bool
+	// Backdrop draws the placement under the cells (b=1), as a scene
+	// behind the terminal's text: a cell with the default background is
+	// transparent over it. A backdrop takes no pointer and never has the
+	// keyboard (SPEC §5.2, §10.1). Like Z it belongs to the placement:
+	// placing the surface again without it puts it back above the cells.
+	// A host without FeatureBackdrop ignores it and draws the surface over
+	// the text, so a program sets it only where HasFeature says so.
+	//
+	// It is the last of the fields, as SDK.md's names list them (Appendix
+	// A), though b goes out after z.
+	Backdrop bool
 }
 
 func placementControl(p Placement, surface string) Control {
@@ -170,6 +181,9 @@ func placementControl(p Placement, surface string) Control {
 	}
 	if p.Z != 0 {
 		ctl = With(ctl, "z", strconv.Itoa(p.Z))
+	}
+	if p.Backdrop {
+		ctl = With(ctl, "b", "1")
 	}
 	for _, f := range [...]struct {
 		key  string
@@ -191,7 +205,8 @@ func placementControl(p Placement, surface string) Control {
 // Placement reads a place command (SPEC §5.2), as a host or a relay
 // does: Rows 0 for r=auto or none, and the window as the command gives it,
 // its defaults filled in: w reaches the surface's right edge, and h its
-// bottom, which with Rows 0 is the host's to find (H 0). A command out of
+// bottom, which with Rows 0 is the host's to find (H 0). Backdrop is b=1:
+// any other value of b, as none, is above the cells. A command out of
 // range is an *Error with Code EINVAL, as a host answers it.
 func PlacementOf(m Message) (Placement, error) {
 	fail := func(detail string) (Placement, error) {
@@ -236,6 +251,7 @@ func PlacementOf(m Message) (Placement, error) {
 	}
 	p.Press, p.Fit, p.Hover = flagOf(m.Control, "p"), flagOf(m.Control, "f"), flagOf(m.Control, "v")
 	p.KeepCursor = Get(m.Control, "C") == "1"
+	p.Backdrop = Get(m.Control, "b") == "1"
 	return p, nil
 }
 
