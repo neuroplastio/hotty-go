@@ -293,7 +293,7 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.5\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.6\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }
@@ -734,7 +734,7 @@ func TestReplies(t *testing.T) {
 
 func TestCaps(t *testing.T) {
 	r, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "1"}, {"re", "q"}},
-		`{"v":"0.5","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
+		`{"v":"0.6","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
 			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
 	caps := r.Caps
 	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
@@ -753,7 +753,7 @@ func TestCaps(t *testing.T) {
 	if HasFeature(none, FeatureHover) || Light(none) {
 		t.Error("a host that lists nothing")
 	}
-	for _, bad := range []string{`{"v":`, `{"v":"0.5","scale":2}`, `{"v":"0.5","features":["hover",3]}`, `{"v":"0.5","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
+	for _, bad := range []string{`{"v":`, `{"v":"0.6","scale":2}`, `{"v":"0.6","features":["hover",3]}`, `{"v":"0.6","cellcss":{"w":10,"h":21.0}}`, `["v"]`} {
 		if r, _ := ReplyOf(host(Control{{"a", "ok"}, {"re", "q"}}, bad)); r.Caps != nil {
 			t.Errorf("caps from %s", bad)
 		}

@@ -251,7 +251,7 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks: what its query
 	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.5"
+	Version = "0.6"
 )
 ```
 
@@ -950,7 +950,7 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements: "0.5".
+	// V is the protocol version the host implements: "0.6".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
