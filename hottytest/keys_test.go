@@ -101,6 +101,28 @@ func TestKeys(t *testing.T) {
 	expect(t, sent(h), `"\x1b"`)
 }
 
+// Enter commits a text field, in a form or not: change, if the user changed
+// it since its last commit, then its form's submit, if it is in one; focus
+// leaving it then sends no second change. A key a textarea binds to submit
+// does the same (SPEC §9, §10.2).
+func TestKeysEnterCommits(t *testing.T) {
+	h := shown(t, "k", `<input id=lone value=a><textarea id=notes data-keys="ctrl+enter=submit"></textarea>`+
+		`<form id=f><input id=q name=q></form>`)
+	send(h, hotty.Focus("k", "lone"))
+	for _, k := range []string{"enter", "b", "enter", "enter", "tab"} {
+		h.Key(k)
+	}
+	expect(t, sent(h), `ev change t=lone {"rev":1,"value":"ab"}`, "ev focus t=notes")
+	h.Key("x")
+	h.Key("ctrl+enter")
+	expect(t, sent(h), `ev change t=notes {"rev":1,"value":"x"}`)
+	send(h, hotty.Focus("k", "q"))
+	for _, k := range []string{"y", "enter", "enter"} {
+		h.Key(k)
+	}
+	expect(t, sent(h), `ev change t=q {"rev":1,"value":"y"}`, `ev submit t=f {"fields":[["q","y"]]}`, `ev submit t=f {"fields":[["q","y"]]}`)
+}
+
 // Shift selects in a text field, and typing replaces the selection; Fill
 // leaves the caret at the end of its text with nothing selected (SPEC
 // §10.2).

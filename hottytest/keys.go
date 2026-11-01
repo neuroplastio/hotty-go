@@ -35,8 +35,9 @@ import (
 // each edit no input event reports (data-on~=caret); a move whose key has
 // shift selects
 // (hotty.Keymap.Selects), select-all selects the value, characters type in
-// place of the selection, and submit commits the value and submits its
-// form.
+// place of the selection, and submit, enter in a text input, commits the
+// value as focus leaving the field does (change, if the user changed it),
+// then submits its form, if it is in one (SPEC §9, §10.2).
 //
 // Any other element has a keymap too, read the same way but with no
 // default keymap (hotty.Keymap.Program): a key it binds to program reaches
@@ -192,8 +193,10 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 	case a == "":
 		return false
 	case a == hotty.Submit:
+		// The field commits, in a form or not, then its form submits
+		// (SPEC §9, §10.2).
+		h.commit(s)
 		if form := closest(el, func(n *html.Node) bool { return n.DataAtom == atom.Form }); form != nil {
-			h.commit(s)
 			h.submit(s, form, nil)
 		}
 	case a == hotty.Copy || a == hotty.Cut:

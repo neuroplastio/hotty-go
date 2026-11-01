@@ -1693,8 +1693,8 @@ func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 // Fill types text into a text control, as the user does: the surface takes
 // the keyboard there (a focus event, if it did not have it), the control's
 // value becomes text (an input event, with data-on~=input), the caret goes
-// to its end with nothing selected, and the change is committed when focus
-// leaves it (Blur, another control, Submit).
+// to its end with nothing selected, and the change is committed by enter
+// (Key), by Submit, or when focus leaves it (Blur, another control).
 func (h *Host) Fill(surface, id, text string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
