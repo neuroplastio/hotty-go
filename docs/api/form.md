@@ -489,7 +489,7 @@ type State struct {
 }
 ```
 
-State is what a placed form holds, kept from its change events: what a submit would carry, for a program that submits the form itself. Text fields report a change when they lose focus, and a=blur makes the focused one do so (SPEC §10.1): blur the surface, wait for its blur event, then read Fields.
+State is what a placed form holds, kept from its change events: what a submit would carry, for a program that submits the form itself. Text fields report a change on Enter and when they lose focus (SPEC §9), and a=blur makes the focused one do so (SPEC §10.1): blur the surface, wait for its blur event, then read Fields.
 
 ### <a id="example-State"></a>Example
 

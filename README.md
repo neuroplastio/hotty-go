@@ -6,23 +6,27 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks hotty 0.5: a program changes a control the user may be changing
-with `hotty.SetField` (`a=field`, SPEC §6.4), but only if the user has not
-changed it since the program last heard. A key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
+It speaks hotty 0.6: Enter commits a text field, in a form or not, and a
+placement can be a backdrop, drawn under the terminal's text
+(`Placement.Backdrop`, `b=1`, SPEC §5.2) on a host that lists the feature
+(`hotty.FeatureBackdrop`). A program changes a control the user may be
+changing with `hotty.SetField` (`a=field`, SPEC §6.4), but only if the user
+has not changed it since the program last heard. A key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
 name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
 events carry msgpack bodies (SPEC §3.3), and its query lists the version it
-speaks (`a=q:n=1:v=0.5`, SPEC §4). A terminal of another hotty version is no
-host to it, and the program draws in cells. A program written for 0.4 ports
+speaks (`a=q:n=1:v=0.6`, SPEC §4). A terminal of another hotty version is no
+host to it, and the program draws in cells. A program written for 0.5 ports
 as hotty's
-[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.5.0/CHANGES.md)
-says: it reads the control's `rev` from `input` and `change` (`Event.Rev`)
-and sends it back in `SetField`'s `FieldChange`; it completes a field with
-`Text`, `From` and `To` rather than a new element, which loses the caret;
-on `ESTALE` it does nothing, and decides again from the next `input`; it
-counts positions in bytes of UTF-8. A field with `data-on~=caret` reports
-the user's moves of its selection (`hotty.EventCaret`, `Event.Sel`), and
-`hottytest` reads a field's rev and selection (`Surface.Rev`,
-`Surface.Selection`).
+[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.6.0/CHANGES.md)
+says: it hears `change` when the user presses Enter in a text `input` they
+changed, in a form or not, and before `submit` in a form (SPEC §9); it sets
+`Backdrop` only where `hotty.HasFeature(caps, hotty.FeatureBackdrop)`, since
+a host without the feature draws the surface over the text, and in every
+placement, since it belongs to the placement as `Z` does; it does not focus
+a backdrop, and hears `blur` when it places a focused surface as one.
+`hottytest` commits a field on Enter as a host does, and has no backdrop:
+it keeps a placement's `Backdrop` (`Surface.Placement`) and places the
+surface above the cells.
 
 The SDK:
 
@@ -83,7 +87,7 @@ of what it imports:
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
 ```
 
-0.5.x speaks hotty 0.5; the patch number is this repository's own.
+0.6.x speaks hotty 0.6; the patch number is this repository's own.
 
 ## Packages
 
@@ -152,9 +156,9 @@ The toolchain is in `mise.toml`: run `mise install` first.
   each nested `go.mod` replaces the others with their directories. What a
   program that uses the SDK gets are the requirements between them, which
   `make pin REV=…` sets: before a release to a pushed commit, and for a
-  release to its version (`make pin REV=v0.5.0`), committed and pushed.
-  `make tag V=v0.5.0` then tags every module at that commit (`v0.5.0`,
-  `hottyterm/v0.5.0`, …). It refuses unless the version's first two
+  release to its version (`make pin REV=v0.6.0`), committed and pushed.
+  `make tag V=v0.6.0` then tags every module at that commit (`v0.6.0`,
+  `hottyterm/v0.6.0`, …). It refuses unless the version's first two
   numbers are the hotty version (`hotty.Version`, the vectors'), the tree
   is clean and pushed, and every requirement between the modules names
   that version.
