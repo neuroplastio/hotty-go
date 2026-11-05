@@ -664,6 +664,9 @@ func TestEncodeEvent(t *testing.T) {
 		{Surface: "f", Kind: EventClick, Target: "plain", Count: 1},
 		{Surface: "f", Kind: EventPress, Target: "t", Area: &Area{Col: -1, Row: 0, W: 2, H: 2}, Mods: ModAlt},
 		{Surface: "f", Kind: EventPress, Mods: ModCtrl},
+		{Surface: "f", Kind: EventPress},
+		{Surface: "f", Kind: EventPress, Target: "m", Area: &Area{Col: 1, Row: 1, W: 4, H: 2}, Button: 2, At: &Cell{Col: 3, Row: 1}},
+		{Surface: "f", Kind: EventPress, Target: "m", Button: 2, At: &Cell{Col: 0, Row: 0}, Mods: ModCtrl | ModSuper},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
 		{Surface: "f", Kind: EventInput, Target: "q", Value: "ab"},
@@ -686,6 +689,12 @@ func TestEncodeEvent(t *testing.T) {
 		if !ok || !reflect.DeepEqual(got, e) {
 			t.Errorf("%s: wrote %+v, read %+v", e.Kind, e, got)
 		}
+	}
+	// A press with a c and no r has no cell.
+	var pd Decoder
+	pm, _ := pd.Feed(EncodePlain(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}}, body(`{"button":2,"c":4}`)))
+	if pe, _ := EventOf(pm); pe.Button != 2 || pe.At != nil {
+		t.Errorf("a press with c and no r: %+v", pe)
 	}
 	// A relay's detail goes on as it came.
 	e := Event{Surface: "f", Kind: EventClick, Value: "not this", Detail: body(`{"value":"this","future":[1]}`)}

@@ -152,8 +152,11 @@ type clickDetail struct {
 }
 
 type pressDetail struct {
-	Area *Area `msg:"area,omitempty"`
-	Mods int   `msg:"mods,omitempty"`
+	Area   *Area `msg:"area,omitempty"`
+	Mods   int   `msg:"mods,omitempty"`
+	Button int   `msg:"button,omitempty"`
+	C      *int  `msg:"c,omitempty"`
+	R      *int  `msg:"r,omitempty"`
 }
 
 type changeDetail struct {

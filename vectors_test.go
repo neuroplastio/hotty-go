@@ -590,6 +590,10 @@ func eventView(e Event) map[string]any {
 	if e.Count > 0 {
 		view["count"] = e.Count
 	}
+	view["button"] = e.Button
+	if a := e.At; a != nil {
+		view["c"], view["r"] = a.Col, a.Row
+	}
 	view["rev"] = e.Rev
 	if e.Sel != nil {
 		view["sel"] = []int{e.Sel[0], e.Sel[1]}

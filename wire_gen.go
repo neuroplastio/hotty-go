@@ -1562,33 +1562,51 @@ func (z *caretDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *caretDetail) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 2
-	// write "sel"
-	err = en.Append(0x82, 0xa3, 0x73, 0x65, 0x6c)
+	// check for omitted fields
+	zb0001Len := uint32(2)
+	var zb0001Mask uint8 /* 2 bits */
+	_ = zb0001Mask
+	if z.Sel == nil {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
 	if err != nil {
 		return
 	}
-	err = en.WriteArrayHeader(uint32(len(z.Sel)))
-	if err != nil {
-		err = msgp.WrapError(err, "Sel")
-		return
-	}
-	for za0001 := range z.Sel {
-		err = en.WriteInt(z.Sel[za0001])
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "sel"
+			err = en.Append(0xa3, 0x73, 0x65, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteArrayHeader(uint32(len(z.Sel)))
+			if err != nil {
+				err = msgp.WrapError(err, "Sel")
+				return
+			}
+			for za0001 := range z.Sel {
+				err = en.WriteInt(z.Sel[za0001])
+				if err != nil {
+					err = msgp.WrapError(err, "Sel", za0001)
+					return
+				}
+			}
+		}
+		// write "rev"
+		err = en.Append(0xa3, 0x72, 0x65, 0x76)
 		if err != nil {
-			err = msgp.WrapError(err, "Sel", za0001)
 			return
 		}
-	}
-	// write "rev"
-	err = en.Append(0xa3, 0x72, 0x65, 0x76)
-	if err != nil {
-		return
-	}
-	err = en.WriteInt(z.Rev)
-	if err != nil {
-		err = msgp.WrapError(err, "Rev")
-		return
+		err = en.WriteInt(z.Rev)
+		if err != nil {
+			err = msgp.WrapError(err, "Rev")
+			return
+		}
 	}
 	return
 }
@@ -3389,6 +3407,48 @@ func (z *pressDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Mods")
 				return
 			}
+		case "button":
+			z.Button, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		case "c":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+				z.C = nil
+			} else {
+				if z.C == nil {
+					z.C = new(int)
+				}
+				*z.C, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		case "r":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+				z.R = nil
+			} else {
+				if z.R == nil {
+					z.R = new(int)
+				}
+				*z.R, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -3403,8 +3463,8 @@ func (z *pressDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *pressDetail) EncodeMsg(en *msgp.Writer) (err error) {
 	// check for omitted fields
-	zb0001Len := uint32(2)
-	var zb0001Mask uint8 /* 2 bits */
+	zb0001Len := uint32(5)
+	var zb0001Mask uint8 /* 5 bits */
 	_ = zb0001Mask
 	if z.Area == nil {
 		zb0001Len--
@@ -3413,6 +3473,18 @@ func (z *pressDetail) EncodeMsg(en *msgp.Writer) (err error) {
 	if z.Mods == 0 {
 		zb0001Len--
 		zb0001Mask |= 0x2
+	}
+	if z.Button == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.C == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	if z.R == nil {
+		zb0001Len--
+		zb0001Mask |= 0x10
 	}
 	// variable map header, size zb0001Len
 	err = en.Append(0x80 | uint8(zb0001Len))
@@ -3453,6 +3525,56 @@ func (z *pressDetail) EncodeMsg(en *msgp.Writer) (err error) {
 				return
 			}
 		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "button"
+			err = en.Append(0xa6, 0x62, 0x75, 0x74, 0x74, 0x6f, 0x6e)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Button)
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "c"
+			err = en.Append(0xa1, 0x63)
+			if err != nil {
+				return
+			}
+			if z.C == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.C)
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x10) == 0 { // if not omitted
+			// write "r"
+			err = en.Append(0xa1, 0x72)
+			if err != nil {
+				return
+			}
+			if z.R == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.R)
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		}
 	}
 	return
 }
@@ -3465,7 +3587,18 @@ func (z *pressDetail) Msgsize() (s int) {
 	} else {
 		s += z.Area.Msgsize()
 	}
-	s += 5 + msgp.IntSize
+	s += 5 + msgp.IntSize + 7 + msgp.IntSize + 2
+	if z.C == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.R == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
 	return
 }
 

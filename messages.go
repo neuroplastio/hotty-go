@@ -83,8 +83,16 @@ type Event struct {
 	// Area is the cells of the element a click or a press reports, a
 	// keyboard click's too: what a program places something next to the
 	// element by, as a browser places a select's list or a menu by its
-	// control.
+	// control. A press's is the opted-in element's.
 	Area *Area
+	// Button is the button of a press as the DOM numbers them: 2 for a
+	// secondary press (SPEC §9), on an element with data-on~=secondary,
+	// and 0 for the primary one. It is 0 for any other kind.
+	Button int
+	// At is where the pointer was on a secondary press: its cell, which a
+	// program places a context menu at (SDK.md §4.7). It is nil when the
+	// detail has none, and for any other kind.
+	At *Cell
 	// Count is a click's place in its run of clicks on its element, as
 	// the user's platform counts them (SPEC §9): 2 for the second click of
 	// a double click, 1 for a single click or the keyboard's. It is 0 for
@@ -117,6 +125,10 @@ type Command struct {
 	Text    string
 	HasText bool
 }
+
+// Cell is a cell of a surface, from 0 at its top left, as Drag.Col and
+// Drag.Row are.
+type Cell struct{ Col, Row int }
 
 // Link is a clicked link: its href, as the document has it, and its URL
 // resolved against the document's base (SPEC §7.3), "" when the href
@@ -202,7 +214,10 @@ func readDetail(e *Event) {
 	case EventPress:
 		var d pressDetail
 		if decodeBody(b, &d) {
-			e.Area, e.Mods = d.Area, d.Mods
+			e.Area, e.Mods, e.Button = d.Area, d.Mods, d.Button
+			if d.C != nil && d.R != nil {
+				e.At = &Cell{Col: *d.C, Row: *d.R}
+			}
 		}
 	case EventChange:
 		var d changeDetail
@@ -317,10 +332,14 @@ func detailOf(e Event) []byte {
 		}
 		d = &c
 	case EventPress:
-		if e.Area == nil && e.Mods == 0 {
+		if e.Area == nil && e.Mods == 0 && e.Button == 0 && e.At == nil {
 			return nil
 		}
-		d = &pressDetail{Area: e.Area, Mods: e.Mods}
+		p := pressDetail{Area: e.Area, Mods: e.Mods, Button: e.Button}
+		if e.At != nil {
+			p.C, p.R = &e.At.Col, &e.At.Row
+		}
+		d = &p
 	case EventChange:
 		d = &changeDetail{Checked: e.Checked, Value: e.Value, Rev: e.Rev}
 	case EventInput:
