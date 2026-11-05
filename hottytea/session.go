@@ -467,6 +467,10 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 		h.det.Tick(m.at)
 		return h.detected(was)
 
+	case tea.WindowSizeMsg:
+		h.watch.resized(m.Height)
+		return msg, nil
+
 	case erasedMsg:
 		h.watch.handled()
 		if h.Mode != Native || len(h.placed) == 0 {
