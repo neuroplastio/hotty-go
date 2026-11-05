@@ -1688,3 +1688,42 @@ func TestWithoutFeatures(t *testing.T) {
 		t.Errorf("counts %v", counts)
 	}
 }
+
+func TestSecondaryPress(t *testing.T) {
+	h := New(t)
+	send(h, hotty.Doc("p", `<div id=outer data-on="secondary"><div id=inner data-on="click secondary"><b id=b>x</b></div><b id=c>y</b></div>
+<div data-on=secondary><i id=anon>z</i></div><p id=plain>plain</p><input id=f type=text>`),
+		hotty.Place("p", hotty.Placement{Cols: 20, Rows: 5}))
+	sent(h)
+	// The innermost opt-in wins, and the press needs no Placement.Press.
+	_ = h.SecondaryPress("p", "b", 3, 1)
+	_ = h.SecondaryPress("p", "c", 4, 2, "ctrl", "super")
+	_ = h.SecondaryPress("p", "anon", 0, 0)
+	expect(t, sent(h),
+		`ev press t=inner {"button":2,"c":3,"r":1}`,
+		`ev press t=outer {"button":2,"c":4,"mods":12,"r":2}`,
+		`ev press t= {"button":2,"c":0,"r":0}`)
+	// No opt-in, Shift, and Alt report nothing; the body is "".
+	_ = h.SecondaryPress("p", "plain", 1, 1)
+	_ = h.SecondaryPress("p", "b", 1, 1, "shift")
+	_ = h.SecondaryPress("p", "b", 1, 1, "alt")
+	_ = h.SecondaryPress("p", "", 1, 1)
+	expect(t, sent(h))
+	// A focused field keeps focus: no blur, no focus, no click.
+	if err := h.Fill("p", "f", "ab"); err != nil {
+		t.Fatal(err)
+	}
+	sent(h)
+	_ = h.SecondaryPress("p", "b", 2, 2)
+	expect(t, sent(h), `ev press t=inner {"button":2,"c":2,"r":2}`)
+	if err := h.SecondaryPress("nope", "b", 0, 0); !errors.Is(err, ErrNoSurface) {
+		t.Errorf("no surface: %v", err)
+	}
+	if err := h.SecondaryPress("p", "nope", 0, 0); !errors.Is(err, ErrNoElement) {
+		t.Errorf("no element: %v", err)
+	}
+	send(h, hotty.Detach("p"))
+	if err := h.SecondaryPress("p", "b", 0, 0); !errors.Is(err, ErrDetached) {
+		t.Errorf("detached: %v", err)
+	}
+}

@@ -87,7 +87,7 @@ func (m *cardApp) draw() tea.Cmd {
 	if m.s.Mode == hottytea.Native {
 		m.s.Layout([]hottytea.Surface{{Name: cardName, Rect: hottytea.Rect{X: 2, Y: m.y, W: 20, H: 3}, Press: true,
 			Doc: func() string {
-				return `<link rel="stylesheet" href="cid:app-css"><p id="status">` + m.status + `</p><button id="go">Go</button>`
+				return `<link rel="stylesheet" href="cid:app-css"><p id="status">` + m.status + `</p><button id="go">Go</button><p id="ctx" data-on="secondary">menu</p>`
 			}}})
 	} else {
 		lines = append(lines, "  ["+m.status+"] (g)o")
@@ -479,4 +479,29 @@ func TestAProgramWithdrawsItsLateQuery(t *testing.T) {
 	if len(h.Replies()) != 0 {
 		t.Errorf("answered after the program: %v", h.Replies())
 	}
+}
+
+// A secondary press from the host is an EventMsg with Button 2 and the cell
+// (SPEC §9, SDK.md §4.7).
+func TestASecondaryPressReachesUpdate(t *testing.T) {
+	h := hottytest.New(t)
+	seen, wait := run(t, h)
+	next[hottytea.ReadyMsg](t, seen)
+	eventually(t, "the card is placed", func() bool { _, ok := command(h, "a", "place", "s", cardName); return ok })
+	drain(seen)
+	if err := h.SecondaryPress(cardName, "ctx", 7, 2, "ctrl"); err != nil {
+		t.Fatal(err)
+	}
+	ev := next[hottytea.EventMsg](t, seen)
+	if ev.Kind != hotty.EventPress || ev.Target != "ctx" || ev.Button != 2 || ev.At == nil || *ev.At != (hotty.Cell{Col: 7, Row: 2}) || ev.Mods != hotty.ModCtrl {
+		t.Errorf("event: %+v", ev.Event)
+	}
+	if err := h.Click(cardName, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if ev := next[hottytea.EventMsg](t, seen); ev.Kind != hotty.EventPress || ev.Button != 0 || ev.At != nil {
+		t.Errorf("a primary press: %+v", ev.Event)
+	}
+	h.Type("q")
+	wait()
 }
