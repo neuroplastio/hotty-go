@@ -28,9 +28,11 @@
 //     frames.
 //
 // Bubble Tea's renderer erases the screen and scrolls regions on its own,
-// and a host may drop placements with them. The Session reads the output
-// on its way out, and asks for a new layout when that happens
-// (RelayoutMsg); it sends a document again when a placement reports it
+// and a host may drop or move placements with them. The Session reads the
+// output on its way out and places its surfaces again itself, in the same
+// frame, before the frame's end, so that a host which draws a frame whole
+// never shows them moved. Only when it cannot (RelayoutMsg) does it ask for
+// a new layout. It sends a document again when a placement reports it
 // gone, and keeps the number of surfaces within the host's limit. So a
 // program never returns an empty View under its surfaces (Layout).
 //
@@ -41,6 +43,7 @@
 package hottytea
 
 import (
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,9 +57,12 @@ import (
 )
 
 // Counts are what Layout has sent so far: documents, placements, hides and
-// deletes, and the relayouts after the renderer erased or scrolled the
-// screen. A program that measures its own hotty traffic reads them.
-type Counts struct{ Docs, Places, Hides, Deletes, Relayouts int }
+// deletes, the relayouts after the renderer erased or scrolled the screen
+// under surfaces the Session could not place again by itself, and the
+// repairs: frames the Session placed the surfaces again in, inside the
+// frame (Relayouts does not count those). A program that measures its own
+// hotty traffic reads them; Repairs is as of the last Update or Layout.
+type Counts struct{ Docs, Places, Hides, Deletes, Relayouts, Repairs int }
 
 // Mode is what the terminal turned out to be.
 type Mode int
@@ -107,8 +113,10 @@ type ErrorMsg struct{ hotty.Reply }
 type AckMsg struct{ hotty.Reply }
 
 // RelayoutMsg asks the program to lay its surfaces out again: the screen
-// was erased or scrolled under them, or a document went missing. Draw a
-// frame; its Layout puts the surfaces back.
+// was erased or scrolled under them and the Session could not place them
+// again in the frame itself (the writer does, when it can, and no message
+// comes), or a document went missing. Draw a frame; its Layout puts the
+// surfaces back.
 type RelayoutMsg struct {
 	// Lost: the host lost a document, which Layout sends again, and it may
 	// have lost the resources (hotty.Res) the document refers to as well,
@@ -325,12 +333,13 @@ type Session struct {
 	outMu  sync.Mutex
 	out    []string
 	queued int
+	unsent map[string]bool // documents queued, not yet taken by a Flush
 }
 
 // New returns a Session that has not detected the terminal yet.
 func New() *Session {
 	return &Session{placed: map[string]placement{}, flags: map[string]flags{}, hasDoc: map[string]bool{}, keep: map[string]bool{},
-		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}}
+		seen: map[string]int{}, refused: map[string]bool{}, scroll: map[string]hotty.Axes{}, unsent: map[string]bool{}}
 }
 
 // Detect asks the terminal whether it is a host (SPEC §4): return it from
@@ -400,6 +409,7 @@ func (h *Session) known(answered bool) tea.Msg {
 // ReadyMsg, EventMsg, ErrorMsg, AckMsg, RelayoutMsg or PongMsg; other
 // messages come back as they are. A nil message was the Session's alone.
 func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
+	h.Count.Repairs = h.watch.repaired()
 	switch m := msg.(type) {
 	case uv.UnknownOscEvent:
 		hm, res := h.dec.Feed(string(m))
@@ -477,6 +487,7 @@ func (h *Session) Update(msg tea.Msg) (tea.Msg, tea.Cmd) {
 			return nil, nil
 		}
 		h.placed = map[string]placement{}
+		h.snapshot()
 		h.Count.Relayouts++
 		return RelayoutMsg{}, nil
 	}
@@ -512,6 +523,7 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		delete(h.hasDoc, r.Surface)
 		delete(h.placed, r.Surface)
 		delete(h.flags, r.Surface)
+		h.snapshot()
 		h.refused[r.Surface] = true
 		return RelayoutMsg{}, nil
 	case r.Re == "place" && r.Code == hotty.ENOENT && h.refused[r.Surface]:
@@ -529,6 +541,7 @@ func (h *Session) reply(r hotty.Reply) (tea.Msg, tea.Cmd) {
 		clear(h.hasDoc)
 		clear(h.placed)
 		clear(h.flags)
+		h.snapshot()
 		return RelayoutMsg{Lost: true}, nil
 	}
 	return ErrorMsg{r}, nil
@@ -560,12 +573,13 @@ func (h *Session) Ping() tea.Cmd {
 // The View under the surfaces must not be empty, even where they cover the
 // whole screen: a single space will do. Bubble Tea erases the screen for
 // an empty view on every render, a host drops the placements an erase
-// covers, and the relayout that follows renders again, so the surfaces
+// covers, and putting them back renders again, so the surfaces
 // never stay up.
 func (h *Session) Layout(want []Surface) {
 	if h.Mode != Native || h.closed {
 		return
 	}
+	h.Count.Repairs = h.watch.repaired()
 	h.layouts++
 	type shown struct {
 		s  Surface
@@ -599,6 +613,9 @@ func (h *Session) Layout(want []Surface) {
 				opts = append(opts, hotty.N(h.markN))
 			}
 			h.Send(hotty.Doc(s.Name, s.Doc(), opts...))
+			h.outMu.Lock()
+			h.unsent[s.Name] = true
+			h.outMu.Unlock()
 			h.Count.Docs++
 			h.hasDoc[s.Name] = true
 			h.scroll[s.Name] = s.Scroll
@@ -633,6 +650,32 @@ func (h *Session) Layout(want []Surface) {
 			h.Delete(name)
 		}
 	}
+	h.snapshot()
+}
+
+// snapshot gives the watcher what it needs to place the surfaces on screen
+// again inside a frame that scrolled them: for each, the command that
+// places it as it is (the p, f and v flags absent, since they belong to the
+// surface on the host and have not changed) and the rows it covers, in
+// names order. Call it wherever placed changes.
+func (h *Session) snapshot() {
+	h.outMu.Lock()
+	unsent := maps.Clone(h.unsent)
+	h.outMu.Unlock()
+	var snap []snapEntry
+	for _, name := range h.names() {
+		p, ok := h.placed[name]
+		if !ok {
+			continue
+		}
+		snap = append(snap, snapEntry{
+			cmd:  hotty.PlaceAt(name, p.at.X, p.at.Y, hotty.Placement{Cols: p.cols, Rows: p.rows, Window: p.win, Z: p.z}),
+			y0:   p.at.Y,
+			y1:   p.at.Y + p.at.H - 1,
+			skip: unsent[name],
+		})
+	}
+	h.watch.setSnap(snap)
 }
 
 // names are the surfaces sent, shown or hidden, in order, so that what
@@ -701,6 +744,10 @@ func (h *Session) Delete(name string) {
 	delete(h.keep, name)
 	delete(h.seen, name)
 	delete(h.scroll, name)
+	h.outMu.Lock()
+	delete(h.unsent, name)
+	h.outMu.Unlock()
+	h.snapshot()
 }
 
 // Close ends the Session, on the program's way out: it deletes every
@@ -738,6 +785,7 @@ func (h *Session) Close() tea.Cmd {
 //	m.s.DetachAll()
 //	return m, tea.Sequence(m.s.Flush(), tea.Quit)
 func (h *Session) DetachAll() {
+	h.watch.setSnap(nil) // detached, they are not the Session's to place
 	for _, name := range h.names() {
 		h.Send(hotty.Detach(name))
 	}
@@ -798,5 +846,7 @@ func (h *Session) take() tea.Msg {
 	}
 	s := strings.Join(h.out, "")
 	h.out = h.out[:0]
+	clear(h.unsent)
+	h.watch.sent()
 	return tea.RawMsg{Msg: s}
 }

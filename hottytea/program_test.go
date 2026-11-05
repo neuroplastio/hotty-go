@@ -273,13 +273,20 @@ func TestAProgramOnAHost(t *testing.T) {
 		return false
 	})
 
-	// The renderer erases the screen: the card is placed again, and its
+	// The renderer erases the screen: the writer places the card again
+	// itself, in the write that erased, with no relayout to ask for; its
 	// document is not sent again.
 	drain(seen)
 	before := count(h, "a", "place", "s", cardName)
 	h.Type("c")
-	next[hottytea.RelayoutMsg](t, seen)
 	eventually(t, "the card is placed again", func() bool { return count(h, "a", "place", "s", cardName) > before })
+	select {
+	case msg := <-seen:
+		if _, ok := msg.(hottytea.RelayoutMsg); ok {
+			t.Error("an erase repaired in the write asked for a relayout")
+		}
+	case <-time.After(100 * time.Millisecond):
+	}
 
 	// The host loses the document: the placement says so, and the
 	// document goes again.
@@ -300,10 +307,10 @@ func TestAProgramOnAHost(t *testing.T) {
 }
 
 // The host loses every document and resource behind the program's back, as
-// one that restarts behind a relay does. The renderer erases the screen,
-// which asks for a plain relayout; the card's placement then finds the card
-// gone, and the program hears of the loss once, sends its stylesheet again,
-// and the card follows it.
+// one that restarts behind a relay does. The renderer erases the screen, and
+// the writer places the card again in the same write; that placement finds
+// the card gone, and the program hears of the loss once, sends its
+// stylesheet again, and the card follows it.
 func TestAProgramOnAHostThatLostItsDocuments(t *testing.T) {
 	h := hottytest.New(t)
 	seen, wait := run(t, h)
@@ -319,9 +326,8 @@ func TestAProgramOnAHostThatLostItsDocuments(t *testing.T) {
 	h.Forget()
 	before := len(h.Commands())
 	h.Type("c")
-	if r := next[hottytea.RelayoutMsg](t, seen); r.Lost {
-		t.Error("an erase lost nothing")
-	}
+	// The erase is repaired in the write: the placement that does it finds
+	// the card gone, and the loss is the first relayout asked for.
 	if r := next[hottytea.RelayoutMsg](t, seen); !r.Lost {
 		t.Error("the loss was not reported")
 	}
@@ -369,9 +375,8 @@ func TestAProgramThatLostItsDocumentsWithNoTerminal(t *testing.T) {
 	h.DetachTerminal()
 	h.Forget()
 	h.Type("c")
-	if r := next[hottytea.RelayoutMsg](t, seen); r.Lost {
-		t.Error("an erase lost nothing")
-	}
+	// The erase is repaired in the write: the placement that does it finds
+	// the card gone, and the loss is the first relayout asked for.
 	if r := next[hottytea.RelayoutMsg](t, seen); !r.Lost {
 		t.Error("the loss was not reported")
 	}
