@@ -576,7 +576,7 @@ func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) erro
 
 SecondaryPress presses the secondary button (a right click) at cell c, r of the surface, on the element with an id, or on the document's body for "" (SPEC §9): reported as a press with button 2, c, r and the modifier keys held (mods), by the nearest element from it outward with data-on~=secondary, as its id (t, absent when it has none). It needs no Placement.Press, and its detail has no area, since this host lays nothing out.
 
-With no such element nothing is reported: the press is the terminal's. So it is with Shift held, which gives the terminal's menu. With Alt it is the program's own gesture, as Press is (SPEC §9.2). It makes no click, focus or blur, moves no keyboard, starts no drag and changes no hover. This host does no touch, and so makes no long press.
+With no such element nothing is reported: the press is the terminal's. So it is with Shift held, which gives the terminal's menu. With Alt it is the program's own gesture, as Press's is (SPEC §9.2): the pointer leaves the window, and the surface hears nothing more. Otherwise it makes no click, focus or blur, moves no keyboard, starts no drag and changes no hover. This host does no touch, and so makes no long press.
 
 It returns ErrDetached on a detached surface, and ErrNoSurface or ErrNoElement as Press does.
 

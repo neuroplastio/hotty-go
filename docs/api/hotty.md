@@ -1348,7 +1348,8 @@ type Event struct {
 	// Area is the cells of the element a click or a press reports, a
 	// keyboard click's too: what a program places something next to the
 	// element by, as a browser places a select's list or a menu by its
-	// control. A press's is the opted-in element's.
+	// control. A secondary press's is that of the element with
+	// data-on~=secondary.
 	Area *Area
 	// Button is the button of a press as the DOM numbers them: 2 for a
 	// secondary press (SPEC §9), on an element with data-on~=secondary,
