@@ -1727,3 +1727,56 @@ func TestSecondaryPress(t *testing.T) {
 		t.Errorf("detached: %v", err)
 	}
 }
+
+// The host speaks 0.6 and 0.7 and answers a query in the highest version it
+// shares with the program (SPEC §4); the session goes on in that version.
+func TestQueryVersions(t *testing.T) {
+	for _, c := range []struct{ v, want string }{
+		{"0.6,0.7", "0.7"}, {"0.6", "0.6"}, {"0.7", "0.7"}, {"0.5", ""}, {"99.0", ""},
+	} {
+		h := New(t)
+		send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "n", V: "1"}, {K: "v", V: c.v}}, nil))
+		var d hotty.Decoder
+		m, _ := d.Feed(oscs(h.drain())[0])
+		r, _ := hotty.ReplyOf(m)
+		switch {
+		case c.want == "" && (r.OK || r.Code != hotty.EVERSION || r.Detail != "0.6,0.7"):
+			t.Errorf("v=%s: %+v", c.v, r)
+		case c.want != "" && (!r.OK || r.Caps == nil || r.Caps.V != c.want):
+			t.Errorf("v=%s: %+v", c.v, r)
+		}
+	}
+}
+
+// A secondary press with Alt held is the program's in a session in 0.7, and
+// the pointer leaves the window; in 0.6 it is the terminal's, and reports
+// nothing to the cells, so the pointer stays (HOST.md §4.1).
+func TestSecondaryPressAltByVersion(t *testing.T) {
+	for _, c := range []struct {
+		v    string
+		want []string
+	}{
+		{"0.6,0.7", []string{`ev hover t= {"out":true}`}},
+		{"0.7", []string{`ev hover t= {"out":true}`}},
+		{"0.6", nil},
+	} {
+		h := New(t)
+		send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "n", V: "1"}, {K: "v", V: c.v}}, nil),
+			hotty.Doc("l", `<div id=l data-on=secondary><p id=a>a</p></div>`),
+			hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: hotty.On}))
+		sent(h)
+		if err := h.Hover("l", "a", 1, 0); err != nil {
+			t.Fatal(err)
+		}
+		sent(h)
+		_ = h.SecondaryPress("l", "a", 1, 0, "alt")
+		if got := sent(h); !slices.Equal(got, c.want) {
+			t.Errorf("v=%s: %q, want %q", c.v, got, c.want)
+		}
+		// Without Alt a secondary press is reported in both.
+		_ = h.SecondaryPress("l", "a", 1, 0)
+		if got := sent(h); len(got) != 1 {
+			t.Errorf("v=%s, no Alt: %q", c.v, got)
+		}
+	}
+}

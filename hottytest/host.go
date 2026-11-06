@@ -259,6 +259,7 @@ type Host struct {
 	menuSeq  []string           // the keys of the level shown
 	heard    hotty.Caps         // the capabilities the program last heard (SPEC §4)
 	queried  bool               // the program has asked, so it hears of changes
+	version  string             // the session's version, the one the last query was answered in (SPEC §4), or "" before one
 	faultOp  int                // the index of the op a delta failed at, or -1
 	prefix   *Surface           // the surface whose keys all reach the program, while it has the keyboard (SPEC §10.5)
 	alt      bool               // the alternate screen is on
@@ -637,7 +638,8 @@ func (h *Host) command(m hotty.Message) {
 		h.send(hotty.ReplyErr(n, s, a, code, detail))
 	case a == "q":
 		h.heard, h.queried = h.caps, true
-		h.send(hotty.ReplyCaps(n, h.caps))
+		h.version, _ = hotty.SharedVersion(m.Control)
+		h.send(hotty.ReplyQuery(m.Control, h.caps))
 	default:
 		h.send(hotty.ReplyOK(n, s, a, extra, nil))
 	}
@@ -660,9 +662,10 @@ func (h *Host) send(enc string) {
 
 func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.Control) {
 	if a == "q" {
-		// This host speaks hotty.Version only (SPEC §4).
+		// This host speaks hotty.Versions (SPEC §4, §15): the reply says
+		// which, and the session goes on in it.
 		if !hotty.Speaks(m.Control) {
-			return hotty.EVERSION, hotty.Version, nil
+			return hotty.EVERSION, strings.Join(hotty.Versions(), ","), nil
 		}
 		return "", "", nil
 	}
@@ -1700,7 +1703,10 @@ func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 // With no such element nothing is reported: the press is the terminal's. So
 // it is with Shift held, which gives the terminal's menu. With Alt it is the
 // program's own gesture, as Press's is (SPEC §9.2): the pointer leaves the
-// window, and the surface hears nothing more. Otherwise it makes no click,
+// window, and the surface hears nothing more. That is 0.7's: in a session in
+// 0.6, which the program asked for by listing 0.6 and not 0.7 in its query,
+// the secondary button with Alt held is the terminal's and reports nothing
+// to the cells, and this host leaves the pointer where it was (HOST.md §4.1). Otherwise it makes no click,
 // focus or blur, moves no keyboard, starts no drag and changes no hover. This
 // host does no touch, and so makes no long press.
 //
@@ -1723,6 +1729,12 @@ func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) erro
 	}
 	if s.detached {
 		return ErrDetached
+	}
+	if h.version == "0.6" && modBits(keys)&hotty.ModAlt != 0 {
+		// A session in 0.6: the secondary button with Alt is the
+		// terminal's, as 0.6's §9.2 has it, and reports nothing to the
+		// cells. The pointer stays where it was (HOST.md §4.1).
+		return nil
 	}
 	if h.alt1(s, keys) {
 		return nil

@@ -352,10 +352,11 @@ func (r *requirements) UnmarshalJSON(b []byte) error {
 
 // implements is what a vector may require of this host (conformance/README.md,
 // SDK.md §4.4): the features it reports, whose pointer and key steps it
-// skips all the same, since it lays nothing out. A vector that requires
+// skips all the same, since it lays nothing out; and speaks-0.6, since it
+// speaks 0.6 as well as 0.7 (HOST.md §4). A vector that requires
 // anything else, scroll, steps, drop, view, touch, undo, passthrough,
 // backdrop, pressed or commands, is skipped.
-var implements = map[string]bool{"hover": true, "count": true, "menu": true}
+var implements = map[string]bool{"hover": true, "count": true, "menu": true, "speaks-0.6": true}
 
 // The host passes the hotty conformance vectors, as hotty-blitz and
 // xterm-addon-hotty do.
