@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -115,27 +116,44 @@ func TestHostReplies(t *testing.T) {
 }
 
 func TestReplyQuery(t *testing.T) {
+	if got := Versions(); !slices.Equal(got, []string{"0.6", "0.7"}) || got[len(got)-1] != Version {
+		t.Errorf("Versions = %v, Version %q", got, Version)
+	}
 	caps := Caps{V: Version, Host: "h"}
-	for v, speaks := range map[string]bool{
-		"0.6": true, "0.5,0.6": true, "99.0,0.6": true,
-		"": false, "0.5": false, "0.60": false, "00.6": false, "0.6.0": false,
+	for v, want := range map[string]string{
+		"0.6,0.7": "0.7", "0.7,0.6": "0.7", "0.6": "0.6", "0.7": "0.7",
+		"0.5,0.6": "0.6", "99.0,0.6": "0.6", "0.7,99.0": "0.7", "0.5,0.7": "0.7",
+		"": "", "0.5": "", "99.0": "", "0.60": "", "00.6": "", "0.6.0": "", "0.8": "",
 	} {
 		q := Control{{"a", "q"}, {"n", "4"}}
 		if v != "" {
 			q = append(q, KV{"v", v})
 		}
-		if Speaks(q) != speaks {
-			t.Errorf("Speaks(v=%q) = %v", v, !speaks)
+		if Speaks(q) != (want != "") {
+			t.Errorf("Speaks(v=%q) = %v", v, want == "")
+		}
+		if got, ok := SharedVersion(q); got != want || ok != (want != "") {
+			t.Errorf("SharedVersion(v=%q) = %q, %v", v, got, ok)
 		}
 		r, _ := ReplyOf(decodeOne(t, ReplyQuery(q, caps)))
 		switch {
 		case r.N != 4 || r.Re != "q":
 			t.Errorf("v=%q: %+v", v, r)
-		case speaks && (!r.OK || r.Caps == nil || r.Caps.V != Version):
+		case want != "" && (!r.OK || r.Caps == nil || r.Caps.V != want || r.Caps.Host != "h"):
 			t.Errorf("v=%q: %+v", v, r)
-		case !speaks && (r.OK || r.Code != EVERSION || r.Detail != Version):
+		case want == "" && (r.OK || r.Code != EVERSION || r.Detail != "0.6,0.7"):
 			t.Errorf("v=%q: %+v", v, r)
 		}
+	}
+
+	// A relay's capabilities carry the host behind it: Raw says that host's
+	// version and fields this package does not know, and the reply says the
+	// version answered and keeps the rest.
+	raw := body(`{"v":"0.7","future":{"x":1},"host":"h"}`)
+	c, _ := CapsOf(raw)
+	r, _ := ReplyOf(decodeOne(t, ReplyQuery(Control{{"a", "q"}, {"n", "4"}, {"v", "0.6"}}, c)))
+	if r.Caps == nil || r.Caps.V != "0.6" || r.Caps.Host != "h" || !bytes.Contains(r.Caps.Raw, []byte("future")) {
+		t.Errorf("a relay's caps in 0.6: %+v", r.Caps)
 	}
 }
 

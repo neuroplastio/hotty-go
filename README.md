@@ -6,15 +6,17 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks hotty 0.6: Enter commits a text field, in a form or not, and a
+It speaks hotty 0.7 and 0.6 (`hotty.Versions`, SPEC §4, §15): a host of either
+is a host to it, and `Caps.V` says which. On a 0.6 host the keys open its
+menus, as no secondary press comes (SDK.md §4.7). Enter commits a text field, in a form or not, and a
 placement can be a backdrop, drawn under the terminal's text
 (`Placement.Backdrop`, `b=1`, SPEC §5.2) on a host that lists the feature
 (`hotty.FeatureBackdrop`). A program changes a control the user may be
 changing with `hotty.SetField` (`a=field`, SPEC §6.4), but only if the user
 has not changed it since the program last heard. A key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
 name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
-events carry msgpack bodies (SPEC §3.3), and its query lists the version it
-speaks (`a=q:n=1:v=0.6`, SPEC §4). A terminal of another hotty version is no
+events carry msgpack bodies (SPEC §3.3), and its query lists the versions it
+speaks (`a=q:n=1:v=0.6,0.7`, SPEC §4). A terminal of no version it lists is no
 host to it, and the program draws in cells. A program written for 0.5 ports
 as hotty's
 [CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.6.0/CHANGES.md)
@@ -87,7 +89,7 @@ of what it imports:
 go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
 ```
 
-0.6.x speaks hotty 0.6; the patch number is this repository's own.
+0.7.x speaks hotty 0.7, and 0.6 too; the patch number is this repository's own.
 
 ## Packages
 

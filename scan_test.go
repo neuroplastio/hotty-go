@@ -160,6 +160,17 @@ func TestDetector(t *testing.T) {
 		t.Error("a reply to another query")
 	}
 
+	// A host that speaks 0.6 or 0.7 is a host, and Caps.V says which; one
+	// that names a version the query did not list is not.
+	for v, host := range map[string]bool{"0.6": true, "0.7": true, "99.0": false, "0.5": false, "0.8": false} {
+		var vd Detector
+		vd.Start(at(0))
+		vd.Reply(reply(`{"v":"`+v+`"}`), at(5))
+		if host != (vd.State == Native) || host && vd.Caps.V != v || !vd.Decided {
+			t.Errorf("a host in %s: %+v", v, vd)
+		}
+	}
+
 	// A reply whose capabilities do not decode, or name another version,
 	// and an error, answer the query: a host this program cannot use.
 	for name, r := range map[string]Reply{
@@ -167,7 +178,7 @@ func TestDetector(t *testing.T) {
 		"another version":         reply(`{"v":"0.5"}`),
 		"no capabilities":         reply(``),
 		"EVERSION": func() Reply {
-			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.6"}`))
+			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.6,0.7"}`))
 			return r
 		}(),
 	} {

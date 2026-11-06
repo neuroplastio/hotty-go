@@ -301,7 +301,7 @@ func TestPlaceAtKeepsTheCursor(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.6\x1b\\\x1b[c"; got != want {
+	if got, want := Query(7), "\x1b]7279;a=q:n=7:v=0.6,0.7\x1b\\\x1b[c"; got != want {
 		t.Errorf("Query = %q, want %q", got, want)
 	}
 }
@@ -754,7 +754,7 @@ func TestCaps(t *testing.T) {
 		`{"v":"0.6","cellcss":{"w":10.0,"h":21.0},"scale":2.0,"scheme":"light","features":["hover","menu","future"],`+
 			`"limits":{"surfaces":64},"net":{"img-src":["https://example.com"]},"host":"xterm-addon-hotty","future":1}`))
 	caps := r.Caps
-	if caps == nil || caps.V != Version || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
+	if caps == nil || !slices.Contains(Versions(), caps.V) || caps.Host != "xterm-addon-hotty" || caps.Limits["surfaces"] != 64 || caps.Net["img-src"][0] != "https://example.com" {
 		t.Fatalf("caps: %+v", caps)
 	}
 	if !bytes.Equal(caps.Raw, r.Message.Payload) {

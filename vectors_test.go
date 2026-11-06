@@ -27,6 +27,7 @@ var features = map[string]bool{
 	"decode.unterminated": true,
 	"scanner.da1":         true,
 	"graphemes":           true,
+	"speaks-0.6":          true, // this package speaks 0.6 as well as 0.7 (SPEC §15)
 }
 
 func applies(t *testing.T, requires []string) {

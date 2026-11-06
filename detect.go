@@ -1,6 +1,7 @@
 package hotty
 
 import (
+	"slices"
 	"strconv"
 	"time"
 )
@@ -49,7 +50,10 @@ const (
 // Deadline, and End when the input ends or it gives up.
 //
 // The terminal is a host when it answers the query with capabilities that
-// decode and name Version. Any other answer, an error (EVERSION, from a
+// decode and name a version the query listed (Versions, SPEC §4): Caps.V
+// is the one it met, 0.6 or 0.7, which the host speaks from then on and
+// which the program reads when it must tell them apart. A 0.6 host sends
+// no secondary press (SDK.md §4.7). Any other answer, an error (EVERSION, from a
 // host that speaks other versions) or capabilities this package cannot
 // read (a 0.1 host's JSON), makes the State Text at once: a host, but not
 // one this program can use (SPEC §4).
@@ -133,7 +137,7 @@ func (d *Detector) Reply(r Reply, now time.Time) bool {
 	if r.Re != "q" || r.N != d.n() {
 		return false
 	}
-	host := r.OK && r.Caps != nil && r.Caps.V == Version
+	host := r.OK && r.Caps != nil && slices.Contains(Versions(), r.Caps.V)
 	if d.State == Detecting {
 		d.State, d.Decided = Text, true
 		if host {

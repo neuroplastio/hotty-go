@@ -78,11 +78,13 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func SetField(surface, target string, change FieldChange, opts ...ReplyOption) string`](#SetField)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
 - [`func SetVar(surface, target, name, value string, opts ...ReplyOption) string`](#SetVar)
+- [`func SharedVersion(query Control) (string, bool)`](#SharedVersion)
 - [`func Speaks(query Control) bool`](#Speaks)
 - [`func SurfaceName(s string) string`](#SurfaceName)
 - [`func Sync(cmds ...string) string`](#Sync)
 - [`func Touch(areas []TouchArea, opts ...ReplyOption) string`](#Touch)
 - [`func ValidName(s string) bool`](#ValidName)
+- [`func Versions() []string`](#Versions)
 - [`func WithdrawLate() string`](#WithdrawLate)
 - [`type Action`](#Action)
   - [`func (a Action) Moves() bool`](#Action.Moves)
@@ -250,9 +252,10 @@ const (
 	MaxSize = 1000
 	// MaxName is the longest a surface name is (SPEC §3.5).
 	MaxName = 64
-	// Version is the protocol version this package speaks: what its query
-	// lists, and what a host's capabilities must name (SPEC §4).
-	Version = "0.6"
+	// Version is the protocol version this package speaks first: the newest
+	// it speaks, and the one it writes in its capabilities (SPEC §4). It
+	// speaks 0.6 as well: Versions.
+	Version = "0.7"
 )
 ```
 
@@ -641,7 +644,7 @@ PlaceAt places a surface with its window's top-left corner at cell (x, y), count
 func Query(n int, opts ...QueryOption) string
 ```
 
-Query asks whether the terminal is a hotty host that speaks Version, fenced by Primary Device Attributes (SPEC §4): a host replies to the query, numbered n, before the DA1 answer every terminal sends, in Version or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
+Query asks whether the terminal is a hotty host that speaks a version in Versions, fenced by Primary Device Attributes (SPEC §4): it lists them, v=0.6,0.7, and a host replies to the query, numbered n, before the DA1 answer every terminal sends, in the highest version they share or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
 
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
@@ -689,7 +692,7 @@ ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering f
 func ReplyQuery(query Control, caps Caps) string
 ```
 
-ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks only Version: caps, as ReplyCaps writes them, when the query lists Version, and an EVERSION error naming Version when it does not. caps.V is Version.
+ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks Versions: caps, as ReplyCaps writes them, with V the version SharedVersion finds, and an EVERSION error when the query lists none, its detail the versions spoken, comma-separated (0.6,0.7). caps.V is replaced, in caps.Raw too; the host speaks that version to the program from then on, which a host that keeps a session's version learns from SharedVersion.
 
 ## <a id="Res"></a>func Res
 
@@ -749,13 +752,21 @@ func SetVar(surface, target, name, value string, opts ...ReplyOption) string
 
 SetVar sets the custom property --name on an element.
 
+## <a id="SharedVersion"></a>func SharedVersion
+
+```go
+func SharedVersion(query Control) (string, bool)
+```
+
+SharedVersion is the highest version a query lists (v, SPEC §4) that is among Versions, the one a host that speaks them answers in; false when the query lists none. A host that speaks 0.6 as well answers v=0.6 in 0.6, and v=0.6,0.7 in 0.7.
+
 ## <a id="Speaks"></a>func Speaks
 
 ```go
 func Speaks(query Control) bool
 ```
 
-Speaks reports whether a query lists Version among the versions the program speaks (v, SPEC §4). A host that speaks only Version answers it with its capabilities, and any other query with EVERSION: ReplyQuery.
+Speaks reports whether a query lists a version among Versions, the versions the program speaks (v, SPEC §4): whether SharedVersion has one. A host that speaks them answers it with its capabilities, and any other query with EVERSION: ReplyQuery.
 
 ## <a id="SurfaceName"></a>func SurfaceName
 
@@ -790,6 +801,14 @@ func ValidName(s string) bool
 ```
 
 ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SPEC §3.5).
+
+## <a id="Versions"></a>func Versions
+
+```go
+func Versions() []string
+```
+
+Versions are the protocol versions this package speaks, oldest first: 0.6 and 0.7 (SPEC §4, §15). Its query lists them, a Detector takes a host that answers in any of them, and ReplyQuery answers a program in the highest one the program and this package share. Version is the last.
 
 ## <a id="WithdrawLate"></a>func WithdrawLate
 
@@ -952,7 +971,7 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements: "0.6".
+	// V is the protocol version the host implements, one of Versions: "0.7".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -1170,7 +1189,7 @@ type Detector struct {
 
 Detector decides whether the terminal is a hotty host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
 
-The terminal is a host when it answers the query with capabilities that decode and name Version. Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
+The terminal is a host when it answers the query with capabilities that decode and name a version the query listed (Versions, SPEC §4): Caps.V is the one it met, 0.6 or 0.7, which the host speaks from then on and which the program reads when it must tell them apart. A 0.6 host sends no secondary press (SDK.md §4.7). Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
 
 Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query, ok or an error, is detection's whenever it comes.
 

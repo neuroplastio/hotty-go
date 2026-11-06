@@ -12,7 +12,7 @@ package hotty
 // Caps is what a host says about itself in its reply to a query (SPEC §4),
 // and, with only the fields that changed, in a caps event (SPEC §9).
 type Caps struct {
-	// V is the protocol version the host implements: "0.6".
+	// V is the protocol version the host implements, one of Versions: "0.7".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.

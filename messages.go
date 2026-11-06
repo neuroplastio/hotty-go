@@ -495,26 +495,45 @@ func CapsOf(body []byte) (Caps, bool) {
 	return caps, true
 }
 
-// Speaks reports whether a query lists Version among the versions the
-// program speaks (v, SPEC §4). A host that speaks only Version answers it
-// with its capabilities, and any other query with EVERSION: ReplyQuery.
+// Speaks reports whether a query lists a version among Versions, the
+// versions the program speaks (v, SPEC §4): whether SharedVersion has one.
+// A host that speaks them answers it with its capabilities, and any other
+// query with EVERSION: ReplyQuery.
 func Speaks(query Control) bool {
-	for v := range strings.SplitSeq(Get(query, "v"), ",") {
-		if v == Version {
-			return true
-		}
-	}
-	return false
+	_, ok := SharedVersion(query)
+	return ok
 }
 
-// ReplyQuery is a host's answer to a query (SPEC §4), for a host that
-// speaks only Version: caps, as ReplyCaps writes them, when the query lists
-// Version, and an EVERSION error naming Version when it does not. caps.V
-// is Version.
+// SharedVersion is the highest version a query lists (v, SPEC §4) that is
+// among Versions, the one a host that speaks them answers in; false when
+// the query lists none. A host that speaks 0.6 as well answers v=0.6 in
+// 0.6, and v=0.6,0.7 in 0.7.
+func SharedVersion(query Control) (string, bool) {
+	listed := strings.Split(Get(query, "v"), ",")
+	for _, v := range slices.Backward(Versions()) {
+		if slices.Contains(listed, v) {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks
+// Versions: caps, as ReplyCaps writes them, with V the version SharedVersion
+// finds, and an EVERSION error when the query lists none, its detail the
+// versions spoken, comma-separated (0.6,0.7). caps.V is replaced, in
+// caps.Raw too; the host speaks that version to the program from then on, which a host that
+// keeps a session's version learns from SharedVersion.
 func ReplyQuery(query Control, caps Caps) string {
 	n := Get(query, "n")
-	if !Speaks(query) {
-		return ReplyErr(n, "", "q", EVERSION, Version)
+	v, ok := SharedVersion(query)
+	if !ok {
+		return ReplyErr(n, "", "q", EVERSION, strings.Join(Versions(), ","))
+	}
+	if caps.V != v {
+		// Raw, a relay's, names the version of the host behind it: say the
+		// one answered, and pass the rest on.
+		caps = Merge(caps, Caps{V: v, Raw: encodeBody(&Caps{V: v})})
 	}
 	return ReplyCaps(n, caps)
 }
