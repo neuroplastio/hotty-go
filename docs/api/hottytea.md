@@ -22,7 +22,7 @@ A Session is the program's side. Its life in a program:
   - When the program draws its frame (in Update, since View cannot return commands), it says which surfaces it wants where (Layout), and returns Flush with its commands. The Session sends only what changed: a document once, a placement when a surface moves, a hide or a delete when it goes. View then returns the cells, with room left where the surfaces go.
   - Deltas go out with Send, and leave with the next Flush, as one tea.Raw, so that hotty commands stay in order with Bubble Tea's frames.
 
-Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop placements with them. The Session reads the output on its way out, and asks for a new layout when that happens (RelayoutMsg); it sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit. So a program never returns an empty View under its surfaces (Layout).
+Bubble Tea's renderer erases the screen and scrolls regions on its own, and a host may drop or move placements with them. The Session reads the output on its way out and places its surfaces again itself, in the same frame, before the frame's end, so that a host which draws a frame whole never shows them moved. Only when it cannot (RelayoutMsg) does it ask for a new layout. It sends a document again when a placement reports it gone, and keeps the number of surfaces within the host's limit. So a program never returns an empty View under its surfaces (Layout).
 
 In a terminal that is not a host, Mode is Text and the Session sends nothing: the program draws everything in cells. A Session with Late asks for a late answer, and moves to Native if one comes. A Session with Known does not ask: the program knows what the terminal is.
 
@@ -237,10 +237,10 @@ AckMsg is the host's ok for a command the program numbered (hotty.N): the host h
 ## <a id="Counts"></a>type Counts
 
 ```go
-type Counts struct{ Docs, Places, Hides, Deletes, Relayouts int }
+type Counts struct{ Docs, Places, Hides, Deletes, Relayouts, Repairs int }
 ```
 
-Counts are what Layout has sent so far: documents, placements, hides and deletes, and the relayouts after the renderer erased or scrolled the screen. A program that measures its own hotty traffic reads them.
+Counts are what Layout has sent so far: documents, placements, hides and deletes, the relayouts after the renderer erased or scrolled the screen under surfaces the Session could not place again by itself, and the repairs: frames the Session placed the surfaces again in, inside the frame (Relayouts does not count those). A program that measures its own hotty traffic reads them; Repairs is as of the last Update or Layout.
 
 ## <a id="ErrorMsg"></a>type ErrorMsg
 
@@ -394,7 +394,7 @@ type RelayoutMsg struct {
 }
 ```
 
-RelayoutMsg asks the program to lay its surfaces out again: the screen was erased or scrolled under them, or a document went missing. Draw a frame; its Layout puts the surfaces back.
+RelayoutMsg asks the program to lay its surfaces out again: the screen was erased or scrolled under them and the Session could not place them again in the frame itself (the writer does, when it can, and no message comes), or a document went missing. Draw a frame; its Layout puts the surfaces back.
 
 ## <a id="Session"></a>type Session
 
@@ -525,7 +525,7 @@ func (h *Session) Layout(want []Surface)
 
 Layout makes the surfaces on screen match want: a new surface gets its document and a placement, a moved or scrolled one is placed again (only the window inside its Clip), and one no longer wanted is hidden if it is kept, or else deleted. What it sends leaves with the next Flush. It does nothing until Mode is Native, and after Close.
 
-The View under the surfaces must not be empty, even where they cover the whole screen: a single space will do. Bubble Tea erases the screen for an empty view on every render, a host drops the placements an erase covers, and the relayout that follows renders again, so the surfaces never stay up.
+The View under the surfaces must not be empty, even where they cover the whole screen: a single space will do. Bubble Tea erases the screen for an empty view on every render, a host drops the placements an erase covers, and putting them back renders again, so the surfaces never stay up.
 
 ### <a id="Session.Ping"></a>func (*Session) Ping
 
