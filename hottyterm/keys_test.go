@@ -48,6 +48,9 @@ func TestKeyName(t *testing.T) {
 		{uv.Key{Code: uv.KeyLeft, Mod: uv.ModSuper}, "super+arrow_left"},
 		{uv.Key{Code: uv.KeyExtended, Text: "é"}, "é"},
 		{uv.Key{Code: 'A'}, "a"},
+		{uv.Key{Code: uv.KeyMenu}, "context_menu"},
+		{uv.Key{Code: uv.KeyMenu, Mod: uv.ModShift}, "shift+context_menu"},
+		{uv.Key{Code: uv.KeyMenu, Mod: uv.ModCtrl | uv.ModAlt}, "ctrl+alt+context_menu"},
 		{uv.Key{Code: uv.KeyLeftShift}, ""},
 		{uv.Key{Code: uv.KeyF13}, ""},
 	} {
