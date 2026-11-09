@@ -12,7 +12,10 @@ require (
 	neuroplast.io/myelin/myelinkey v0.2.0
 )
 
-require github.com/philhofer/fwd v1.2.0 // indirect
+require (
+	github.com/clipperhouse/displaywidth v0.11.0 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
+)
 
 // The SDK's modules build against each other as they are in this
 // repository; a release requires the versions it tags.

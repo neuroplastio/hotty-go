@@ -28,3 +28,19 @@ func ExampleField_Key() {
 	// 6 9
 	// "hello Z" 7
 }
+
+// A multi-line field wrapped to a width: the caret's row and column, for the
+// terminal cursor, and the scroll offset of a view of two rows.
+func ExampleField_Cursor() {
+	km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+	f := hottyedit.Field{Value: "the quick brown fox", Multiline: true, Width: 10, Rows: 2}
+	f.Key(km, "ctrl+end") // input-end
+	row, col := f.Cursor()
+	fmt.Println(row, col, f.Scroll(0))
+	f.Key(km, "up") // by visual row, the column kept
+	row, col = f.Cursor()
+	fmt.Println(row, col, f.Scroll(1))
+	// Output:
+	// 1 9 0
+	// 0 9 0
+}
