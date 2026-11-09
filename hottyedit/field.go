@@ -23,7 +23,15 @@
 // Selection says what to draw as selected.
 //
 // Characters are grapheme clusters (Unicode UAX #29): the caret counts
-// them. A field in cells does not wrap, so its rows are its lines.
+// them.
+//
+// A field keeps a history, for Undo and Redo, one step to a run of typing.
+//
+// Undo and Redo are on where they were the program's before (hotty-go
+// 0.7.2). A program that wants ctrl+z for itself binds it to Program in its
+// keymap: Key then returns that action and the field leaves the key alone.
+// A Field is comparable; its zero value is an editor with no history, and a
+// copy of a Field shares the history of the one it was copied from.
 package hottyedit
 
 import (
@@ -51,6 +59,13 @@ type Field struct {
 	// when less.
 	Rows int
 
+	// hist is the history, nil until there is an edit; it is a pointer so
+	// that a Field stays comparable, as it was before it had one. A copy
+	// shares it. run is the kind of edit that the last one was, left with
+	// value runValue and the caret at runCaret.
+	hist          *history
+	run, runCaret int
+	runValue      string
 	// anchor is where the selection began, plus one; 0 when there is
 	// none, so that a Field literal selects nothing. Nothing is selected
 	// either when it is at the caret.
@@ -91,6 +106,7 @@ func (f *Field) selection(n int) (start, end int) {
 func (f *Field) Select(anchor, caret int) {
 	f.Caret = caret
 	f.goal = 0
+	f.run = runNone
 	f.anchor = 0
 	if anchor != caret {
 		f.anchor = max(anchor, 0) + 1
@@ -100,7 +116,10 @@ func (f *Field) Select(anchor, caret int) {
 // Do does an action, and reports whether the value changed: then the
 // program reports an input event. Submit and Program change nothing, the
 // selection included; they are the program's to act on, and so are Copy,
-// Cut, Paste, Undo and Redo: a Field keeps no clipboard and no history. An
+// Cut and Paste: a Field keeps no clipboard (Paste is the pasted text's).
+// Undo and Redo are the field's own history (from this version on; they
+// were the program's), done by the keymap's bindings of them, so that a key
+// the program binds to Program or to something else stays the program's. An
 // action only a multi-line field has does nothing in an input.
 //
 // A selection comes first (SPEC §10.2): a delete deletes it and nothing
@@ -129,6 +148,15 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 	default:
 		f.goal = 0
 	}
+	if a != hotty.DeleteCharBackward && a != hotty.DeleteCharForward {
+		f.run = runNone
+	}
+	switch a {
+	case hotty.Undo:
+		return f.Undo()
+	case hotty.Redo:
+		return f.Redo()
+	}
 	if a.Multiline() && !f.Multiline {
 		return false
 	}
@@ -151,7 +179,7 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 		}
 	case lo < hi && strings.HasPrefix(string(a), "delete-"):
 		f.anchor = 0
-		return f.delete(c, lo, hi)
+		return f.delete(c, lo, hi, runNone)
 	case lo == hi:
 		f.anchor = 0
 	}
@@ -185,17 +213,17 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 	case hotty.SelectAll:
 		f.anchor, f.Caret = 1, len(c)
 	case hotty.DeleteCharBackward:
-		return f.delete(c, max(p-1, 0), p)
+		return f.delete(c, max(p-1, 0), p, runBackward)
 	case hotty.DeleteCharForward:
-		return f.delete(c, p, min(p+1, len(c)))
+		return f.delete(c, p, min(p+1, len(c)), runForward)
 	case hotty.DeleteWordBackward:
-		return f.delete(c, f.wordBackward(c, p), p)
+		return f.delete(c, f.wordBackward(c, p), p, runNone)
 	case hotty.DeleteWordForward:
-		return f.delete(c, p, f.wordForward(c, p))
+		return f.delete(c, p, f.wordForward(c, p), runNone)
 	case hotty.DeleteToLineStart:
-		return f.delete(c, start, p)
+		return f.delete(c, start, p, runNone)
 	case hotty.DeleteToLineEnd:
-		return f.delete(c, p, end)
+		return f.delete(c, p, end, runNone)
 	case hotty.Newline:
 		return f.Type("\n")
 	}
@@ -206,8 +234,18 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 }
 
 // Type types text in place of the selection, or at the caret, and reports
-// whether the value changed.
+// whether the value changed. A character typed where the last was is of one
+// step of the history with it.
 func (f *Field) Type(text string) (changed bool) {
+	run := runNone
+	if g := chars(text); len(g) == 1 && !isBreak(g[0]) {
+		run = runType
+	}
+	return f.insert(text, run)
+}
+
+// insert types text, as an edit of the kind run, which a selection ends.
+func (f *Field) insert(text string, run int) bool {
 	f.goal = 0
 	if text == "" {
 		return false
@@ -215,9 +253,11 @@ func (f *Field) Type(text string) (changed bool) {
 	c := chars(f.Value)
 	lo, hi := f.selection(len(c))
 	f.anchor = 0
+	if lo < hi {
+		run = runNone
+	}
 	before := strings.Join(c[:lo], "") + text
-	f.Value = before + strings.Join(c[hi:], "")
-	f.Caret = len(chars(before))
+	f.edit(before+strings.Join(c[hi:], ""), len(chars(before)), run)
 	return true
 }
 
@@ -229,6 +269,11 @@ func (f *Field) Type(text string) (changed bool) {
 func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) {
 	switch a = m.Lookup(key); a {
 	case "":
+		// Shift and enter is a line break in a field that has lines,
+		// where enter is the program's (Submit).
+		if key == "shift+enter" && f.Multiline {
+			return hotty.Newline, f.Do(hotty.Newline)
+		}
 		return "", false
 	case hotty.Insert:
 		text, _ := hotty.KeyText(key)
@@ -241,12 +286,16 @@ func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) 
 }
 
 // delete deletes the characters from a to b, and leaves the caret at a.
-func (f *Field) delete(c []string, a, b int) bool {
-	f.Caret = a
+func (f *Field) delete(c []string, a, b, run int) bool {
 	if a >= b {
+		f.Caret = a
 		return false
 	}
-	f.Value = strings.Join(c[:a], "") + strings.Join(c[b:], "")
+	// A run of backspaces or deletes goes on where the caret is.
+	if lo, hi := f.selection(len(c)); lo < hi {
+		run = runNone
+	}
+	f.edit(strings.Join(c[:a], "")+strings.Join(c[b:], ""), a, run)
 	return true
 }
 

@@ -31,7 +31,11 @@ case changed:
 
 A field has a selection, from its anchor to the caret, as a host's does: Key extends it with a move whose key has shift (hotty.Keymap.Selects), select-all selects the whole value, and Select sets it for the pointer. Selection says what to draw as selected.
 
-Characters are grapheme clusters (Unicode UAX #29): the caret counts them. A field in cells does not wrap, so its rows are its lines.
+Characters are grapheme clusters (Unicode UAX #29): the caret counts them.
+
+A field keeps a history, for Undo and Redo, one step to a run of typing.
+
+Undo and Redo are on where they were the program's before (hotty-go 0.7.2). A program that wants ctrl+z for itself binds it to Program in its keymap: Key then returns that action and the field leaves the key alone. A Field is comparable; its zero value is an editor with no history, and a copy of a Field shares the history of the one it was copied from.
 
 ## <a id="pkg-index"></a>Index
 
@@ -40,9 +44,12 @@ Characters are grapheme clusters (Unicode UAX #29): the caret counts them. A fie
   - [`func (f *Field) Do(a hotty.Action) (changed bool)`](#Field.Do)
   - [`func (f *Field) Extend(a hotty.Action) (changed bool)`](#Field.Extend)
   - [`func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool)`](#Field.Key)
+  - [`func (f *Field) Paste(text string) bool`](#Field.Paste)
+  - [`func (f *Field) Redo() bool`](#Field.Redo)
   - [`func (f *Field) Select(anchor, caret int)`](#Field.Select)
   - [`func (f *Field) Selection() (start, end int)`](#Field.Selection)
   - [`func (f *Field) Type(text string) (changed bool)`](#Field.Type)
+  - [`func (f *Field) Undo() bool`](#Field.Undo)
 
 ### <a id="pkg-examples"></a>Examples
 
@@ -85,7 +92,7 @@ Anchor is where the selection began, the end of it the caret is not at. ok is fa
 func (f *Field) Do(a hotty.Action) (changed bool)
 ```
 
-Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing, the selection included; they are the program's to act on, and so are Copy, Cut, Paste, Undo and Redo: a Field keeps no clipboard and no history. An action only a multi-line field has does nothing in an input.
+Do does an action, and reports whether the value changed: then the program reports an input event. Submit and Program change nothing, the selection included; they are the program's to act on, and so are Copy, Cut and Paste: a Field keeps no clipboard (Paste is the pasted text's). Undo and Redo are the field's own history (from this version on; they were the program's), done by the keymap's bindings of them, so that a key the program binds to Program or to something else stays the program's. An action only a multi-line field has does nothing in an input.
 
 A selection comes first (SPEC §10.2): a delete deletes it and nothing else; a move starts from its start when it goes back or up, and from its end otherwise, and ends it, and char-backward and char-forward stop there; select-all selects the whole value, the anchor at its start and the caret at its end.
 
@@ -134,6 +141,22 @@ Output:
 "hello Z" 7
 ```
 
+### <a id="Field.Paste"></a>func (*Field) Paste
+
+```go
+func (f *Field) Paste(text string) bool
+```
+
+Paste types pasted text in place of the selection, as one edit, and reports whether the value changed. The text is kept whole: CRLF and CR become LF and a tab four spaces. A field that has no lines (Multiline false) takes its line breaks as spaces.
+
+### <a id="Field.Redo"></a>func (*Field) Redo
+
+```go
+func (f *Field) Redo() bool
+```
+
+Redo does again what Undo took back.
+
 ### <a id="Field.Select"></a>func (*Field) Select
 
 ```go
@@ -156,4 +179,12 @@ Selection is the selection's start and end, in characters, for a rendition to dr
 func (f *Field) Type(text string) (changed bool)
 ```
 
-Type types text in place of the selection, or at the caret, and reports whether the value changed.
+Type types text in place of the selection, or at the caret, and reports whether the value changed. A character typed where the last was is of one step of the history with it.
+
+### <a id="Field.Undo"></a>func (*Field) Undo
+
+```go
+func (f *Field) Undo() bool
+```
+
+Undo takes back the last edit, or the last run of typing, and reports whether there was one: the value and caret are as they were before it.
