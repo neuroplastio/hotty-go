@@ -5,6 +5,7 @@ module neuroplast.io/hotty-go/hottyedit
 go 1.24.0
 
 require (
+	github.com/clipperhouse/displaywidth v0.11.0
 	github.com/clipperhouse/uax29/v2 v2.7.0
 	neuroplast.io/hotty-go v0.7.1
 )

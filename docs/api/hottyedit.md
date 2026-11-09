@@ -33,7 +33,7 @@ A field has a selection, from its anchor to the caret, as a host's does: Key ext
 
 Characters are grapheme clusters (Unicode UAX #29): the caret counts them.
 
-A field keeps a history, for Undo and Redo, one step to a run of typing.
+A field has rows: its lines, or with a Width the lines wrapped to it (Wrap). Home, End and the moves by row go by those rows, and Cursor and Scroll say where a rendition draws the caret. A field keeps a history, for Undo and Redo, one step to a run of typing.
 
 Undo and Redo are on where they were the program's before (hotty-go 0.7.2). A program that wants ctrl+z for itself binds it to Program in its keymap: Key then returns that action and the field leaves the key alone. A Field is comparable; its zero value is an editor with no history, and a copy of a Field shares the history of the one it was copied from.
 
@@ -41,18 +41,24 @@ Undo and Redo are on where they were the program's before (hotty-go 0.7.2). A pr
 
 - [`type Field`](#Field)
   - [`func (f *Field) Anchor() (anchor int, ok bool)`](#Field.Anchor)
+  - [`func (f *Field) Cursor() (row, col int)`](#Field.Cursor)
   - [`func (f *Field) Do(a hotty.Action) (changed bool)`](#Field.Do)
   - [`func (f *Field) Extend(a hotty.Action) (changed bool)`](#Field.Extend)
   - [`func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool)`](#Field.Key)
   - [`func (f *Field) Paste(text string) bool`](#Field.Paste)
   - [`func (f *Field) Redo() bool`](#Field.Redo)
+  - [`func (f *Field) Scroll(top int) int`](#Field.Scroll)
   - [`func (f *Field) Select(anchor, caret int)`](#Field.Select)
   - [`func (f *Field) Selection() (start, end int)`](#Field.Selection)
   - [`func (f *Field) Type(text string) (changed bool)`](#Field.Type)
   - [`func (f *Field) Undo() bool`](#Field.Undo)
+  - [`func (f *Field) Wrap() []Row`](#Field.Wrap)
+- [`type Row`](#Row)
+  - [`func Wrap(text string, width int) []Row`](#Wrap)
 
 ### <a id="pkg-examples"></a>Examples
 
+- [Field.Cursor](#example-Field.Cursor)
 - [Field.Key](#example-Field.Key)
 
 ## <a id="Field"></a>type Field
@@ -72,6 +78,9 @@ type Field struct {
 	// Rows is how many rows the field shows, for page-up and page-down; 1
 	// when less.
 	Rows int
+	// Width is the width in cells that the value wraps at, as Wrap does;
+	// 0 or less wraps nothing, and the rows are the lines.
+	Width int
 	// contains filtered or unexported fields
 }
 ```
@@ -85,6 +94,36 @@ func (f *Field) Anchor() (anchor int, ok bool)
 ```
 
 Anchor is where the selection began, the end of it the caret is not at. ok is false when nothing is selected, and anchor is then the caret.
+
+### <a id="Field.Cursor"></a>func (*Field) Cursor
+
+```go
+func (f *Field) Cursor() (row, col int)
+```
+
+Cursor is the visual row and the column, in cells, of the caret in the rows Wrap makes: where a rendition puts the terminal cursor. The column stays inside the width, whatever hangs past it.
+
+#### <a id="example-Field.Cursor"></a>Example
+
+A multi-line field wrapped to a width: the caret's row and column, for the terminal cursor, and the scroll offset of a view of two rows.
+
+```go
+km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+f := hottyedit.Field{Value: "the quick brown fox", Multiline: true, Width: 10, Rows: 2}
+f.Key(km, "ctrl+end") // input-end
+row, col := f.Cursor()
+fmt.Println(row, col, f.Scroll(0))
+f.Key(km, "up") // by visual row, the column kept
+row, col = f.Cursor()
+fmt.Println(row, col, f.Scroll(1))
+```
+
+Output:
+
+```
+1 9 0
+0 9 0
+```
 
 ### <a id="Field.Do"></a>func (*Field) Do
 
@@ -157,6 +196,14 @@ func (f *Field) Redo() bool
 
 Redo does again what Undo took back.
 
+### <a id="Field.Scroll"></a>func (*Field) Scroll
+
+```go
+func (f *Field) Scroll(top int) int
+```
+
+Scroll is the scroll offset in rows, the first row shown, for a view of Rows rows (1 when less) that keeps the caret's row in view: top when it is, and otherwise the nearest that does. The offset stays within the rows, so that the view is full when there are enough.
+
 ### <a id="Field.Select"></a>func (*Field) Select
 
 ```go
@@ -188,3 +235,39 @@ func (f *Field) Undo() bool
 ```
 
 Undo takes back the last edit, or the last run of typing, and reports whether there was one: the value and caret are as they were before it.
+
+### <a id="Field.Wrap"></a>func (*Field) Wrap
+
+```go
+func (f *Field) Wrap() []Row
+```
+
+Wrap is Wrap of the field's Value at its Width.
+
+## <a id="Row"></a>type Row
+
+```go
+type Row struct {
+	// Start and End are character indices: the row is the characters
+	// [Start, End).
+	Start, End int
+	// Cols is the row's width in cells, hanging spaces included.
+	Cols int
+	// Soft is true when the row ends because the text wrapped, so that
+	// the next row goes on from End; a hard row ends at a line break, or
+	// at the end of the value, and End is the break's index.
+	Soft bool
+}
+```
+
+Row is one visual row of a wrapped value: the characters from Start to End, not counting the line break that ends a hard row.
+
+### <a id="Wrap"></a>func Wrap
+
+```go
+func Wrap(text string, width int) []Row
+```
+
+Wrap breaks text into visual rows of at most width cells, as a field with that Width draws it: at each line break, and where a line is too wide, after its last space that fits, or anywhere once no space is left (a long URL). Spaces at the end of a row hang past the width rather than start the next row. A line that fills its last row to the width gets an empty row after it, so the caret at its end has a place inside the width. A character wider than width has a row of its own.
+
+The rows cover every character: the ones between rows are the line breaks after each hard row but the last. width \< 1 wraps nothing: the rows are the lines. An empty text is one empty row.

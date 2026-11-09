@@ -25,7 +25,10 @@
 // Characters are grapheme clusters (Unicode UAX #29): the caret counts
 // them.
 //
-// A field keeps a history, for Undo and Redo, one step to a run of typing.
+// A field has rows: its lines, or with a Width the lines wrapped to it
+// (Wrap). Home, End and the moves by row go by those rows, and Cursor and
+// Scroll say where a rendition draws the caret. A field keeps a history, for
+// Undo and Redo, one step to a run of typing.
 //
 // Undo and Redo are on where they were the program's before (hotty-go
 // 0.7.2). A program that wants ctrl+z for itself binds it to Program in its
@@ -58,6 +61,9 @@ type Field struct {
 	// Rows is how many rows the field shows, for page-up and page-down; 1
 	// when less.
 	Rows int
+	// Width is the width in cells that the value wraps at, as Wrap does;
+	// 0 or less wraps nothing, and the rows are the lines.
+	Width int
 
 	// hist is the history, nil until there is an edit; it is a pointer so
 	// that a Field stays comparable, as it was before it had one. A copy
@@ -185,6 +191,8 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 	}
 	start, end := f.line(c, p)
 	rows := max(f.Rows, 1)
+	vr := wrap(c, f.Width)
+	cur := vr[rowOf(vr, p)]
 	switch a {
 	case hotty.CharBackward:
 		f.Caret = max(p-1, 0)
@@ -195,17 +203,17 @@ func (f *Field) act(a hotty.Action, extend bool) bool {
 	case hotty.WordForward:
 		f.Caret = f.wordForward(c, p)
 	case hotty.LineStart:
-		f.Caret = start
+		f.Caret = cur.Start
 	case hotty.LineEnd:
-		f.Caret = end
+		f.Caret = rowEnd(cur, c)
 	case hotty.LinePrevious:
-		f.Caret = f.row(c, p, -1)
+		f.Caret = f.row(c, vr, p, -1)
 	case hotty.LineNext:
-		f.Caret = f.row(c, p, 1)
+		f.Caret = f.row(c, vr, p, 1)
 	case hotty.PageUp:
-		f.Caret = f.row(c, p, -rows)
+		f.Caret = f.row(c, vr, p, -rows)
 	case hotty.PageDown:
-		f.Caret = f.row(c, p, rows)
+		f.Caret = f.row(c, vr, p, rows)
 	case hotty.InputStart:
 		f.Caret = 0
 	case hotty.InputEnd:
@@ -315,33 +323,21 @@ func (f *Field) line(c []string, p int) (start, end int) {
 	return start, end
 }
 
-// row moves by rows: to the row by rows away, as near as it can to the
-// place along the row where the run of moves began; past the first row to
-// the start, past the last to the end.
-func (f *Field) row(c []string, p, by int) int {
-	var lines [][2]int
-	start := 0
-	for i, ch := range c {
-		if isBreak(ch) {
-			lines = append(lines, [2]int{start, i})
-			start = i + 1
-		}
-	}
-	lines = append(lines, [2]int{start, len(c)})
-	r := 0
-	for r < len(lines)-1 && p > lines[r][1] {
-		r++
-	}
+// row moves by rows of vr, the visual rows: to the row by rows away, as
+// near as it can to the column in cells where the run of moves began; past
+// the first row to the start, past the last to the end.
+func (f *Field) row(c []string, vr []Row, p, by int) int {
+	r := rowOf(vr, p)
 	if f.goal == 0 {
-		f.goal = p - lines[r][0] + 1
+		f.goal = colAt(vr[r], c, p) + 1
 	}
 	switch t := r + by; {
 	case t < 0:
 		return 0
-	case t >= len(lines):
+	case t >= len(vr):
 		return len(c)
 	default:
-		return lines[t][0] + min(f.goal-1, lines[t][1]-lines[t][0])
+		return posAt(vr[t], c, f.goal-1)
 	}
 }
 
