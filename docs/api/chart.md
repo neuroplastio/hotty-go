@@ -3,7 +3,7 @@
 # chart
 
 ```go
-import "github.com/neuroplastio/hotty-go/chart"
+import "neuroplast.io/hotty-go/chart"
 ```
 
 - [Overview](#pkg-overview)

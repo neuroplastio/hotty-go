@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // The conformance vectors' edit section (SDK.md §4.6), from the copy the

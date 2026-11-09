@@ -3,7 +3,7 @@
 # hottyterm
 
 ```go
-import "github.com/neuroplastio/hotty-go/hottyterm"
+import "neuroplast.io/hotty-go/hottyterm"
 ```
 
 - [Overview](#pkg-overview)

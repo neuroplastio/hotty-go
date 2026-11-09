@@ -23,9 +23,9 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/form"
-	"github.com/neuroplastio/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/form"
+	"neuroplast.io/hotty-go/hottyterm"
 )
 
 // deploy is the form. form.Parse reads the same from JSON.

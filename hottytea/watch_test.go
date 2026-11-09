@@ -14,7 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 func TestWatcherFindsErasesAndScrolls(t *testing.T) {

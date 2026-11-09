@@ -67,8 +67,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/neuroplastio/hotty-go"
 	"github.com/tinylib/msgp/msgp"
+	"neuroplast.io/hotty-go"
 )
 
 // Errors of the user's actions.

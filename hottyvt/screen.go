@@ -99,7 +99,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // DefaultID is the id of a screen made without ID.

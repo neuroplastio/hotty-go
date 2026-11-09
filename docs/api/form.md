@@ -3,7 +3,7 @@
 # form
 
 ```go
-import "github.com/neuroplastio/hotty-go/form"
+import "neuroplast.io/hotty-go/form"
 ```
 
 - [Overview](#pkg-overview)

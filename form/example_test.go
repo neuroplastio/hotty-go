@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/form"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/form"
 )
 
 const deploy = `{

@@ -3,8 +3,8 @@ package hottyedit_test
 import (
 	"fmt"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyedit"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyedit"
 )
 
 // A field in cells, edited with the keymap the program gives its surfaces.

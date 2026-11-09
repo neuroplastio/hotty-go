@@ -12,8 +12,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyedit"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyedit"
 )
 
 // This file keeps what a=field changes (SPEC §6.4): each control's rev, a

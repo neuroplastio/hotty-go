@@ -6,11 +6,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/neuroplastio/myelin/myelinkey"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"neuroplast.io/myelin/myelinkey"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // Key types a key as the user does, and does with it what SPEC §10.2 has a

@@ -31,10 +31,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyterm"
-	"github.com/neuroplastio/hotty-go/hottyvt"
-	"github.com/neuroplastio/hotty-go/hottyvt/asciicast"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go/hottyvt"
+	"neuroplast.io/hotty-go/hottyvt/asciicast"
 )
 
 // env is the process's streams and terminal: main fills it from the OS,

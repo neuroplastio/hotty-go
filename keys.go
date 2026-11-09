@@ -1,7 +1,7 @@
 package hotty
 
 import (
-	"github.com/neuroplastio/myelin/myelinkey"
+	"neuroplast.io/myelin/myelinkey"
 	"strconv"
 	"strings"
 	"unicode"

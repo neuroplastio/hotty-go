@@ -35,7 +35,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // Defaults for the fields of a Line left zero.

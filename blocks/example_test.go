@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/neuroplastio/hotty-go/blocks"
+	"neuroplast.io/hotty-go/blocks"
 )
 
 // A histogram in cells: each bin a column, its height in eighths of a row,

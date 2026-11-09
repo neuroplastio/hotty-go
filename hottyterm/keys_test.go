@@ -5,7 +5,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // ultraviolet's decoder and KeyName name the keys of the vectors' input as

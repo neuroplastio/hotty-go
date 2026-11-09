@@ -34,10 +34,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/chart"
-	"github.com/neuroplastio/hotty-go/hottytea"
-	"github.com/neuroplastio/hotty-go/series"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/chart"
+	"neuroplast.io/hotty-go/hottytea"
+	"neuroplast.io/hotty-go/series"
 )
 
 func main() {

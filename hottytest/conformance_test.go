@@ -12,9 +12,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/myelin/myelinkey"
 	"github.com/tinylib/msgp/msgp"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/myelin/myelinkey"
 )
 
 // drain takes what the host has sent the program, unread.

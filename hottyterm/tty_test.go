@@ -18,9 +18,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyterm"
-	"github.com/neuroplastio/hotty-go/hottytest"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go/hottytest"
 )
 
 // childArgs run one test of this binary again, in a child process, whose

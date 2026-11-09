@@ -3,7 +3,7 @@ package braille_test
 import (
 	"fmt"
 
-	"github.com/neuroplastio/hotty-go/braille"
+	"neuroplast.io/hotty-go/braille"
 )
 
 // A line chart in cells, for a terminal that is not a hotty host: values

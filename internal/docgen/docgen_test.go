@@ -223,11 +223,11 @@ func TestFirstSentence(t *testing.T) {
 
 func TestAssumedName(t *testing.T) {
 	for in, want := range map[string]string{
-		"github.com/neuroplastio/hotty-go": "hotty",
-		"charm.land/bubbletea/v2":          "bubbletea",
-		"github.com/x/go-thing":            "thing",
-		"gopkg.in/yaml.v3":                 "yaml",
-		"strings":                          "strings",
+		"neuroplast.io/hotty-go":  "hotty",
+		"charm.land/bubbletea/v2": "bubbletea",
+		"github.com/x/go-thing":   "thing",
+		"gopkg.in/yaml.v3":        "yaml",
+		"strings":                 "strings",
 	} {
 		if got := assumedName(in); got != want {
 			t.Errorf("assumedName(%q) = %q, want %q", in, got, want)

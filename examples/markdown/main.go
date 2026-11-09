@@ -45,8 +45,8 @@ import (
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyterm"
 )
 
 // imageRows is the most rows an image takes: style keeps it to that.

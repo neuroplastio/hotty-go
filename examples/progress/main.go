@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyterm"
 )
 
 // env is the process's streams and terminal: main fills it from the OS,

@@ -10,7 +10,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	xterm "github.com/charmbracelet/x/term"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // Open opens the process's terminal, /dev/tty, whatever its standard streams

@@ -3,7 +3,7 @@
 # braille
 
 ```go
-import "github.com/neuroplastio/hotty-go/braille"
+import "neuroplast.io/hotty-go/braille"
 ```
 
 - [Overview](#pkg-overview)

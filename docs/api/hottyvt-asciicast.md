@@ -3,7 +3,7 @@
 # asciicast
 
 ```go
-import "github.com/neuroplastio/hotty-go/hottyvt/asciicast"
+import "neuroplast.io/hotty-go/hottyvt/asciicast"
 ```
 
 - [Overview](#pkg-overview)

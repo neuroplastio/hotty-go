@@ -3,7 +3,7 @@
 # hottyedit
 
 ```go
-import "github.com/neuroplastio/hotty-go/hottyedit"
+import "neuroplast.io/hotty-go/hottyedit"
 ```
 
 - [Overview](#pkg-overview)

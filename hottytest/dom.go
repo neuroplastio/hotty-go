@@ -8,8 +8,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyedit"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyedit"
 )
 
 // Surface is one surface the program made: its document, as the program's

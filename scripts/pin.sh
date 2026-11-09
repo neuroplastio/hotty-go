@@ -12,7 +12,7 @@
 set -eu
 rev=${1:?usage: pin.sh VERSION|COMMIT}
 GO=${GO:-go}
-repo=github.com/neuroplastio/hotty-go
+repo=neuroplast.io/hotty-go
 
 case $rev in
 v[0-9]*)

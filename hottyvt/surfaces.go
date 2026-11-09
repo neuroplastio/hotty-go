@@ -12,7 +12,7 @@ import (
 	nethtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // A screen shows the surfaces the program makes, as a hotty host would

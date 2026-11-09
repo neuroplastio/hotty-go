@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/neuroplastio/hotty-go/hottyvt"
-	"github.com/neuroplastio/hotty-go/hottyvt/asciicast"
+	"neuroplast.io/hotty-go/hottyvt"
+	"neuroplast.io/hotty-go/hottyvt/asciicast"
 )
 
 // A recording played into a screen of its size. A player waits until each

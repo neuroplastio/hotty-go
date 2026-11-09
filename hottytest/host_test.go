@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/neuroplastio/hotty-go"
 	"github.com/tinylib/msgp/msgp"
+	"neuroplast.io/hotty-go"
 )
 
 // recorder is a test that records what would fail it.

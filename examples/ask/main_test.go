@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/neuroplastio/hotty-go/form"
-	"github.com/neuroplastio/hotty-go/hottyterm"
-	"github.com/neuroplastio/hotty-go/hottytest"
+	"neuroplast.io/hotty-go/form"
+	"neuroplast.io/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go/hottytest"
 )
 
 const surface = "ask-form"

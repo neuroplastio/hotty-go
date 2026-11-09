@@ -4,7 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/neuroplastio/hotty-go/hottyterm"
+	"neuroplast.io/hotty-go/hottyterm"
 )
 
 // KeyName is a Bubble Tea key as SPEC §10.4 names it, so that a program

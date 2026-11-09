@@ -3,7 +3,7 @@
 # series
 
 ```go
-import "github.com/neuroplastio/hotty-go/series"
+import "neuroplast.io/hotty-go/series"
 ```
 
 - [Overview](#pkg-overview)

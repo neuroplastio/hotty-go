@@ -4,13 +4,13 @@
 // nothing more: chart, form, series, braille, blocks.
 // The packages that need more are modules of their own, so that a program
 // takes on only what it imports: hottyterm, hottytea and hottytest.
-module github.com/neuroplastio/hotty-go
+module neuroplast.io/hotty-go
 
 go 1.24.0
 
 require (
-	github.com/neuroplastio/myelin/myelinkey v0.1.0
 	github.com/tinylib/msgp v1.6.5
+	neuroplast.io/myelin/myelinkey v0.2.0
 )
 
 require github.com/philhofer/fwd v1.2.0 // indirect

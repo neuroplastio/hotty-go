@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/hottyvt"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottytest"
+	"neuroplast.io/hotty-go/hottyvt"
 )
 
 // send writes commands to the host, as a program does.

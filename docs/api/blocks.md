@@ -3,7 +3,7 @@
 # blocks
 
 ```go
-import "github.com/neuroplastio/hotty-go/blocks"
+import "neuroplast.io/hotty-go/blocks"
 ```
 
 - [Overview](#pkg-overview)

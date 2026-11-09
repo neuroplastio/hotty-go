@@ -3,8 +3,8 @@ package hottyvt_test
 import (
 	"fmt"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottyvt"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottyvt"
 )
 
 // show prints what commands do: each op of a delta, its operation, target

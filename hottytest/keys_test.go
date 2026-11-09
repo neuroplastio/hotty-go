@@ -3,7 +3,7 @@ package hottytest
 import (
 	"testing"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 func TestKeys(t *testing.T) {

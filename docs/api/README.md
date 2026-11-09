@@ -2,7 +2,7 @@
 
 # API reference
 
-A page for each package of `github.com/neuroplastio/hotty-go`, written from the code by `internal/docgen` (`make docs`). The same documentation is on [pkg.go.dev](https://pkg.go.dev/github.com/neuroplastio/hotty-go).
+A page for each package of `neuroplast.io/hotty-go`, written from the code by `internal/docgen` (`make docs`). The same documentation is on [pkg.go.dev](https://pkg.go.dev/neuroplast.io/hotty-go).
 
 | package | what it is |
 | --- | --- |

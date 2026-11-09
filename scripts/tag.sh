@@ -16,7 +16,7 @@
 # It only tags. Pushing them is the release, and prints as the next step.
 set -eu
 version=${1:?usage: tag.sh vX.Y.Z}
-repo=github.com/neuroplastio/hotty-go
+repo=neuroplast.io/hotty-go
 # The library's modules besides the root; examples and internal/docgen's
 # fixtures are not released.
 modules="hottyedit hottyterm hottytea hottytest hottyvt"

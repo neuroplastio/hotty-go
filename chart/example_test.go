@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/chart"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/chart"
 )
 
 // show prints what a command does: each op's target, key and value.

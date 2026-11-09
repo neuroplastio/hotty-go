@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/neuroplastio/hotty-go"
-	"github.com/neuroplastio/hotty-go/hottytest"
-	"github.com/neuroplastio/hotty-go/hottyvt"
+	"neuroplast.io/hotty-go"
+	"neuroplast.io/hotty-go/hottytest"
+	"neuroplast.io/hotty-go/hottyvt"
 )
 
 // What a full-screen program that speaks hotty writes, in the chunks a pty

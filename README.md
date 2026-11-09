@@ -69,7 +69,7 @@ h.Surface("hello-hello").Text() // "Hello, HTML in the terminal."
 ```
 
 The reference is in [docs/api](docs/api) and on
-[pkg.go.dev](https://pkg.go.dev/github.com/neuroplastio/hotty-go).
+[pkg.go.dev](https://pkg.go.dev/neuroplast.io/hotty-go).
 
 ## Install
 
@@ -78,18 +78,22 @@ of what it imports:
 
 | module | packages | needs |
 | --- | --- | --- |
-| `github.com/neuroplastio/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library, and tinylib/msgp's runtime for a host's msgpack bodies |
-| `github.com/neuroplastio/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
-| `github.com/neuroplastio/hotty-go/hottytea` | `hottytea` | Bubble Tea |
-| `github.com/neuroplastio/hotty-go/hottyedit` | `hottyedit` | uax29, Unicode's grapheme segmentation |
-| `github.com/neuroplastio/hotty-go/hottytest` | `hottytest` | x/net/html, hottyedit |
-| `github.com/neuroplastio/hotty-go/hottyvt` | `hottyvt`, `asciicast` | x/vt, a terminal emulator; asciicast, the standard library |
+| `neuroplast.io/hotty-go` | `hotty`, `chart`, `form`, `series`, `braille`, `blocks` | the standard library, and tinylib/msgp's runtime for a host's msgpack bodies |
+| `neuroplast.io/hotty-go/hottyterm` | `hottyterm` | ultraviolet, for the terminal's input |
+| `neuroplast.io/hotty-go/hottytea` | `hottytea` | Bubble Tea |
+| `neuroplast.io/hotty-go/hottyedit` | `hottyedit` | uax29, Unicode's grapheme segmentation |
+| `neuroplast.io/hotty-go/hottytest` | `hottytest` | x/net/html, hottyedit |
+| `neuroplast.io/hotty-go/hottyvt` | `hottyvt`, `asciicast` | x/vt, a terminal emulator; asciicast, the standard library |
 
 ```
-go get github.com/neuroplastio/hotty-go github.com/neuroplastio/hotty-go/hottyterm
+go get neuroplast.io/hotty-go neuroplast.io/hotty-go/hottyterm
 ```
 
 0.7.x speaks hotty 0.7, and 0.6 too; the patch number is this repository's own.
+
+Up to v0.7.0 the modules were `github.com/neuroplastio/hotty-go/...`; from
+v0.7.1 they are `neuroplast.io/hotty-go/...`, so upgrading changes the import
+paths. The API is otherwise v0.7.0's.
 
 ## Packages
 

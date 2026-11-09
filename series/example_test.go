@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/neuroplastio/hotty-go/series"
+	"neuroplast.io/hotty-go/series"
 )
 
 // A CSV stream with a header: each column is a series named by it, and the

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/neuroplastio/hotty-go"
+	"neuroplast.io/hotty-go"
 )
 
 // deploy is the spec in docs/tools/askhot.md.
