@@ -7,8 +7,8 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0
 	github.com/tinylib/msgp v1.6.5
 	golang.org/x/net v0.39.0
-	neuroplast.io/hotty-go v0.7.1
-	neuroplast.io/hotty-go/hottyedit v0.7.1
+	neuroplast.io/hotty-go v0.7.2
+	neuroplast.io/hotty-go/hottyedit v0.7.2
 	neuroplast.io/myelin/myelinkey v0.2.0
 )
 

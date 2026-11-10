@@ -9,8 +9,8 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285
 	golang.org/x/net v0.39.0
-	neuroplast.io/hotty-go v0.7.1
-	neuroplast.io/hotty-go/hottytest v0.7.1
+	neuroplast.io/hotty-go v0.7.2
+	neuroplast.io/hotty-go/hottytest v0.7.2
 )
 
 require (
@@ -30,7 +30,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	neuroplast.io/hotty-go/hottyedit v0.7.1 // indirect
+	neuroplast.io/hotty-go/hottyedit v0.7.2 // indirect
 	neuroplast.io/myelin/myelinkey v0.2.0 // indirect
 )
 

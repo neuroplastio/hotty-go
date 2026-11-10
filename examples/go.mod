@@ -8,10 +8,10 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
 	github.com/yuin/goldmark v1.8.6
-	neuroplast.io/hotty-go v0.7.1
-	neuroplast.io/hotty-go/hottytea v0.7.1
-	neuroplast.io/hotty-go/hottyterm v0.7.1
-	neuroplast.io/hotty-go/hottytest v0.7.1
+	neuroplast.io/hotty-go v0.7.2
+	neuroplast.io/hotty-go/hottytea v0.7.2
+	neuroplast.io/hotty-go/hottyterm v0.7.2
+	neuroplast.io/hotty-go/hottytest v0.7.2
 )
 
 require (
@@ -19,7 +19,7 @@ require (
 	github.com/charmbracelet/x/vt v0.0.0-20261001101533-953920dd3285 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect
-	neuroplast.io/hotty-go/hottyedit v0.7.1 // indirect
+	neuroplast.io/hotty-go/hottyedit v0.7.2 // indirect
 	neuroplast.io/myelin/myelinkey v0.2.0 // indirect
 )
 
@@ -39,7 +39,7 @@ require (
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	neuroplast.io/hotty-go/hottyvt v0.7.1
+	neuroplast.io/hotty-go/hottyvt v0.7.2
 )
 
 replace (
