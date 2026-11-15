@@ -41,6 +41,8 @@ const (
 	// after it reaches the program too, until it sends a=focus or a=blur
 	// (SPEC §10.5).
 	Prefix Action = "prefix"
+	// Default gives a key back to the host as if no data-keys bound it.
+	Default Action = "default"
 	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
 	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
 	// nothing with them.
@@ -75,7 +77,7 @@ var actions = map[Action]bool{
 	DeleteWordBackward: true, DeleteWordForward: true, DeleteToLineStart: true, DeleteToLineEnd: true,
 	LinePrevious: true, LineNext: true, PageUp: true, PageDown: true,
 	InputStart: true, InputEnd: true, SelectAll: true, Newline: true, Submit: true, Program: true, Prefix: true,
-	Copy: true, Cut: true, Paste: true, Undo: true, Redo: true,
+	Copy: true, Cut: true, Paste: true, Undo: true, Redo: true, Default: true,
 	ScrollUp: true, ScrollDown: true, ScrollLeft: true, ScrollRight: true,
 	ScrollPageUp: true, ScrollPageDown: true, ScrollHalfPageUp: true, ScrollHalfPageDown: true,
 	ScrollStart: true, ScrollEnd: true,
@@ -572,13 +574,16 @@ type Keymap struct {
 	written   map[string]string // by key: its last binding's key, mod kept
 	multiline bool
 	platform  Platform
+	field     bool    // Resolve makes a field's keymap, which may give tab
+	base      *Keymap // the default keymap, before data-keys
 }
 
 // ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it:
 // bindings separated by ASCII white space, each key=action, split at its
 // last '='. It drops the bindings a host ignores: a key that does not
-// parse, an action it does not know, and tab, shift+tab and escape. Mod
-// reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
+// parse, an action it does not know, shift+tab and escape, and tab except
+// when bound to program or default. Mod reads as the Platform's: on ctrl,
+// mod+a and ctrl+a are one key.
 func ParseKeymap(p Platform, value string) *Keymap {
 	m := &Keymap{platform: p}
 	bindings(value, func(k string, a Action) { m.Bind(k, a) })
@@ -599,7 +604,7 @@ func bindings(value string, f func(key string, a Action)) {
 // ignores the bindings ParseKeymap drops, and so does Bind.
 func (m *Keymap) Bind(name string, a Action) bool {
 	k, ok := m.platform.ReadKey(name)
-	if !ok || !actions[a] || k == "tab" || k == "shift+tab" || k == "escape" {
+	if !ok || !actions[a] || k == "tab" && a != Program && a != Default || k == "shift+tab" || k == "escape" {
 		return false
 	}
 	if m.actions == nil {
@@ -671,9 +676,10 @@ var (
 // multi-line field, then each data-keys value in turn, the root's first,
 // each overriding the bindings before it key by key. It leaves out each
 // binding to a scroll action where it stands, in its own value too: one
-// neither acts nor overrides an earlier binding of its key.
+// neither acts nor overrides an earlier binding of its key. A binding to
+// default gives the key back to the default keymap, or to typing.
 func Resolve(p Platform, multiline bool, values ...string) *Keymap {
-	m := &Keymap{multiline: multiline, platform: p}
+	m := &Keymap{multiline: multiline, platform: p, field: true}
 	for _, b := range defaultKeys {
 		m.Bind(b.key, b.action)
 	}
@@ -700,6 +706,10 @@ func Resolve(p Platform, multiline bool, values ...string) *Keymap {
 			m.Bind(k, a)
 		}
 	}
+	m.base = &Keymap{multiline: multiline, platform: p, actions: make(map[string]Action, len(m.actions))}
+	for k, a := range m.actions {
+		m.base.actions[k] = a
+	}
 	for _, v := range values {
 		bindings(v, func(k string, a Action) {
 			if !a.Scrolls() {
@@ -718,6 +728,9 @@ func (m *Keymap) bound(name string) (k myelinkey.Key, a Action, bound, ok bool) 
 	k, err := myelinkey.Parse(name)
 	if err != nil {
 		return "", "", false, false
+	}
+	if k == "shift+tab" || k == "escape" {
+		return k, "", false, true
 	}
 	a, bound = m.actions[string(k)]
 	if mods, value, kind := myelinkey.Split(k); !bound && mods&myelinkey.Shift != 0 && kind != myelinkey.Character {
@@ -739,7 +752,8 @@ func (m *Keymap) Binds(name string) bool {
 // Program reports whether the keymap gives a key to the program: binds it
 // to program or prefix, or, for a key with shift that is not a character
 // and that no binding names, binds it without shift (SPEC §10.2, keys for
-// the program).
+// the program). Tab is given only by a field's keymap, from Resolve;
+// shift+tab and escape keep their meaning. Default gives no key.
 //
 // Every focused element has a keymap, and outside a text field program and
 // the scroll actions are the only actions it gives. A host reads the
@@ -750,7 +764,10 @@ func (m *Keymap) Binds(name string) bool {
 // before the surface scrolls with it; a nearer binding of the key to
 // another action takes it back. In a field, Lookup says as much.
 func (m *Keymap) Program(name string) bool {
-	_, a, bound, _ := m.bound(name)
+	k, a, bound, _ := m.bound(name)
+	if k == "tab" && !m.field {
+		return false
+	}
 	return bound && (a == Program || a == Prefix)
 }
 
@@ -795,6 +812,12 @@ func (m *Keymap) Lookup(name string) Action {
 	}
 	if k == "tab" || k == "shift+tab" || k == "escape" {
 		return ""
+	}
+	if bound && a == Default {
+		if m.base != nil {
+			return m.base.Lookup(name)
+		}
+		bound = false
 	}
 	switch {
 	case bound && (a == Program || a == Prefix || a.Multiline() && !m.multiline):

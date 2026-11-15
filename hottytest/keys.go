@@ -23,7 +23,8 @@ import (
 // that name. A name that does not parse is no key; the program gets nothing
 // of it.
 //
-// tab and shift+tab move focus from the focused element to the next or the
+// tab, unless a text field gives it to the program with tab=program,
+// and shift+tab move focus from the focused element to the next or the
 // previous of the surface's focusable elements in tree order, those with a
 // negative tabindex and those in an inert subtree left out (an element
 // focused with a negative tabindex is where they start from); past the
@@ -88,6 +89,10 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	mods, name, kind := myelinkey.Split(k)
 	shiftOnly := mods&^myelinkey.Shift == 0
 	if name == "tab" && kind == myelinkey.Physical && shiftOnly {
+		if mods == 0 && s.focused != nil && textField(s.focused) &&
+			hotty.Resolve(hotty.PlatformOf(h.caps), s.focused.DataAtom == atom.Textarea || editingHost(s.focused), keymaps(s.focused)...).Program(key) {
+			return false
+		}
 		h.tab(s, mods != 0)
 		return true
 	}

@@ -1001,6 +1001,7 @@ type keymapVector struct {
 	Keys         []string           `json:"keys"`
 	Lookup       map[string]*string `json:"lookup"`
 	Selects      map[string]bool    `json:"selects"`
+	Binds        map[string]bool    `json:"binds"`
 	Program      map[string]bool    `json:"program"`
 	Prefix       map[string]bool    `json:"prefix"`
 	Scroll       map[string]*string `json:"scroll"`
@@ -1018,7 +1019,7 @@ func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
-			if v.Program != nil || v.Prefix != nil || v.Scroll != nil {
+			if v.Lookup == nil && (v.Program != nil || v.Prefix != nil || v.Scroll != nil) {
 				m := ParseKeymap(Platform(v.Platform), strings.Join(v.Keys, " "))
 				for k, want := range v.Program {
 					if got := m.Program(k); got != want {
@@ -1063,6 +1064,16 @@ func TestKeymapVectors(t *testing.T) {
 				}
 				if got := m.Lookup(k); got != w {
 					t.Errorf("Lookup(%q) = %q, want %q", k, got, w)
+				}
+			}
+			for k, want := range v.Program {
+				if got := m.Program(k); got != want {
+					t.Errorf("Program(%q) = %v, want %v", k, got, want)
+				}
+			}
+			for k, want := range v.Binds {
+				if got := m.Binds(k); got != want {
+					t.Errorf("Binds(%q) = %v, want %v", k, got, want)
 				}
 			}
 			for k, want := range v.Selects {

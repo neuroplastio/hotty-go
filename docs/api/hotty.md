@@ -836,7 +836,7 @@ type Action string
 
 Action is what a text field does with a key (SPEC §10.2): a keymap binds keys to actions, and Lookup says which one a key does.
 
-<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="SelectAll"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Prefix"></a><a id="Copy"></a><a id="Cut"></a><a id="Paste"></a><a id="Undo"></a><a id="Redo"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
+<a id="CharBackward"></a><a id="CharForward"></a><a id="WordBackward"></a><a id="WordForward"></a><a id="LineStart"></a><a id="LineEnd"></a><a id="DeleteCharBackward"></a><a id="DeleteCharForward"></a><a id="DeleteWordBackward"></a><a id="DeleteWordForward"></a><a id="DeleteToLineStart"></a><a id="DeleteToLineEnd"></a><a id="LinePrevious"></a><a id="LineNext"></a><a id="PageUp"></a><a id="PageDown"></a><a id="InputStart"></a><a id="InputEnd"></a><a id="SelectAll"></a><a id="Newline"></a><a id="Submit"></a><a id="Program"></a><a id="Prefix"></a><a id="Default"></a><a id="Copy"></a><a id="Cut"></a><a id="Paste"></a><a id="Undo"></a><a id="Redo"></a><a id="ScrollUp"></a><a id="ScrollDown"></a><a id="ScrollLeft"></a><a id="ScrollRight"></a><a id="ScrollPageUp"></a><a id="ScrollPageDown"></a><a id="ScrollHalfPageUp"></a><a id="ScrollHalfPageDown"></a><a id="ScrollStart"></a><a id="ScrollEnd"></a><a id="Insert"></a>
 
 ```go
 const (
@@ -867,6 +867,8 @@ const (
 	// after it reaches the program too, until it sends a=focus or a=blur
 	// (SPEC §10.5).
 	Prefix Action = "prefix"
+	// Default gives a key back to the host as if no data-keys bound it.
+	Default Action = "default"
 	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
 	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
 	// nothing with them.
@@ -1542,7 +1544,7 @@ Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap read
 func ParseKeymap(p Platform, value string) *Keymap
 ```
 
-ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, and tab, shift+tab and escape. Mod reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
+ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, shift+tab and escape, and tab except when bound to program or default. Mod reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
 
 ### <a id="Resolve"></a>func Resolve
 
@@ -1550,7 +1552,7 @@ ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings s
 func Resolve(p Platform, multiline bool, values ...string) *Keymap
 ```
 
-Resolve makes a field's keymap (SPEC §10.2): the default keymap for the Platform's Mod, with its edit shortcuts, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key.
+Resolve makes a field's keymap (SPEC §10.2): the default keymap for the Platform's Mod, with its edit shortcuts, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key. A binding to default gives the key back to the default keymap, or to typing.
 
 ### <a id="Keymap.Bind"></a>func (*Keymap) Bind
 
@@ -1598,7 +1600,7 @@ Prefix reports whether the keymap binds a key to prefix, or, for a key with shif
 func (m *Keymap) Program(name string) bool
 ```
 
-Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift (SPEC §10.2, keys for the program).
+Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift (SPEC §10.2, keys for the program). Tab is given only by a field's keymap, from Resolve; shift+tab and escape keep their meaning. Default gives no key.
 
 Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds to program or prefix to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
 
