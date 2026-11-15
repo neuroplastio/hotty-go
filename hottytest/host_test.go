@@ -1780,3 +1780,37 @@ func TestSecondaryPressAltByVersion(t *testing.T) {
 		}
 	}
 }
+
+// A hit has query quiet defaults, needs no placement, and has no target
+// without layout. With no terminal it is never kept (SPEC §3.6, §9.7).
+func TestHit(t *testing.T) {
+	h := New(t, Lenient())
+	send(h, hotty.Doc("x", `<div id=a data-on=drop>a</div>`))
+	for _, q := range []hotty.Quiet{hotty.ReplyAlways, hotty.ReplyOnError, hotty.NoReply} {
+		send(h, hotty.Hit("x", -1, -2, hotty.Q(q)))
+		r := h.sentR()
+		if q == hotty.ReplyAlways {
+			if len(r) != 1 || !r[0].OK || r[0].Hit == nil || *r[0].Hit != (hotty.HitCell{}) {
+				t.Fatalf("hit: %+v", r)
+			}
+		} else if len(r) != 0 {
+			t.Fatalf("quiet hit: %+v", r)
+		}
+	}
+	for _, c := range []string{"", "+1", "--1", " 1", "1e2"} {
+		send(h, hotty.Encode(hotty.Control{{K: "a", V: "hit"}, {K: "s", V: "x"}, {K: "c", V: c}, {K: "r", V: "0"}}, nil))
+		expect(t, sent(h), "err re=hit s=x EINVAL")
+	}
+	h.DetachTerminal()
+	for _, q := range []hotty.Quiet{hotty.ReplyAlways, hotty.ReplyOnError, hotty.NoReply} {
+		send(h, hotty.Hit("x", 0, 0, hotty.N(7), hotty.Q(q)))
+		r := h.sentR()
+		if len(r) != 1 || r[0].Code != hotty.ENOTERM || r[0].N != 7 {
+			t.Fatalf("hit without terminal, q=%d: %+v", q, r)
+		}
+	}
+	h.AttachTerminal()
+	if r := h.sentR(); len(r) != 0 {
+		t.Fatalf("hit was kept: %+v", r)
+	}
+}

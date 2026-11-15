@@ -453,6 +453,9 @@ type Reply struct {
 	// Caps are the capabilities an ok reply to a query carries: nil when
 	// it carries none, or they do not decode.
 	Caps *Caps
+	// Hit is what the cell holds in an ok reply to hit (SPEC §9.7): nil
+	// for any other reply, or when the body does not decode.
+	Hit *HitCell
 	// Message is the reply as it came.
 	Message Message
 }
@@ -474,6 +477,11 @@ func ReplyOf(m Message) (Reply, bool) {
 		var e errorBody
 		if decodeBody(m.Payload, &e) {
 			r.Code, r.Detail = e.Code, e.Detail
+		}
+	case r.Re == "hit":
+		var hit HitCell
+		if decodeBody(m.Payload, &hit) {
+			r.Hit = &hit
 		}
 	case r.Re == "q" && len(m.Payload) > 0:
 		if caps, ok := CapsOf(m.Payload); ok {

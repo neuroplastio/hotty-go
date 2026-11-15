@@ -168,6 +168,8 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return Reveal(str("surface"), str("target"), str("where"), opts...)
 	case "scroll":
 		return ScrollBy(str("surface"), str("target"), Action(str("action")), opts...)
+	case "hit":
+		return Hit(str("surface"), num("c"), num("r"), opts...)
 	case "res":
 		return Res(str("id"), str("mime"), []byte(str("data")), opts...)
 	case "del_res":
@@ -541,8 +543,13 @@ func replyView(r Reply) map[string]any {
 	if r.HasOp {
 		op = r.Op
 	}
+	var hit any
+	if r.Hit != nil {
+		hit = map[string]any{"t": r.Hit.T, "tx": r.Hit.TX, "ty": r.Hit.TY}
+	}
 	return map[string]any{
-		"ok": r.OK, "re": r.Re, "n": r.N, "surface": r.Surface,
+		"hit": hit,
+		"ok":  r.OK, "re": r.Re, "n": r.N, "surface": r.Surface,
 		"cols": r.Cols, "rows": r.Rows, "code": r.Code, "detail": r.Detail, "op": op,
 	}
 }

@@ -158,6 +158,7 @@ func (h *Host) BecomeHost() {
 // it keeps unchecked: answered ENOTERM where the program asks for every
 // answer (q=0), and not at all with q=1. Such a placement moves the cursor
 // as one row tall would, the least it can be, and no placement hears fit.
+// A hit is answered ENOTERM whatever its quiet level, and is never kept.
 func NoTerminal() Option { return func(h *Host) { h.noTerm = true } }
 
 // AttachTerminal attaches a terminal to the pane of a host made with
@@ -613,9 +614,13 @@ func (h *Host) command(m hotty.Message) {
 	q, ok := hotty.Lookup(m.Control, "q")
 	if !ok {
 		q = "1"
-		if hotty.Has(m.Control, "n") || a == "q" {
+		if hotty.Has(m.Control, "n") || a == "q" || a == "hit" {
 			q = "0"
 		}
+	}
+	if a == "hit" && code == hotty.ENOTERM {
+		h.send(hotty.ReplyErr(hotty.Get(m.Control, "n"), hotty.Get(m.Control, "s"), a, code, detail))
+		return
 	}
 	if h.noTerm && code != hotty.EINVAL && code != hotty.ENOENT && code != hotty.EQUOTA && code != hotty.EDETACHED &&
 		(code == hotty.ENOTERM || slices.Contains([]string{"doc", "delta", "field", "focus", "blur"}, a)) {
@@ -636,6 +641,9 @@ func (h *Host) command(m hotty.Message) {
 		h.send(hotty.ReplyDeltaErr(n, s, h.faultOp, code, detail))
 	case code != "":
 		h.send(hotty.ReplyErr(n, s, a, code, detail))
+	case a == "hit":
+		// No layout, so no target; an empty msgpack map still decodes.
+		h.send(hotty.ReplyOK(n, s, a, nil, []byte{0x80}))
 	case a == "q":
 		h.heard, h.queried = h.caps, true
 		h.version, _ = hotty.SharedVersion(m.Control)
@@ -711,7 +719,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		return "", "", nil
 	}
 	switch a {
-	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur", "field":
+	case "doc", "place", "hide", "delta", "del", "detach", "focus", "blur", "field", "hit":
 	default:
 		return hotty.EINVAL, "unknown action " + a, nil
 	}
@@ -751,6 +759,19 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		return hotty.ENOENT, "no surface " + name, nil
 	}
 	switch a {
+	case "hit":
+		for _, key := range []string{"c", "r"} {
+			v := strings.TrimPrefix(hotty.Get(m.Control, key), "-")
+			if v == "" || strings.ContainsFunc(v, func(r rune) bool { return r < '0' || r > '9' }) {
+				return hotty.EINVAL, "bad " + key, nil
+			}
+		}
+		if s.detached {
+			return hotty.EDETACHED, name, nil
+		}
+		if h.noTerm {
+			return hotty.ENOTERM, "", nil
+		}
 	case "place":
 		return h.place(s, m)
 	case "hide":

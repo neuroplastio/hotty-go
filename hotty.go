@@ -201,10 +201,11 @@ func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string 
 	if numbered {
 		set(&ctl, "n", strconv.Itoa(n))
 	}
-	// q goes out only where the wire does not say it: 0 with n, else 1
+	// q goes out only where the wire does not say it: 0 with n or for a
+	// query (q or hit), else 1
 	// (SPEC §3.5).
 	implied := int(ReplyOnError)
-	if numbered {
+	if numbered || Get(ctl, "a") == "q" || Get(ctl, "a") == "hit" {
 		implied = int(ReplyAlways)
 	}
 	if q != implied {

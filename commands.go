@@ -21,6 +21,14 @@ func Query(n int, opts ...QueryOption) string {
 	return Encode(ctl, nil) + "\x1b[c"
 }
 
+// Hit asks which element a drag would name at the centre of cell (c, r)
+// of the surface, counted from its top left (SPEC §9.7). A cell may be
+// negative, above or to its left. It is a query: answered by default,
+// with or without N; Q asks for another level. The reply carries Hit.
+func Hit(surface string, c, r int, opts ...ReplyOption) string {
+	return command(Control{{"a", "hit"}, {"s", surface}, {"c", strconv.Itoa(c)}, {"r", strconv.Itoa(r)}}, nil, ReplyAlways, opts)
+}
+
 // QueryOption is an option of Query: Late.
 type QueryOption interface{ query(*Control) }
 

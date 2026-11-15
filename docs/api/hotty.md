@@ -53,6 +53,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Has(c Control, k string) bool`](#Has)
 - [`func HasFeature(c Caps, feature string) bool`](#HasFeature)
 - [`func Hide(surface string, opts ...ReplyOption) string`](#Hide)
+- [`func Hit(surface string, c, r int, opts ...ReplyOption) string`](#Hit)
 - [`func KeyText(key string) (text string, ok bool)`](#KeyText)
 - [`func Light(c Caps) bool`](#Light)
 - [`func Lookup(c Control, k string) (string, bool)`](#Lookup)
@@ -132,6 +133,10 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (z *FormField) DecodeMsg(dc *msgp.Reader) (err error)`](#FormField.DecodeMsg)
   - [`func (z FormField) EncodeMsg(en *msgp.Writer) (err error)`](#FormField.EncodeMsg)
   - [`func (z FormField) Msgsize() (s int)`](#FormField.Msgsize)
+- [`type HitCell`](#HitCell)
+  - [`func (z *HitCell) DecodeMsg(dc *msgp.Reader) (err error)`](#HitCell.DecodeMsg)
+  - [`func (z *HitCell) EncodeMsg(en *msgp.Writer) (err error)`](#HitCell.EncodeMsg)
+  - [`func (z *HitCell) Msgsize() (s int)`](#HitCell.Msgsize)
 - [`type Hover`](#Hover)
 - [`type KV`](#KV)
 - [`type Keymap`](#Keymap)
@@ -551,6 +556,14 @@ func Hide(surface string, opts ...ReplyOption) string
 ```
 
 Hide removes a surface's placement and keeps its document, to place it again without sending it (SPEC §5.4). Deltas still apply to it.
+
+## <a id="Hit"></a>func Hit
+
+```go
+func Hit(surface string, c, r int, opts ...ReplyOption) string
+```
+
+Hit asks which element a drag would name at the centre of cell (c, r) of the surface, counted from its top left (SPEC §9.7). A cell may be negative, above or to its left. It is a query: answered by default, with or without N; Q asks for another level. The reply carries Hit.
 
 ## <a id="KeyText"></a>func KeyText
 
@@ -1503,6 +1516,44 @@ func (z FormField) Msgsize() (s int)
 
 Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 
+## <a id="HitCell"></a>type HitCell
+
+```go
+type HitCell struct {
+	// T is the element's id, empty when no element is there.
+	T string `msg:"t,omitempty"`
+	// TX and TY are the drop target's steps, nil where it has none.
+	TX *int `msg:"tx,omitempty"`
+	TY *int `msg:"ty,omitempty"`
+}
+```
+
+HitCell is what a drag would name at the centre of a surface's cell (SPEC §9.7), carried by Reply.Hit.
+
+### <a id="HitCell.DecodeMsg"></a>func (*HitCell) DecodeMsg
+
+```go
+func (z *HitCell) DecodeMsg(dc *msgp.Reader) (err error)
+```
+
+DecodeMsg implements msgp.Decodable
+
+### <a id="HitCell.EncodeMsg"></a>func (*HitCell) EncodeMsg
+
+```go
+func (z *HitCell) EncodeMsg(en *msgp.Writer) (err error)
+```
+
+EncodeMsg implements msgp.Encodable
+
+### <a id="HitCell.Msgsize"></a>func (*HitCell) Msgsize
+
+```go
+func (z *HitCell) Msgsize() (s int)
+```
+
+Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+
 ## <a id="Hover"></a>type Hover
 
 ```go
@@ -2099,6 +2150,9 @@ type Reply struct {
 	// Caps are the capabilities an ok reply to a query carries: nil when
 	// it carries none, or they do not decode.
 	Caps *Caps
+	// Hit is what the cell holds in an ok reply to hit (SPEC §9.7): nil
+	// for any other reply, or when the body does not decode.
+	Hit *HitCell
 	// Message is the reply as it came.
 	Message Message
 }

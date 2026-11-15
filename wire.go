@@ -247,3 +247,13 @@ type Op struct {
 type deltaBody struct {
 	Ops []Op `msg:"ops"`
 }
+
+// HitCell is what a drag would name at the centre of a surface's cell
+// (SPEC §9.7), carried by Reply.Hit.
+type HitCell struct {
+	// T is the element's id, empty when no element is there.
+	T string `msg:"t,omitempty"`
+	// TX and TY are the drop target's steps, nil where it has none.
+	TX *int `msg:"tx,omitempty"`
+	TY *int `msg:"ty,omitempty"`
+}

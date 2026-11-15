@@ -115,6 +115,7 @@ func TestEncodedBodiesWellFormed(t *testing.T) {
 	}{
 		&Caps{}, &Caps{V: Version, Features: []string{FeatureHover}, CellCSS: Size{W: 9, H: 18}, Scale: 2,
 			Limits: map[string]int{"surfaces": 8}, Net: map[string][]string{"img-src": nil}},
+		&HitCell{}, &HitCell{T: "row", TX: &one, TY: &one},
 		&errorBody{}, &errorBody{Code: EINVAL, Detail: "x"},
 		&clickDetail{}, &clickDetail{Value: "v", Href: &href, URL: "u", Area: area, Mods: ModShift},
 		&pressDetail{}, &pressDetail{Area: area, Mods: ModAlt},

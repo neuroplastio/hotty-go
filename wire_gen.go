@@ -736,6 +736,178 @@ func (z FormField) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *HitCell) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "t":
+			z.T, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "T")
+				return
+			}
+		case "tx":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+				z.TX = nil
+			} else {
+				if z.TX == nil {
+					z.TX = new(int)
+				}
+				*z.TX, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		case "ty":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+				z.TY = nil
+			} else {
+				if z.TY == nil {
+					z.TY = new(int)
+				}
+				*z.TY, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *HitCell) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(3)
+	var zb0001Mask uint8 /* 3 bits */
+	_ = zb0001Mask
+	if z.T == "" {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	if z.TX == nil {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.TY == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "t"
+			err = en.Append(0xa1, 0x74)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.T)
+			if err != nil {
+				err = msgp.WrapError(err, "T")
+				return
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "tx"
+			err = en.Append(0xa2, 0x74, 0x78)
+			if err != nil {
+				return
+			}
+			if z.TX == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TX)
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "ty"
+			err = en.Append(0xa2, 0x74, 0x79)
+			if err != nil {
+				return
+			}
+			if z.TY == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TY)
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *HitCell) Msgsize() (s int) {
+	s = 1 + 2 + msgp.StringPrefixSize + len(z.T) + 3
+	if z.TX == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.TY == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *MenuItem) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field

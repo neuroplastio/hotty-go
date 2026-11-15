@@ -508,7 +508,8 @@ func TestConformanceVectors(t *testing.T) {
 						got, _ := fromMsgpack(r.Message.Payload).(map[string]any)
 						want, _ := fromJSON(types.Body).(map[string]any)
 						for k, w := range want {
-							if g, ok := got[k]; !ok || !reflect.DeepEqual(g, w) {
+							g, ok := got[k]
+							if w == nil && ok || w != nil && (!ok || !reflect.DeepEqual(g, w)) {
 								t.Errorf("step %d: body %s = %#v, want %#v", i, k, got[k], w)
 							}
 						}
