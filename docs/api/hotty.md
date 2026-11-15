@@ -74,6 +74,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`func Res(id, mime string, data []byte, opts ...ReplyOption) string`](#Res)
 - [`func Reveal(surface, target, where string, opts ...ReplyOption) string`](#Reveal)
 - [`func Sanitize(v string) string`](#Sanitize)
+- [`func ScrollBy(surface, target string, action Action, opts ...ReplyOption) string`](#ScrollBy)
 - [`func SetAttr(surface, target, name, value string, opts ...ReplyOption) string`](#SetAttr)
 - [`func SetField(surface, target string, change FieldChange, opts ...ReplyOption) string`](#SetField)
 - [`func SetText(surface, target, text string, opts ...ReplyOption) string`](#SetText)
@@ -173,6 +174,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func OpRemove(target string) Op`](#OpRemove)
   - [`func OpReplace(target, html string) Op`](#OpReplace)
   - [`func OpReveal(target, where string) Op`](#OpReveal)
+  - [`func OpScroll(target string, action Action) Op`](#OpScroll)
   - [`func OpText(target, text string) Op`](#OpText)
   - [`func OpUnattr(target, name string) Op`](#OpUnattr)
   - [`func OpVar(target, name, value string) Op`](#OpVar)
@@ -717,6 +719,14 @@ func Sanitize(v string) string
 ```
 
 Sanitize makes v a control value (SPEC §3.2): each character a value may not hold becomes '\_', one for each character, not each byte, and one for each byte that is not UTF-8. Above 0x7e is not merely untidy: UTF-8 can hold 0x9c, which a terminal that reads C1 controls takes for ST, ending the sequence early.
+
+## <a id="ScrollBy"></a>func ScrollBy
+
+```go
+func ScrollBy(surface, target string, action Action, opts ...ReplyOption) string
+```
+
+ScrollBy scrolls a surface as a key bound to action would, from the target outward (empty: the root), by one of the host's steps (SPEC §6.1). A count is as many OpScroll ops in one Delta. It moves no focus.
 
 ## <a id="SetAttr"></a>func SetAttr
 
@@ -1776,7 +1786,7 @@ type Op struct {
 	// Op names what it does: "morph", "text", ….
 	Op string `msg:"op"`
 	// Target is the id of the element, as the document has it; empty for
-	// a morph of the whole tree, and sent only when not.
+	// a morph of the whole tree or a scroll from the root; sent only when not.
 	Target string `msg:"t,omitempty"`
 	// Key is the name of the attribute or the custom property, for attr,
 	// unattr and var.
@@ -1794,7 +1804,7 @@ Op is one change of a delta (SPEC §6.1): what to do, to which element, with whi
 func DeltaOf(m Message) ([]Op, error)
 ```
 
-DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay does, checking the whole body first: it is an \*Error with Code EINVAL, and with HasOp the index of the first op at fault, when the body does not decode (SPEC §3.3) or has no ops, an op is not a map, holds op, t, k or v as anything but a str, or names an op there is none of, an op lacks the t or k it needs (an empty one is none), or a reveal has a value other than start or end. A value an op does not take is ignored, and so is a key this package does not know.
+DeltaOf reads a delta command's ops (SPEC §6.1), as a host or a relay does, checking the whole body first: it is an \*Error with Code EINVAL, and with HasOp the index of the first op at fault, when the body does not decode (SPEC §3.3) or has no ops, an op is not a map, holds op, t, k or v as anything but a str, or names an op there is none of, an op lacks the t or k it needs (an empty one is none), a reveal has a value other than start or end, or a scroll has no scroll action. A value an op does not take is ignored, and so is a key this package does not know.
 
 ### <a id="OpAfter"></a>func OpAfter
 
@@ -1875,6 +1885,14 @@ func OpReveal(target, where string) Op
 ```
 
 OpReveal scrolls an element into view (SPEC §6.1): where is RevealStart, RevealEnd or RevealNearest, which has the op no value.
+
+### <a id="OpScroll"></a>func OpScroll
+
+```go
+func OpScroll(target string, action Action) Op
+```
+
+OpScroll scrolls as a key bound to action would, from the target outward (empty: the root), by one of the host's steps (SPEC §6.1, §10.2).
 
 ### <a id="OpText"></a>func OpText
 

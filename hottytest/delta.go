@@ -24,6 +24,7 @@ const (
 	opText    = "text"
 	opVar     = "var"
 	opReveal  = "reveal"
+	opScroll  = "scroll"
 )
 
 // delta applies one op of a delta to the surface's document (SPEC §6.1),
@@ -36,6 +37,9 @@ func (s *Surface) delta(o hotty.Op) (code, detail string) {
 	}
 	if op == opMorph && target == "" {
 		return s.morphByIDs(payload)
+	}
+	if op == opScroll && target == "" {
+		return "", "" // Nothing is laid out, so the root cannot scroll.
 	}
 	t := s.byID(target)
 	if t == nil {
@@ -105,7 +109,7 @@ func (s *Surface) delta(o hotty.Op) (code, detail string) {
 	case opVar:
 		style, _ := attr(t, "style")
 		setAttr(t, "style", setStyleProp(style, varName(key), payload))
-	case opReveal:
+	case opReveal, opScroll:
 		// Nothing is laid out, so nothing scrolls (SPEC §6.1).
 	default:
 		return hotty.EINVAL, "unknown op " + op

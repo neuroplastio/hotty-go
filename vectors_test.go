@@ -166,6 +166,8 @@ func build(t *testing.T, name string, args, options map[string]any, order []stri
 		return MorphTo(str("surface"), str("target"), str("html"), opts...)
 	case "reveal":
 		return Reveal(str("surface"), str("target"), str("where"), opts...)
+	case "scroll":
+		return ScrollBy(str("surface"), str("target"), Action(str("action")), opts...)
 	case "res":
 		return Res(str("id"), str("mime"), []byte(str("data")), opts...)
 	case "del_res":

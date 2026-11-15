@@ -234,7 +234,7 @@ type Op struct {
 	// Op names what it does: "morph", "text", ….
 	Op string `msg:"op"`
 	// Target is the id of the element, as the document has it; empty for
-	// a morph of the whole tree, and sent only when not.
+	// a morph of the whole tree or a scroll from the root; sent only when not.
 	Target string `msg:"t,omitempty"`
 	// Key is the name of the attribute or the custom property, for attr,
 	// unattr and var.

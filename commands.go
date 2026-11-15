@@ -281,9 +281,9 @@ func CursorBelow(rows int) string {
 // and with HasOp the index of the first op at fault, when the body does not
 // decode (SPEC §3.3) or has no ops, an op is not a map, holds op, t, k or v
 // as anything but a str, or names an op there is none of, an op lacks the
-// t or k it needs (an empty one is none), or a reveal has a value other
-// than start or end. A value an op does not take is ignored, and so is a
-// key this package does not know.
+// t or k it needs (an empty one is none), a reveal has a value other
+// than start or end, or a scroll has no scroll action. A value an op does
+// not take is ignored, and so is a key this package does not know.
 func DeltaOf(m Message) ([]Op, error) {
 	fail := func(detail string, at int) ([]Op, error) {
 		e := &Error{Code: EINVAL, Detail: detail, Re: Get(m.Control, "a"), Surface: Get(m.Control, "s")}
@@ -313,12 +313,14 @@ func DeltaOf(m Message) ([]Op, error) {
 		switch {
 		case !validOps[op.Op]:
 			return fail("unknown op "+op.Op, i)
-		case op.Target == "" && op.Op != opMorph:
+		case op.Target == "" && op.Op != opMorph && op.Op != opScroll:
 			return fail("missing t", i)
 		case op.Key == "" && (op.Op == opAttr || op.Op == opUnattr || op.Op == opVar):
 			return fail("missing k", i)
 		case op.Op == opReveal && op.Value != nil && v != RevealStart && v != RevealEnd:
 			return fail("reveal "+v, i)
+		case op.Op == opScroll && !Action(v).Scrolls():
+			return fail("scroll "+v, i)
 		}
 	}
 	return d.Ops, nil
@@ -525,7 +527,7 @@ func touchFields(body []byte) bool {
 // validOps are the delta ops there are.
 var validOps = map[string]bool{
 	opMorph: true, opInner: true, opReplace: true, opAppend: true, opPrepend: true, opBefore: true,
-	opAfter: true, opRemove: true, opAttr: true, opUnattr: true, opText: true, opVar: true, opReveal: true,
+	opAfter: true, opRemove: true, opAttr: true, opUnattr: true, opText: true, opVar: true, opReveal: true, opScroll: true,
 }
 
 // opAtFault is the index of the first element of a body's ops that is not
@@ -609,6 +611,7 @@ const (
 	opText    = "text"    // replace the target's children with one text node
 	opVar     = "var"     // set the custom property --key on the target
 	opReveal  = "reveal"  // scroll the target into view; the value says where
+	opScroll  = "scroll"  // scroll from the target by one step of the action
 )
 
 // valued is an op with a value, present even when empty.
@@ -663,6 +666,10 @@ func OpReveal(target, where string) Op {
 	}
 	return valued(opReveal, target, "", where)
 }
+
+// OpScroll scrolls as a key bound to action would, from the target outward
+// (empty: the root), by one of the host's steps (SPEC §6.1, §10.2).
+func OpScroll(target string, action Action) Op { return valued(opScroll, target, "", string(action)) }
 
 // Delta changes one surface's document (SPEC §6.1): the ops, in the order
 // they apply, which the host shows as one. A program that changes a
@@ -720,6 +727,13 @@ const (
 // report it after (EventView).
 func Reveal(surface, target, where string, opts ...ReplyOption) string {
 	return Delta(surface, []Op{OpReveal(target, where)}, opts...)
+}
+
+// ScrollBy scrolls a surface as a key bound to action would, from the
+// target outward (empty: the root), by one of the host's steps (SPEC §6.1).
+// A count is as many OpScroll ops in one Delta. It moves no focus.
+func ScrollBy(surface, target string, action Action, opts ...ReplyOption) string {
+	return Delta(surface, []Op{OpScroll(target, action)}, opts...)
 }
 
 // FieldChange is what an a=field changes in a control (SPEC §6.4), made
