@@ -6,29 +6,26 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks hotty 0.7 and 0.6 (`hotty.Versions`, SPEC §4, §15): a host of either
-is a host to it, and `Caps.V` says which. On a 0.6 host the keys open its
-menus, as no secondary press comes (SDK.md §4.7). Enter commits a text field, in a form or not, and a
-placement can be a backdrop, drawn under the terminal's text
-(`Placement.Backdrop`, `b=1`, SPEC §5.2) on a host that lists the feature
-(`hotty.FeatureBackdrop`). A program changes a control the user may be
-changing with `hotty.SetField` (`a=field`, SPEC §6.4), but only if the user
-has not changed it since the program last heard. A key is named as [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
-name it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), a host's replies and
-events carry msgpack bodies (SPEC §3.3), and its query lists the versions it
-speaks (`a=q:n=1:v=0.6,0.7`, SPEC §4). A terminal of no version it lists is no
-host to it, and the program draws in cells. A program written for 0.5 ports
-as hotty's
-[CHANGES.md](https://github.com/neuroplastio/hotty/blob/v0.6.0/CHANGES.md)
-says: it hears `change` when the user presses Enter in a text `input` they
-changed, in a form or not, and before `submit` in a form (SPEC §9); it sets
-`Backdrop` only where `hotty.HasFeature(caps, hotty.FeatureBackdrop)`, since
-a host without the feature draws the surface over the text, and in every
-placement, since it belongs to the placement as `Z` does; it does not focus
-a backdrop, and hears `blur` when it places a focused surface as one.
-`hottytest` commits a field on Enter as a host does, and has no backdrop:
-it keeps a placement's `Backdrop` (`Surface.Placement`) and places the
-surface above the cells.
+It speaks hotty 0.8 and 0.7 (`hotty.Versions`, SPEC §4, §15): a host of
+either is a host to it, and `Caps.V` says which. Its query lists both
+(`a=q:n=1:v=0.7,0.8`, SPEC §4); a terminal of no version it lists is no host
+to it, and the program draws in cells. A key is named as
+[myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
+names it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), and a host's
+replies and events carry msgpack bodies (SPEC §3.3).
+
+On a 0.8 host a program scrolls by the host's steps with `hotty.ScrollBy`
+and `hotty.OpScroll` (SPEC §6.1, §10.2), and asks which element a cell holds
+with `hotty.Hit`, whose reply carries `Reply.Hit` (SPEC §9.7). A text field
+may give Tab to the program with `tab=program`, and `default` in a keymap
+gives a key back to the host (SPEC §10.2). A program that meets a 0.7 host
+sends no scroll op or hit: that host refuses them with `EINVAL`, and
+ignores the new keymap bindings (SDK.md §3.8). It scrolls by focus and
+`hotty.Reveal` there, and keeps Tab for focus.
+
+`hottytest` takes scroll ops and hit queries, and the same keymaps, as a
+host does. It lays nothing out, so a scroll moves nothing and a hit names
+no element (SDK.md §4.4).
 
 The SDK:
 
@@ -89,11 +86,11 @@ of what it imports:
 go get neuroplast.io/hotty-go neuroplast.io/hotty-go/hottyterm
 ```
 
-0.7.x speaks hotty 0.7, and 0.6 too; the patch number is this repository's own.
+0.8.x speaks hotty 0.8, and 0.7 too; the patch number is this repository's own.
 
 Up to v0.7.0 the modules were `github.com/neuroplastio/hotty-go/...`; from
 v0.7.1 they are `neuroplast.io/hotty-go/...`, so upgrading changes the import
-paths. The API is otherwise v0.7.0's.
+paths. The 0.8 additions above build on that API.
 
 ## Packages
 

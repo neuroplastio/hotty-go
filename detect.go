@@ -51,12 +51,13 @@ const (
 //
 // The terminal is a host when it answers the query with capabilities that
 // decode and name a version the query listed (Versions, SPEC §4): Caps.V
-// is the one it met, 0.6 or 0.7, which the host speaks from then on and
-// which the program reads when it must tell them apart. A 0.6 host sends
-// no secondary press (SDK.md §4.7). Any other answer, an error (EVERSION, from a
-// host that speaks other versions) or capabilities this package cannot
-// read (a 0.1 host's JSON), makes the State Text at once: a host, but not
-// one this program can use (SPEC §4).
+// is the one it met, 0.7 or 0.8, which the host speaks from then on and
+// which the program reads when it must tell them apart. A 0.7 host has no
+// scroll op or hit, and ignores tab=program and default (SDK.md §3.8). Any
+// other answer, an error (EVERSION, from a host that speaks other
+// versions) or capabilities this package cannot read (a 0.1 host's JSON),
+// makes the State Text at once: a host, but not one this program can use
+// (SPEC §4).
 //
 // Every DA1 answer from the start until Done is detection's, and the
 // program swallows it: it answers the query's fence, or a question asked

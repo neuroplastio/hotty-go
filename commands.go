@@ -9,7 +9,7 @@ import (
 
 // Query asks whether the terminal is a hotty host that speaks a version in
 // Versions, fenced by Primary Device Attributes (SPEC §4): it lists them,
-// v=0.6,0.7, and a host replies to the query, numbered n, before the DA1
+// v=0.7,0.8, and a host replies to the query, numbered n, before the DA1
 // answer every terminal sends, in the highest version they share or with
 // EVERSION. A DA1 answer with no reply before it means there is no
 // host. Late asks for a late answer as well.

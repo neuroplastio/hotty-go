@@ -93,21 +93,21 @@ func TestHostReplies(t *testing.T) {
 	}
 	// The capabilities go as they came, fields this package does not know
 	// included, and uncompressed however long.
-	raw := body(`{"v":"0.6","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
+	raw := body(`{"v":"0.7","future":{"x":1},"host":"` + strings.Repeat("h", 400) + `"}`)
 	enc := ReplyCaps("1", Caps{Raw: raw})
 	if strings.Contains(enc, "o=z") {
 		t.Error("a caps reply compressed")
 	}
 	r, _ = ReplyOf(decodeOne(t, enc))
-	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.6" {
+	if caps := r.Caps; caps == nil || !bytes.Equal(caps.Raw, raw) || caps.V != "0.7" {
 		t.Errorf("ReplyCaps: %+v", caps)
 	}
 	// Written, Caps has only what it has.
-	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.6", Host: "h"})))
-	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e36a4686f7374a168" { // {"v":"0.6","host":"h"}
+	r, _ = ReplyOf(decodeOne(t, ReplyCaps("2", Caps{V: "0.7", Host: "h"})))
+	if fmt.Sprintf("%x", r.Message.Payload) != "82a176a3302e37a4686f7374a168" { // {"v":"0.7","host":"h"}
 		t.Errorf("written: %x", r.Message.Payload)
 	}
-	if caps, ok := CapsOf(raw); !ok || caps.V != "0.6" || !bytes.Equal(caps.Raw, raw) {
+	if caps, ok := CapsOf(raw); !ok || caps.V != "0.7" || !bytes.Equal(caps.Raw, raw) {
 		t.Errorf("CapsOf: %+v", caps)
 	}
 	if _, ok := CapsOf(body(`{"v":2}`)); ok {
@@ -116,14 +116,14 @@ func TestHostReplies(t *testing.T) {
 }
 
 func TestReplyQuery(t *testing.T) {
-	if got := Versions(); !slices.Equal(got, []string{"0.6", "0.7"}) || got[len(got)-1] != Version {
+	if got := Versions(); !slices.Equal(got, []string{"0.7", "0.8"}) || got[len(got)-1] != Version {
 		t.Errorf("Versions = %v, Version %q", got, Version)
 	}
 	caps := Caps{V: Version, Host: "h"}
 	for v, want := range map[string]string{
-		"0.6,0.7": "0.7", "0.7,0.6": "0.7", "0.6": "0.6", "0.7": "0.7",
-		"0.5,0.6": "0.6", "99.0,0.6": "0.6", "0.7,99.0": "0.7", "0.5,0.7": "0.7",
-		"": "", "0.5": "", "99.0": "", "0.60": "", "00.6": "", "0.6.0": "", "0.8": "",
+		"0.7,0.8": "0.8", "0.8,0.7": "0.8", "0.7": "0.7", "0.8": "0.8",
+		"0.5,0.7": "0.7", "99.0,0.7": "0.7", "0.8,99.0": "0.8", "0.5,0.8": "0.8",
+		"": "", "0.5": "", "0.6": "", "99.0": "", "0.70": "", "00.7": "", "0.7.0": "", "0.9": "",
 	} {
 		q := Control{{"a", "q"}, {"n", "4"}}
 		if v != "" {
@@ -141,7 +141,7 @@ func TestReplyQuery(t *testing.T) {
 			t.Errorf("v=%q: %+v", v, r)
 		case want != "" && (!r.OK || r.Caps == nil || r.Caps.V != want || r.Caps.Host != "h"):
 			t.Errorf("v=%q: %+v", v, r)
-		case want == "" && (r.OK || r.Code != EVERSION || r.Detail != "0.6,0.7"):
+		case want == "" && (r.OK || r.Code != EVERSION || r.Detail != "0.7,0.8"):
 			t.Errorf("v=%q: %+v", v, r)
 		}
 	}
@@ -149,11 +149,11 @@ func TestReplyQuery(t *testing.T) {
 	// A relay's capabilities carry the host behind it: Raw says that host's
 	// version and fields this package does not know, and the reply says the
 	// version answered and keeps the rest.
-	raw := body(`{"v":"0.7","future":{"x":1},"host":"h"}`)
+	raw := body(`{"v":"0.8","future":{"x":1},"host":"h"}`)
 	c, _ := CapsOf(raw)
-	r, _ := ReplyOf(decodeOne(t, ReplyQuery(Control{{"a", "q"}, {"n", "4"}, {"v", "0.6"}}, c)))
-	if r.Caps == nil || r.Caps.V != "0.6" || r.Caps.Host != "h" || !bytes.Contains(r.Caps.Raw, []byte("future")) {
-		t.Errorf("a relay's caps in 0.6: %+v", r.Caps)
+	r, _ := ReplyOf(decodeOne(t, ReplyQuery(Control{{"a", "q"}, {"n", "4"}, {"v", "0.7"}}, c)))
+	if r.Caps == nil || r.Caps.V != "0.7" || r.Caps.Host != "h" || !bytes.Contains(r.Caps.Raw, []byte("future")) {
+		t.Errorf("a relay's caps in 0.7: %+v", r.Caps)
 	}
 }
 

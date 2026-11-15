@@ -60,8 +60,8 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks first: the newest
 	// it speaks, and the one it writes in its capabilities (SPEC §4). It
-	// speaks 0.6 as well: Versions.
-	Version = "0.7"
+	// speaks 0.7 as well: Versions.
+	Version = "0.8"
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
@@ -374,8 +374,8 @@ func SurfaceName(s string) string {
 	return b.String()
 }
 
-// Versions are the protocol versions this package speaks, oldest first: 0.6
-// and 0.7 (SPEC §4, §15). Its query lists them, a Detector takes a host that
+// Versions are the protocol versions this package speaks, oldest first: 0.7
+// and 0.8 (SPEC §4, §15). Its query lists them, a Detector takes a host that
 // answers in any of them, and ReplyQuery answers a program in the highest one
 // the program and this package share. Version is the last.
-func Versions() []string { return []string{"0.6", Version} }
+func Versions() []string { return []string{"0.7", Version} }

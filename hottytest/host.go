@@ -1724,10 +1724,7 @@ func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 // With no such element nothing is reported: the press is the terminal's. So
 // it is with Shift held, which gives the terminal's menu. With Alt it is the
 // program's own gesture, as Press's is (SPEC §9.2): the pointer leaves the
-// window, and the surface hears nothing more. That is 0.7's: in a session in
-// 0.6, which the program asked for by listing 0.6 and not 0.7 in its query,
-// the secondary button with Alt held is the terminal's and reports nothing
-// to the cells, and this host leaves the pointer where it was (HOST.md §4.1). Otherwise it makes no click,
+// window, and the surface hears nothing more. Otherwise it makes no click,
 // focus or blur, moves no keyboard, starts no drag and changes no hover. This
 // host does no touch, and so makes no long press.
 //
@@ -1750,12 +1747,6 @@ func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) erro
 	}
 	if s.detached {
 		return ErrDetached
-	}
-	if h.version == "0.6" && modBits(keys)&hotty.ModAlt != 0 {
-		// A session in 0.6: the secondary button with Alt is the
-		// terminal's, as 0.6's §9.2 has it, and reports nothing to the
-		// cells. The pointer stays where it was (HOST.md §4.1).
-		return nil
 	}
 	if h.alt1(s, keys) {
 		return nil

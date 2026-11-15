@@ -514,8 +514,8 @@ func Speaks(query Control) bool {
 
 // SharedVersion is the highest version a query lists (v, SPEC §4) that is
 // among Versions, the one a host that speaks them answers in; false when
-// the query lists none. A host that speaks 0.6 as well answers v=0.6 in
-// 0.6, and v=0.6,0.7 in 0.7.
+// the query lists none. A host that speaks 0.7 as well answers v=0.7 in
+// 0.7, and v=0.7,0.8 in 0.8.
 func SharedVersion(query Control) (string, bool) {
 	listed := strings.Split(Get(query, "v"), ",")
 	for _, v := range slices.Backward(Versions()) {
@@ -529,7 +529,7 @@ func SharedVersion(query Control) (string, bool) {
 // ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks
 // Versions: caps, as ReplyCaps writes them, with V the version SharedVersion
 // finds, and an EVERSION error when the query lists none, its detail the
-// versions spoken, comma-separated (0.6,0.7). caps.V is replaced, in
+// versions spoken, comma-separated (0.7,0.8). caps.V is replaced, in
 // caps.Raw too; the host speaks that version to the program from then on, which a host that
 // keeps a session's version learns from SharedVersion.
 func ReplyQuery(query Control, caps Caps) string {
@@ -625,7 +625,7 @@ func (e *Error) Error() string {
 
 // HasFeature reports whether the host has an optional feature (SPEC §4):
 // FeaturePassthrough, FeatureHover, FeatureCount, FeatureMenu or
-// FeatureBackdrop. Everything else a 0.6 host does, it does.
+// FeatureBackdrop. Everything else a 0.7 host does, it does.
 func HasFeature(c Caps, feature string) bool { return slices.Contains(c.Features, feature) }
 
 // Light reports whether the terminal's colour scheme is light.
