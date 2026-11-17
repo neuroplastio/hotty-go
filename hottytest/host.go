@@ -1045,8 +1045,13 @@ func focusable(n *html.Node) bool {
 		}
 		return true
 	case atom.A:
-		_, href := attr(n, "href")
-		return href && !hyperlink(n)
+		if hyperlink(n) {
+			return false // a hyperlink takes no focus, whatever its tabindex (SPEC §10.1)
+		}
+		if _, href := attr(n, "href"); href {
+			return true
+		}
+		// HTML: an a without href takes focus by its tabindex, as any element.
 	}
 	if t, ok := attr(n, "tabindex"); ok {
 		v, err := strconv.Atoi(t)
