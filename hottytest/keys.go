@@ -193,10 +193,17 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 	}
 	f := s.field(el)
 	was := s.sel(el)
+	saved := *f
 	a, changed := f.Key(hotty.Resolve(hotty.PlatformOf(h.caps), multi, values...), key)
+	_, readonly := attr(el, "readonly")
 	switch {
 	case a == "":
 		return false
+	case readonly && changed:
+		// A readonly field takes the key and keeps its value, as a
+		// browser's does: what the user cannot change (SPEC §6.4).
+		*f = saved
+		return true
 	case a == hotty.Submit:
 		// The field commits, in a form or not, then its form submits
 		// (SPEC §9, §10.2).
@@ -211,7 +218,7 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 		if start, end := f.Selection(); start == end || f.Password {
 			return false
 		}
-		if a == hotty.Cut && f.Do(hotty.DeleteCharBackward) {
+		if _, ro := attr(el, "readonly"); a == hotty.Cut && !ro && f.Do(hotty.DeleteCharBackward) {
 			h.typeInto(s, el, f.Value)
 		}
 	case a == hotty.Paste:

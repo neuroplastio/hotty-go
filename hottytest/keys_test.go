@@ -1,6 +1,7 @@
 package hottytest
 
 import (
+	"strings"
 	"testing"
 
 	"neuroplast.io/hotty-go"
@@ -356,5 +357,29 @@ func TestKeysOnAMac(t *testing.T) {
 	h.drain()
 	if h.Key("super+a") {
 		t.Error("super+a was the field's where mod is ctrl")
+	}
+}
+
+// TestReadonlyField: a readonly field takes typed keys and keeps its value,
+// sending nothing; its caret still moves, and a cut deletes nothing (SPEC
+// §6.4: what the user cannot change).
+func TestReadonlyField(t *testing.T) {
+	h := shown(t, "k", `<input id=f readonly value=abc data-on=input>`)
+	send(h, hotty.Focus("k", "f"))
+	h.drain()
+	for _, k := range []string{"x", "backspace", "shift+X"} {
+		if !h.Key(k) {
+			t.Errorf("%s was not taken by a readonly field", k)
+		}
+	}
+	h.Key("ctrl+a")
+	h.Key("ctrl+x")
+	for _, line := range sent(h) {
+		if strings.Contains(line, "ev input") || strings.Contains(line, "ev change") {
+			t.Errorf("a readonly field sent %s", line)
+		}
+	}
+	if !h.Key("arrow_left") {
+		t.Error("arrow_left was not taken by a readonly field")
 	}
 }
