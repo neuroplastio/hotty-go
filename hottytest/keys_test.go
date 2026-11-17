@@ -303,10 +303,24 @@ func TestSelectKeys(t *testing.T) {
 func TestKeySequence(t *testing.T) {
 	for key, want := range map[string]string{
 		"a": "a", "enter": "\r", "shift+tab": "\x1b[Z", "ctrl+c": "\x03", "alt+x": "\x1bx",
-		"arrow_left": "\x1b[D", "+": "+", "ctrl++": "", "F1": "", "Hyper+a": "", "space": " ",
+		"arrow_left": "\x1b[D", "+": "+", "ctrl++": "", "F1": "\x1bOP", "Hyper+a": "", "space": " ",
+		"f10": "\x1b[21~", "shift+f10": "\x1b[21;2~", "shift+f5": "\x1b[15;2~", "ctrl+f1": "\x1b[1;5P",
+		"context_menu": "\x1b[29~",
 	} {
 		if got := keySequence(key); got != want {
 			t.Errorf("%q: %q, want %q", key, got, want)
+		}
+	}
+}
+
+// TestKeySequenceDecodes: a function key or the Menu key the host types is
+// the key hotty.DecodeKeys reads back, so a program's context menu
+// (shift+f10, context_menu; SPEC §10.2) can be tested through the host.
+func TestKeySequenceDecodes(t *testing.T) {
+	for _, key := range []string{"f1", "f4", "f5", "f10", "f12", "shift+f10", "ctrl+f1", "alt+f5", "shift+f5", "context_menu", "shift+context_menu"} {
+		seq := keySequence(key)
+		if got := hotty.DecodeKeys([]byte(seq)); len(got) != 1 || got[0] != key {
+			t.Errorf("%q: %q decodes as %q", key, seq, got)
 		}
 	}
 }

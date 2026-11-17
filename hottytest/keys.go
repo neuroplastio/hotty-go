@@ -428,6 +428,29 @@ func keySequence(key string) string {
 		return ""
 	}
 	ctrl, alt, shift := mods&myelinkey.Ctrl != 0, mods&myelinkey.Alt != 0, mods&myelinkey.Shift != 0
+	if final, n, ok := csiKey(name); ok {
+		// xterm's: CSI n ~ or CSI 1 ; m final with modifiers, SS3 final for
+		// f1–f4 without.
+		m := 1
+		if shift {
+			m++
+		}
+		if alt {
+			m += 2
+		}
+		if ctrl {
+			m += 4
+		}
+		switch {
+		case m == 1 && final == '~':
+			return "\x1b[" + strconv.Itoa(n) + "~"
+		case m == 1:
+			return "\x1bO" + string(final)
+		case final == '~':
+			return "\x1b[" + strconv.Itoa(n) + ";" + strconv.Itoa(m) + "~"
+		}
+		return "\x1b[1;" + strconv.Itoa(m) + string(final)
+	}
 	seq := map[string]string{"enter": "\r", "tab": "\t", "escape": "\x1b", "backspace": "\x7f", "space": " ",
 		"arrow_up": "\x1b[A", "arrow_down": "\x1b[B", "arrow_right": "\x1b[C", "arrow_left": "\x1b[D",
 		"home": "\x1b[H", "end": "\x1b[F", "insert": "\x1b[2~", "delete": "\x1b[3~", "page_up": "\x1b[5~", "page_down": "\x1b[6~"}[name]
@@ -456,4 +479,19 @@ func keySequence(key string) string {
 		seq = "\x1b" + seq
 	}
 	return seq
+}
+
+// csiKey is a function key or the Menu key as xterm sends it: the final
+// byte, and n for CSI n ~.
+func csiKey(name string) (final byte, n int, ok bool) {
+	switch name {
+	case "f1", "f2", "f3", "f4":
+		return "PQRS"[name[1]-'1'], 0, true
+	case "context_menu":
+		return '~', 29, true
+	}
+	if t, known := map[string]int{"f5": 15, "f6": 17, "f7": 18, "f8": 19, "f9": 20, "f10": 21, "f11": 23, "f12": 24}[name]; known {
+		return '~', t, true
+	}
+	return 0, 0, false
 }

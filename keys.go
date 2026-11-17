@@ -293,10 +293,13 @@ func oneKey(input []byte) (string, int) {
 }
 
 // csiFinals are the keys CSI and SS3 name by their final byte.
-var csiFinals = map[byte]string{'A': "arrow_up", 'B': "arrow_down", 'C': "arrow_right", 'D': "arrow_left", 'H': "home", 'F': "end"}
+var csiFinals = map[byte]string{'A': "arrow_up", 'B': "arrow_down", 'C': "arrow_right", 'D': "arrow_left", 'H': "home", 'F': "end",
+	'P': "f1", 'Q': "f2", 'R': "f3", 'S': "f4"}
 
 // tildeKeys are the keys CSI n ~ names.
-var tildeKeys = map[int]string{1: "home", 7: "home", 4: "end", 8: "end", 2: "insert", 3: "delete", 5: "page_up", 6: "page_down"}
+var tildeKeys = map[int]string{1: "home", 7: "home", 4: "end", 8: "end", 2: "insert", 3: "delete", 5: "page_up", 6: "page_down",
+	11: "f1", 12: "f2", 13: "f3", 14: "f4", 15: "f5", 17: "f6", 18: "f7", 19: "f8", 20: "f9", 21: "f10", 23: "f11", 24: "f12",
+	29: "context_menu"}
 
 // codeKeys are the codes of the kitty protocol and modifyOtherKeys that are
 // not characters.
@@ -309,6 +312,7 @@ var kittyKeys = map[int]string{
 	57409: ".", 57410: "/", 57411: "*", 57412: "-", 57413: "+", 57414: "enter", 57415: "=",
 	57417: "arrow_left", 57418: "arrow_right", 57419: "arrow_up", 57420: "arrow_down", 57421: "page_up", 57422: "page_down",
 	57423: "home", 57424: "end", 57425: "insert", 57426: "delete",
+	57363: "context_menu",
 }
 
 // ss3Key is the key SS3 with a final byte names.
