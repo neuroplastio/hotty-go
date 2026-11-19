@@ -412,6 +412,23 @@ func TestDocDetachedChunked(t *testing.T) {
 	}
 }
 
+// A Plain document goes out uncompressed, however big and however well it
+// would compress, and keeps the other options and the reply.
+func TestDocPlain(t *testing.T) {
+	html := strings.Repeat("<p>hello</p>", 500)
+	if !strings.Contains(Doc("big", html), "o=z") {
+		t.Fatal("the control test is void: Doc did not compress")
+	}
+	cmd := Doc("big", html, Plain(), Detached(), N(2))
+	if strings.Contains(cmd, "o=z") {
+		t.Fatal("a Plain document went out compressed")
+	}
+	m := decodeOne(t, cmd)
+	if Get(m.Control, "a") != "doc" || Get(m.Control, "s") != "big" || Get(m.Control, "d") != "1" || Get(m.Control, "n") != "2" || string(m.Payload) != html {
+		t.Errorf("control %v, payload %d bytes", m.Control, len(m.Payload))
+	}
+}
+
 func TestDecoder(t *testing.T) {
 	b64 := func(s string) string {
 		return strings.TrimSuffix(Encode(Control{{"x", "1"}}, []byte(s)), "\x1b\\")[len("\x1b]7279;x=1;"):]

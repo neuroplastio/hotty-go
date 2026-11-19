@@ -64,17 +64,22 @@ func WithdrawLate() string {
 func Doc(surface, html string, opts ...DocOption) string {
 	ctl := Control{{"a", "doc"}, {"s", surface}}
 	var replies []ReplyOption
+	compress := true
 	for _, o := range opts {
 		if r, ok := o.(ReplyOption); ok {
 			replies = append(replies, r)
 			continue
 		}
+		if _, ok := o.(plain); ok {
+			compress = false
+			continue
+		}
 		o.doc(&ctl)
 	}
-	return command(ctl, []byte(html), ReplyOnError, replies)
+	return commandOf(ctl, []byte(html), ReplyOnError, replies, compress)
 }
 
-// DocOption is an option of Doc: a ReplyOption, Detached, or Scroll.
+// DocOption is an option of Doc: a ReplyOption, Detached, Scroll, or Plain.
 type DocOption interface{ doc(*Control) }
 
 // doc does nothing: Doc takes its reply options apart from the others, so
@@ -96,6 +101,17 @@ func (detached) doc(c *Control) { set(c, "d", "1") }
 // reads the terminal next, a shell, would read the surface's events as
 // typing.
 func Detached() DocOption { return detached{} }
+
+type plain struct{}
+
+func (plain) doc(*Control) {}
+
+// Plain sends the document uncompressed (SDK.md §3.3): no o=z, whatever its
+// size. It is for a document that goes no further than the program's own
+// process, such as one drawn into cells by a renderer in the program, where
+// compressing it only to inflate it again costs time and memory for
+// nothing. Over a terminal, Doc's compression is the better choice.
+func Plain() DocOption { return plain{} }
 
 // Axes are the directions a document scrolls in (SPEC §5.1): a bitmask of
 // ScrollVertical and ScrollHorizontal.

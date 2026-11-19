@@ -186,6 +186,11 @@ func N(n int) ReplyOption { return ReplyOption{n: n, setN: true} }
 
 // command encodes a command with its default quiet level and the options.
 func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string {
+	return commandOf(ctl, payload, def, opts, true)
+}
+
+// commandOf is command, compressing the payload or not (Plain).
+func commandOf(ctl Control, payload []byte, def Quiet, opts []ReplyOption, compress bool) string {
 	q, n, numbered, given := int(def), 0, false, false
 	for _, o := range opts {
 		if o.setN {
@@ -211,7 +216,7 @@ func command(ctl Control, payload []byte, def Quiet, opts []ReplyOption) string 
 	if q != implied {
 		set(&ctl, "q", strconv.Itoa(q))
 	}
-	return Encode(ctl, payload)
+	return encode(ctl, payload, compress)
 }
 
 // Encode returns one command: the control and the payload, compressed when

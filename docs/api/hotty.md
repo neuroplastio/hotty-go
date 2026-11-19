@@ -120,6 +120,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
   - [`func (d *Detector) Tick(now time.Time)`](#Detector.Tick)
 - [`type DocOption`](#DocOption)
   - [`func Detached() DocOption`](#Detached)
+  - [`func Plain() DocOption`](#Plain)
   - [`func Scroll(axes Axes) DocOption`](#Scroll)
 - [`type Drag`](#Drag)
 - [`type Error`](#Error)
@@ -1273,7 +1274,7 @@ type DocOption interface {
 }
 ```
 
-DocOption is an option of Doc: a ReplyOption, Detached, or Scroll.
+DocOption is an option of Doc: a ReplyOption, Detached, Scroll, or Plain.
 
 ### <a id="Detached"></a>func Detached
 
@@ -1284,6 +1285,14 @@ func Detached() DocOption
 Detached sends a document the program only shows (d=1, SPEC §5.5): the surface is created detached, or its document replaced and the surface detached, in the one command. It reports nothing, never takes the keyboard, and its controls act disabled; hover, selection, \<details> and hyperlinks still work, and it is placed, changed by deltas, hidden and deleted as before.
 
 It is what a command prints among its output, which outlives it: whatever reads the terminal next, a shell, would read the surface's events as typing.
+
+### <a id="Plain"></a>func Plain
+
+```go
+func Plain() DocOption
+```
+
+Plain sends the document uncompressed (SDK.md §3.3): no o=z, whatever its size. It is for a document that goes no further than the program's own process, such as one drawn into cells by a renderer in the program, where compressing it only to inflate it again costs time and memory for nothing. Over a terminal, Doc's compression is the better choice.
 
 ### <a id="Scroll"></a>func Scroll
 
