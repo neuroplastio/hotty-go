@@ -2,6 +2,7 @@ package hotty
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -369,6 +370,12 @@ func TestCompressAbove(t *testing.T) {
 		}
 		if seqs := split(cmd); len(seqs) != 1 {
 			t.Errorf("%d bytes: %d sequences, want 1", c.n, len(seqs))
+		}
+		// At zlib's fastest level: its header is 78 01.
+		if _, b64, _ := strings.Cut(strings.TrimSuffix(cmd, st), "o=z;"); c.zip {
+			if z, _ := base64.StdEncoding.DecodeString(b64); len(z) < 2 || z[0] != 0x78 || z[1] != 0x01 {
+				t.Errorf("%d bytes: not at the fastest level: % x", c.n, z[:min(len(z), 2)])
+			}
 		}
 		if m := decodeOne(t, cmd); string(m.Payload) != p {
 			t.Errorf("%d bytes did not decode", c.n)

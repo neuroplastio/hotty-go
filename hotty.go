@@ -235,10 +235,17 @@ func Encode(ctl Control, payload []byte) string { return encode(ctl, payload, tr
 // (SPEC §3.3).
 func EncodePlain(ctl Control, payload []byte) string { return encode(ctl, payload, false) }
 
-// A zipper compresses one payload at a time. A new zlib writer allocates
-// some 800 KB of state, so encode takes one from zippers rather than
-// making one per message. body may be its buffer, so encode gives it back
-// only when it returns, after the buffer has gone into base64.
+// A zipper compresses one payload at a time, at zlib's fastest level. A
+// new zlib writer allocates some 1 MB of state, so encode takes one from
+// zippers rather than making one per message. body may be its buffer, so
+// encode gives it back only when it returns, after the buffer has gone
+// into base64.
+//
+// The fastest level costs a half to two thirds of the default's time: a
+// 236 KB stylesheet takes 1.2 ms rather than 3.0, a 6 KB delta 28 µs
+// rather than 44. Over a recorded session of a program's messages it
+// sends a fifth more bytes, still under a quarter of what they are
+// uncompressed.
 type zipper struct {
 	buf bytes.Buffer
 	w   *zlib.Writer
@@ -246,7 +253,7 @@ type zipper struct {
 
 var zippers = sync.Pool{New: func() any {
 	z := &zipper{}
-	z.w = zlib.NewWriter(&z.buf)
+	z.w, _ = zlib.NewWriterLevel(&z.buf, zlib.BestSpeed) // errs only for a level out of range
 	return z
 }}
 
