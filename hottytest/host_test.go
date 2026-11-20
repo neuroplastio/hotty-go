@@ -136,6 +136,24 @@ func TestQueryAndCaps(t *testing.T) {
 	}
 }
 
+// The host takes a document compressed or not: one just over a sequence
+// goes compressed, one just under it plain, and both are shown as sent.
+func TestCompressedDoc(t *testing.T) {
+	for _, n := range []int{3072, 3073} {
+		text := strings.Repeat("row ", n)[:n-len("<p></p>")]
+		html := "<p>" + text + "</p>"
+		h := New(t)
+		cmd := hotty.Doc("x", html)
+		if zipped := strings.Contains(cmd, "o=z"); zipped != (n > 3072) {
+			t.Fatalf("%d bytes: compressed %v", n, zipped)
+		}
+		send(h, cmd)
+		if s := h.Surface("x"); s == nil || strings.TrimSpace(s.Text()) != strings.TrimSpace(text) {
+			t.Errorf("%d bytes: the document did not arrive", n)
+		}
+	}
+}
+
 func TestTextTerminal(t *testing.T) {
 	rec := &recorder{TB: t}
 	h := New(rec, Text())

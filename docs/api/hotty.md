@@ -492,7 +492,7 @@ Edit takes the edit commands named (SPEC §10.6): "select-all", "copy", "cut", "
 func Encode(ctl Control, payload []byte) string
 ```
 
-Encode returns one command: the control and the payload, compressed when that makes it smaller, base64-encoded, and split into chunks of at most Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are cleaned (Sanitize). The keys o and m are Encode's to set: a control given with them goes out without them.
+Encode returns one command: the control and the payload, compressed when it is longer than one sequence holds uncompressed (3072 bytes) and that makes it smaller, base64-encoded, and split into chunks of at most Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are cleaned (Sanitize). The keys o and m are Encode's to set: a control given with them goes out without them.
 
 ## <a id="EncodeEvent"></a>func EncodeEvent
 

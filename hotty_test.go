@@ -355,16 +355,37 @@ func TestLargePayloadsAreCompressedAndChunked(t *testing.T) {
 	}
 }
 
+// A payload that fits one sequence uncompressed goes uncompressed, however
+// well it would compress; one byte more and it is compressed. Both decode.
+func TestCompressAbove(t *testing.T) {
+	for _, c := range []struct {
+		n   int
+		zip bool
+	}{{compressAbove, false}, {compressAbove + 1, true}} {
+		p := strings.Repeat("<li>row</li>", c.n/12+1)[:c.n]
+		cmd := Doc("s", p)
+		if got := strings.Contains(cmd, ":o=z;"); got != c.zip {
+			t.Errorf("%d bytes: compressed %v, want %v", c.n, got, c.zip)
+		}
+		if seqs := split(cmd); len(seqs) != 1 {
+			t.Errorf("%d bytes: %d sequences, want 1", c.n, len(seqs))
+		}
+		if m := decodeOne(t, cmd); string(m.Payload) != p {
+			t.Errorf("%d bytes did not decode", c.n)
+		}
+	}
+}
+
 // Encode reuses its compressors: each message, one after another or at
 // once, carries its own payload and nothing of another's, including one
 // that did not compress.
 func TestEncodeReusesCompressors(t *testing.T) {
 	payloads := []string{
 		strings.Repeat("<li>row</li>", 500),
-		strings.Repeat("<p>x</p>", 40),
-		noise(3000, 7),
+		strings.Repeat("<p>x</p>", 400),
+		noise(4000, 7),
 		strings.Repeat("<td>cell</td>", 2000),
-		strings.Repeat("<li>row</li>", 30),
+		strings.Repeat("<li>row</li>", 300),
 	}
 	check := func(p string) error {
 		if m, invalid := decodeAll(Doc("s", p)); len(m) != 1 || invalid != 0 || string(m[0].Payload) != p {

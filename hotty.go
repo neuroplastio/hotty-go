@@ -65,8 +65,11 @@ const (
 
 	prefix = "\x1b]" + Number + ";"
 	st     = "\x1b\\"
-	// Payloads shorter than this are not worth compressing.
-	compressFrom = 256
+	// compressAbove is the longest payload Encode sends uncompressed: one
+	// whose base64 fits one sequence (Chunk). Compressing one that short
+	// saves bytes but never a sequence, and a zlib writer's fixed cost, some
+	// 10 µs a message, is most of what it costs: several times its base64.
+	compressAbove = Chunk / 4 * 3
 )
 
 // The modifier keys held during a click, a press or a drag, as the bits of
@@ -220,7 +223,8 @@ func commandOf(ctl Control, payload []byte, def Quiet, opts []ReplyOption, compr
 }
 
 // Encode returns one command: the control and the payload, compressed when
-// that makes it smaller, base64-encoded, and split into chunks of at most
+// it is longer than one sequence holds uncompressed (3072 bytes) and that
+// makes it smaller, base64-encoded, and split into chunks of at most
 // Chunk bytes (SPEC §3.3, §3.4). Keys are sent as they are; values are
 // cleaned (Sanitize). The keys o and m are Encode's to set: a control
 // given with them goes out without them.
@@ -249,7 +253,7 @@ var zippers = sync.Pool{New: func() any {
 func encode(ctl Control, payload []byte, compress bool) string {
 	body := payload
 	var zipped bool
-	if compress && len(payload) >= compressFrom {
+	if compress && len(payload) > compressAbove {
 		z := zippers.Get().(*zipper)
 		defer zippers.Put(z)
 		z.buf.Reset()
