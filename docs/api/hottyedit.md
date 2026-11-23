@@ -14,10 +14,10 @@ import "neuroplast.io/hotty-go/hottyedit"
 
 Package hottyedit edits a text field as a hotty host edits one (SPEC §10.2), for a program that draws its fields in cells: the same actions, the same words and lines, the same caret.
 
-A program gives its surfaces a keymap in data-keys (hotty.TerminalKeys, say), and its cells rendition looks keys up in the same keymap, resolved with hotty.Resolve, and does what they say to a Field:
+A program gives its surfaces a keymap in the data-keys-inner of the element holding the fields (hotty.TerminalKeys, say), and its cells rendition looks keys up in the same keymap, resolved with hotty.Resolve, and does what they say to a Field:
 
 ```go
-km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
+km := hotty.Resolve(hotty.Platform{}, hotty.ReaderInput, "", hotty.TerminalKeys)
 f := hottyedit.Field{Value: "foo bar"}
 switch a, changed := f.Key(km, "ctrl+w"); {
 case a == "":
@@ -35,7 +35,7 @@ Characters are grapheme clusters (Unicode UAX #29): the caret counts them.
 
 A field has rows: its lines, or with a Width the lines wrapped to it (Wrap). Home, End and the moves by row go by those rows, and Cursor and Scroll say where a rendition draws the caret. A field keeps a history, for Undo and Redo, one step to a run of typing.
 
-Undo and Redo are on where they were the program's before (hotty-go 0.7.2). A program that wants ctrl+z for itself binds it to Program in its keymap: Key then returns that action and the field leaves the key alone. A Field is comparable; its zero value is an editor with no history, and a copy of a Field shares the history of the one it was copied from.
+A program that handles ctrl+z itself binds it to Program. Key then returns an empty action and leaves the field alone. A Field is comparable; its zero value is an editor with no history, and a copy of a Field shares the history of the one it was copied from.
 
 ## <a id="pkg-index"></a>Index
 
@@ -108,7 +108,7 @@ Cursor is the visual row and the column, in cells, of the caret in the rows Wrap
 A multi-line field wrapped to a width: the caret's row and column, for the terminal cursor, and the scroll offset of a view of two rows.
 
 ```go
-km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "", hotty.TerminalKeys)
 f := hottyedit.Field{Value: "the quick brown fox", Multiline: true, Width: 10, Rows: 2}
 f.Key(km, "ctrl+end") // input-end
 row, col := f.Cursor()
@@ -156,7 +156,7 @@ Key does what a keymap says the field does with a key (hotty.Keymap's Lookup): i
 A field in cells, edited with the keymap the program gives its surfaces.
 
 ```go
-km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
+km := hotty.Resolve(hotty.Platform{}, hotty.ReaderInput, "", hotty.TerminalKeys)
 f := hottyedit.Field{Value: "hello wrld", Caret: 10}
 f.Key(km, "alt+b")  // word-backward: hello |wrld
 f.Key(km, "ctrl+f") // char-forward: hello w|rld

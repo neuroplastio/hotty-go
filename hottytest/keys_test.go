@@ -144,17 +144,16 @@ func TestKeysSelect(t *testing.T) {
 }
 
 // A key the focused element's keymap binds to program reaches the program,
-// whatever the element: its keymap is read from data-keys as a field's is,
-// with no default keymap, and outside a text field its other bindings do
-// nothing, except that a nearer one takes a key back (SPEC §10.2).
+// An element can give the program its ordinary keys with its own keymap.
+// An ancestor can only give keys the element does not use (SPEC §10.2).
 func TestKeysForTheProgram(t *testing.T) {
-	h := shown(t, "k", `<div data-keys="arrow_down=program end=program space=program enter=program tab=program">`+
-		`<select id=s><option>a<option>b<option>c</select>`+
-		`<select id=own data-keys="end=line-end arrow_up=program"><option>a<option>b<option>c</select>`+
-		`<button id=b data-keys="enter=submit">B</button>`+
-		`<input id=c type=checkbox>`+
-		`<a id=l href=/x>L</a>`+
-		`<details><summary id=m>M</summary></details>`+
+	h := shown(t, "k", `<div data-keys-inner="arrow_down=program end=program space=program enter=program tab=program">`+
+		`<select id=s data-keys="arrow_down=program end=program space=program enter=program"><option>a<option>b<option>c</select>`+
+		`<select id=own data-keys="arrow_up=program arrow_down=program"><option>a<option>b<option>c</select>`+
+		`<button id=b data-keys="space=program">B</button>`+
+		`<input id=c type=checkbox data-keys="space=program">`+
+		`<a id=l href=/x data-keys="enter=program">L</a>`+
+		`<details><summary id=m data-keys="space=program">M</summary></details>`+
 		`<input id=d type=date data-keys="arrow_left=program">`+
 		`<input id=f data-on=input>`+
 		`</div>`+
@@ -179,8 +178,7 @@ func TestKeysForTheProgram(t *testing.T) {
 	press("c", "arrow_up")
 	expect(t, sent(h), `ev change t=s {"rev":1,"value":"c"}`, `ev change t=s {"rev":2,"value":"b"}`)
 
-	// tab cannot be bound: it moves focus. A nearer binding to another
-	// action takes end back, and the select uses it.
+	// A select keeps Tab and End, and gives the arrows away explicitly.
 	press("tab")
 	if got := h.Surface("k").Focused(); got != "own" {
 		t.Fatalf("Tab, bound to program, moved focus to %q", got)
@@ -189,8 +187,7 @@ func TestKeysForTheProgram(t *testing.T) {
 	press("end", "arrow_up", "arrow_down")
 	expect(t, sent(h), `ev change t=own {"rev":1,"value":"c"}`, `"\x1b[A\x1b[B"`)
 
-	// A button clicks with Enter, which it binds to an action of its own,
-	// and gives space to the program.
+	// A button keeps Enter and gives Space away explicitly.
 	send(h, hotty.Focus("k", "b"))
 	h.drain()
 	press("enter", "space")
@@ -229,9 +226,8 @@ func TestKeysForTheProgram(t *testing.T) {
 	expect(t, sent(h), `ev change t=f {"rev":2,"value":"yx"}`, `ev change t=free {"rev":1,"value":"b"}`)
 }
 
-// With no element focused there is no keymap: a surface that has the
-// keyboard with nothing to focus reads no data-keys, and every key but Tab
-// reaches the program (SPEC §10.2).
+// With nothing focused, a keymap on an ordinary descendant does not apply
+// to the body (SPEC §10.2).
 func TestKeysWithNothingFocused(t *testing.T) {
 	h := shown(t, "k", `<div data-keys="arrow_down=line-next enter=submit space=program"><p>text</p></div>`)
 	send(h, hotty.Focus("k", ""))

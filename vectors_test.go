@@ -1004,8 +1004,9 @@ type keymapVector struct {
 	Parse        *string            `json:"parse"`
 	Format       string             `json:"format"`
 	TerminalKeys bool               `json:"terminal_keys"`
-	Multiline    bool               `json:"multiline"`
-	Keys         []string           `json:"keys"`
+	Reader       string             `json:"reader"`
+	Own          string             `json:"own"`
+	Inner        []string           `json:"inner"`
 	Lookup       map[string]*string `json:"lookup"`
 	Selects      map[string]bool    `json:"selects"`
 	Binds        map[string]bool    `json:"binds"`
@@ -1018,38 +1019,14 @@ type keymapVector struct {
 	} `json:"platform"`
 }
 
-// TestKeymapVectors formats keymaps, looks keys up in resolved ones and
-// asks which select, and asks an element's keymap, with no default, which
-// keys it gives the program, which start a prefix and which scroll actions
-// it binds them to.
+// TestKeymapVectors formats keymaps, and asks the keymap each reader reads
+// what it does with keys: Lookup, Selects, Binds, Program, Prefix and
+// Scroll.
 func TestKeymapVectors(t *testing.T) {
 	for _, v := range sdkVectors(t).Keymap {
 		t.Run(v.Name, func(t *testing.T) {
 			applies(t, v.Requires)
-			if v.Lookup == nil && (v.Program != nil || v.Prefix != nil || v.Scroll != nil) {
-				m := ParseKeymap(Platform(v.Platform), strings.Join(v.Keys, " "))
-				for k, want := range v.Program {
-					if got := m.Program(k); got != want {
-						t.Errorf("Program(%q) = %v, want %v", k, got, want)
-					}
-				}
-				for k, want := range v.Prefix {
-					if got := m.Prefix(k); got != want {
-						t.Errorf("Prefix(%q) = %v, want %v", k, got, want)
-					}
-				}
-				for k, want := range v.Scroll {
-					w := Action("")
-					if want != nil {
-						w = Action(*want)
-					}
-					if got := m.Scroll(k); got != w {
-						t.Errorf("Scroll(%q) = %q, want %q", k, got, w)
-					}
-				}
-				return
-			}
-			if v.Lookup == nil {
+			if v.Reader == "" {
 				value := TerminalKeys
 				if v.Parse != nil {
 					value = *v.Parse
@@ -1059,11 +1036,11 @@ func TestKeymapVectors(t *testing.T) {
 				}
 				return
 			}
-			values := v.Keys
+			inner := v.Inner
 			if v.TerminalKeys {
-				values = append([]string{TerminalKeys}, values...)
+				inner = append([]string{TerminalKeys}, inner...)
 			}
-			m := Resolve(Platform(v.Platform), v.Multiline, values...)
+			m := Resolve(Platform(v.Platform), Reader(v.Reader), v.Own, inner...)
 			for k, want := range v.Lookup {
 				w := Action("")
 				if want != nil {
@@ -1086,6 +1063,20 @@ func TestKeymapVectors(t *testing.T) {
 			for k, want := range v.Selects {
 				if got := m.Selects(k); got != want {
 					t.Errorf("Selects(%q) = %v, want %v", k, got, want)
+				}
+			}
+			for k, want := range v.Prefix {
+				if got := m.Prefix(k); got != want {
+					t.Errorf("Prefix(%q) = %v, want %v", k, got, want)
+				}
+			}
+			for k, want := range v.Scroll {
+				w := Action("")
+				if want != nil {
+					w = Action(*want)
+				}
+				if got := m.Scroll(k); got != w {
+					t.Errorf("Scroll(%q) = %q, want %q", k, got, w)
 				}
 			}
 		})

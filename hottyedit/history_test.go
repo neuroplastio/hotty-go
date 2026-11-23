@@ -9,7 +9,11 @@ import (
 
 func key(t *testing.T, f *Field, keys ...string) {
 	t.Helper()
-	km := hotty.Resolve(hotty.Platform{}, f.Multiline, hotty.TerminalKeys)
+	reader := hotty.ReaderInput
+	if f.Multiline {
+		reader = hotty.ReaderMultiline
+	}
+	km := hotty.Resolve(hotty.Platform{}, reader, "", hotty.TerminalKeys)
 	for _, k := range keys {
 		if a, _ := f.Key(km, k); a == "" {
 			t.Fatalf("key %q is not the field's", k)
@@ -25,7 +29,7 @@ func TestEnter(t *testing.T) {
 		t.Fatalf("%q %d", f.Value, f.Caret)
 	}
 	// An input: enter and shift+enter are the program's.
-	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderInput, "", hotty.TerminalKeys)
 	in := Field{Value: "ab"}
 	if a, ch := in.Key(km, "enter"); a != hotty.Submit || ch {
 		t.Fatal(a, ch)
@@ -53,7 +57,7 @@ func TestPaste(t *testing.T) {
 
 func TestUndoRuns(t *testing.T) {
 	f := Field{Multiline: true}
-	km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "", hotty.TerminalKeys)
 	for _, k := range []string{"a", "b", "c"} {
 		f.Key(km, k)
 	}
@@ -137,8 +141,8 @@ func TestFieldCopies(t *testing.T) {
 // A program's own binding of the undo keys wins: the keymap says what a key
 // is, and a key it binds to Program or to another action is not undo.
 func TestProgramBindingWins(t *testing.T) {
-	for _, bind := range []string{"ctrl+z=program", "ctrl+z=submit", "ctrl+y=program", "ctrl+shift+z=program"} {
-		km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys, bind)
+	for _, bind := range []string{"ctrl+z=program", "ctrl+z=submit", "ctrl+y=program", "ctrl+shift+z=program", "shift+enter=program"} {
+		km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, bind, hotty.TerminalKeys)
 		key := strings.SplitN(bind, "=", 2)[0]
 		f := Field{Multiline: true}
 		f.Paste("abc")
@@ -148,14 +152,14 @@ func TestProgramBindingWins(t *testing.T) {
 		}
 	}
 	// The other undo key keeps working beside the program's one.
-	km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys, "ctrl+z=program")
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "ctrl+z=program", hotty.TerminalKeys)
 	f := Field{Multiline: true}
 	f.Paste("abc")
 	if a, ch := f.Key(km, "ctrl+y"); a != hotty.Redo || ch {
 		t.Fatal(a, ch)
 	}
 	// And bound by the program to undo, it is undo.
-	km = hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys, "ctrl+q=undo")
+	km = hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "ctrl+q=undo", hotty.TerminalKeys)
 	if a, ch := f.Key(km, "ctrl+q"); a != hotty.Undo || !ch || f.Value != "" {
 		t.Fatalf("%q %v %v", f.Value, a, ch)
 	}

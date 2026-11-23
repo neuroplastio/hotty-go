@@ -1,7 +1,9 @@
 package hotty
 
 import (
+	"maps"
 	"neuroplast.io/myelin/myelinkey"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -41,7 +43,8 @@ const (
 	// after it reaches the program too, until it sends a=focus or a=blur
 	// (SPEC §10.5).
 	Prefix Action = "prefix"
-	// Default gives a key back to the host as if no data-keys bound it.
+	// Default gives a key back to the host as if no keymap of the
+	// program's bound it. Only an element's own data-keys gives one.
 	Default Action = "default"
 	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
 	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
@@ -120,8 +123,9 @@ func (a Action) Scrolls() bool {
 // the keys of Bubble Tea's text input and text area (bubbles), but for
 // mod+a, which selects all, as in a GUI field and SPEC §10.2's default
 // keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A
-// program puts it in the data-keys of an element that holds its fields, and
-// edits its fields in cells with Resolve(platform, multiline, TerminalKeys),
+// program puts it in the data-keys-inner of an element that holds its
+// fields, and edits its fields in cells with Resolve(platform, ReaderInput,
+// "", TerminalKeys), or ReaderMultiline for a multi-line field,
 // so that they edit the same on a surface and in cells. It leaves enter to
 // SPEC §10.2's default.
 const TerminalKeys = "arrow_left=char-backward ctrl+b=char-backward arrow_right=char-forward ctrl+f=char-forward " +
@@ -567,27 +571,64 @@ func (p Platform) written(name string, k myelinkey.Key) string {
 }
 
 // Keymap binds keys to actions (SPEC §10.2), read on a Platform.
-// ParseKeymap reads one from a data-keys value; Resolve makes the one a
-// field uses, whose Lookup says what the field does with a key, and Selects
-// whether it selects as it moves. Binds says whether it binds a key,
-// Program whether any focused element's keymap gives a key to the program,
-// and Scroll which scroll action it binds a key to.
+// ParseKeymap reads one from a data-keys or a data-keys-inner value;
+// Resolve makes the one a reader reads: a field's, whose Lookup says what
+// the field does with a key and Selects whether it selects as it moves,
+// another element's, or a selection's. Binds says whether it binds a key,
+// Program whether it gives a key to the program, and Scroll which scroll
+// action it binds a key to.
 type Keymap struct {
-	keys      []string          // canonical, mod read, in the order first bound
-	actions   map[string]Action // by key
-	written   map[string]string // by key: its last binding's key, mod kept
-	multiline bool
-	platform  Platform
-	field     bool    // Resolve makes a field's keymap, which may give tab
-	base      *Keymap // the default keymap, before data-keys
+	keys     []string          // canonical, mod read, in the order first bound
+	actions  map[string]Action // by key
+	written  map[string]string // by key: its last binding's key, mod kept
+	platform Platform
+	reader   Reader  // the reader Resolve made it for, "" from ParseKeymap
+	base     *Keymap // the default keymap, before the program's keymaps
 }
 
-// ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it:
-// bindings separated by ASCII white space, each key=action, split at its
-// last '='. It drops the bindings a host ignores: a key that does not
-// parse, an action it does not know, shift+tab and escape, and tab except
-// when bound to program or default. Mod reads as the Platform's: on ctrl,
-// mod+a and ctrl+a are one key.
+// Reader is what reads a keymap (SPEC §10.2, Keymaps): a text field, an
+// element of another row of SPEC §10.2's first table, or a selection in the
+// document. Each takes only the bindings it has a use for. The readers are
+// a closed set, and Resolve panics on any other value.
+type Reader string
+
+// The readers (SDK.md §3.10).
+const (
+	// ReaderInput is a text input: an input of type text, search, url,
+	// tel, email, password or number, or of a type the host does not know.
+	ReaderInput Reader = "input"
+	// ReaderMultiline is a multi-line field: a textarea, or an editing
+	// host (contenteditable).
+	ReaderMultiline Reader = "multiline"
+	// ReaderButton is a button, an input of type button, submit or reset,
+	// a link, a summary, a checkbox or a radio button.
+	ReaderButton Reader = "button"
+	// ReaderSelect is a select.
+	ReaderSelect Reader = "select"
+	// ReaderDate is an input of a date or time type.
+	ReaderDate Reader = "date"
+	// ReaderElement is any other focused element, such as one with a
+	// tabindex, and the surface with nothing focused, where the body
+	// stands for the document.
+	ReaderElement Reader = "element"
+	// ReaderSelection is a selection in the document (SPEC §11).
+	ReaderSelection Reader = "selection"
+)
+
+// Readers returns every Reader in SDK.md §3.10's order.
+func Readers() []Reader {
+	return []Reader{ReaderInput, ReaderMultiline, ReaderButton, ReaderSelect, ReaderDate, ReaderElement, ReaderSelection}
+}
+
+// readerField reports whether a reader is a text field's.
+func readerField(r Reader) bool { return r == ReaderInput || r == ReaderMultiline }
+
+// ParseKeymap reads a data-keys or a data-keys-inner value as SPEC §10.2
+// has hosts read it: bindings separated by ASCII white space, each
+// key=action, split at its last '='. It drops the bindings a host ignores: a
+// key that does not parse, an action it does not know, shift+tab and
+// escape, and tab except when bound to program or default. Mod reads as the
+// Platform's: on ctrl, mod+a and ctrl+a are one key.
 func ParseKeymap(p Platform, value string) *Keymap {
 	m := &Keymap{platform: p}
 	bindings(value, func(k string, a Action) { m.Bind(k, a) })
@@ -675,53 +716,127 @@ var (
 	}
 )
 
-// Resolve makes a field's keymap (SPEC §10.2): the default keymap for the
-// Platform's Mod, with its edit shortcuts, for an input or for a
-// multi-line field, then each data-keys value in turn, the root's first,
-// each overriding the bindings before it key by key. It leaves out each
-// binding to a scroll action where it stands, in its own value too: one
-// neither acts nor overrides an earlier binding of its key. A binding to
-// default gives the key back to the default keymap, or to typing.
-func Resolve(p Platform, multiline bool, values ...string) *Keymap {
-	m := &Keymap{multiline: multiline, platform: p, field: true}
-	for _, b := range defaultKeys {
-		m.Bind(b.key, b.action)
+// Resolve makes the keymap a reader reads (SPEC §10.2, Keymaps; SDK.md
+// §3.10): for a text field and a selection, the default keymap for the
+// Platform's Mod, with its edit shortcuts, for an input or a multi-line
+// field; then each value of inner in turn, the data-keys-inner values of
+// the focused element's ancestors from the document's root down to its
+// parent; then own, the element's own data-keys. Each overrides the
+// bindings before it key by key, less the bindings its reader does not
+// take, which neither act nor override:
+//   - a text field takes the editing actions, program and prefix, and no
+//     scroll action;
+//   - any other element takes program, prefix and the scroll actions;
+//   - a selection takes copy from own only, and program and prefix;
+//   - no reader takes a binding in inner to program or prefix of a key it
+//     uses: one a field types (KeyText), or its row of SPEC §10.2's first
+//     table, unmodified or with shift only (a button's space and enter, a
+//     select's characters, space, enter and moves, a date input's
+//     characters and keys);
+//   - each takes default from own only. A binding to default gives the key
+//     back: in a field, to the default keymap or to typing.
+//
+// With nothing focused the reader is ReaderElement, own is the body's
+// data-keys, and inner the root's and the body's data-keys-inner, since the
+// body stands for the document; a selection reads the same own and inner.
+// In an 0.8 session each data-keys is both its element's own and its inner
+// (HOST.md §5.1): a host passes the ancestors' data-keys as inner.
+//
+// Resolve panics on a reader outside Readers.
+func Resolve(p Platform, reader Reader, own string, inner ...string) *Keymap {
+	if !slices.Contains(Readers(), reader) {
+		panic("hotty: Resolve: no reader " + strconv.Quote(string(reader)))
 	}
-	enter := Submit
-	if multiline {
-		enter = Newline
-	}
-	m.Bind("enter", enter)
-	if p.modOf() == myelinkey.Super {
-		for _, b := range superKeys {
+	m := &Keymap{platform: p, reader: reader}
+	if readerField(reader) || reader == ReaderSelection {
+		for _, b := range defaultKeys {
 			m.Bind(b.key, b.action)
 		}
-	} else {
-		for _, b := range ctrlKeys {
-			m.Bind(b.key, b.action)
+		enter := Submit
+		if reader == ReaderMultiline {
+			enter = Newline
 		}
-	}
-	edit := p.Edit
-	if edit == nil {
-		edit = DefaultEdit(p.Mod)
-	}
-	for _, a := range editActions {
-		for _, k := range edit[string(a)] {
-			m.Bind(k, a)
+		m.Bind("enter", enter)
+		if p.modOf() == myelinkey.Super {
+			for _, b := range superKeys {
+				m.Bind(b.key, b.action)
+			}
+		} else {
+			for _, b := range ctrlKeys {
+				m.Bind(b.key, b.action)
+			}
 		}
-	}
-	m.base = &Keymap{multiline: multiline, platform: p, actions: make(map[string]Action, len(m.actions))}
-	for k, a := range m.actions {
-		m.base.actions[k] = a
-	}
-	for _, v := range values {
-		bindings(v, func(k string, a Action) {
-			if !a.Scrolls() {
+		edit := p.Edit
+		if edit == nil {
+			edit = DefaultEdit(p.Mod)
+		}
+		for _, a := range editActions {
+			for _, k := range edit[string(a)] {
 				m.Bind(k, a)
 			}
-		})
+		}
+		m.base = &Keymap{platform: p, reader: reader, actions: maps.Clone(m.actions)}
 	}
+	take := func(own bool) func(string, Action) {
+		return func(name string, a Action) {
+			if k, ok := p.ReadKey(name); ok && takes(reader, myelinkey.Key(k), a, own) {
+				m.Bind(name, a)
+			}
+		}
+	}
+	for _, v := range inner {
+		bindings(v, take(false))
+	}
+	bindings(own, take(true))
 	return m
+}
+
+// takes reports whether a reader takes the binding of key k to action a,
+// from the element's own data-keys (own) or from a data-keys-inner.
+func takes(reader Reader, k myelinkey.Key, a Action, own bool) bool {
+	switch {
+	case a == Default:
+		return own
+	case a == Program || a == Prefix:
+		return own || !uses(reader, k)
+	case reader == ReaderSelection:
+		return a == Copy && own
+	case a.Scrolls():
+		return !readerField(reader)
+	}
+	return readerField(reader)
+}
+
+// The keys an element uses, unmodified or with shift only, by its reader
+// (SPEC §10.2's first table), besides a select's and a date input's
+// characters.
+var (
+	buttonUses = []string{"space", "enter"}
+	selectUses = []string{"space", "arrow_up", "arrow_down", "home", "end", "page_up", "page_down", "enter"}
+	dateUses   = []string{"space", "backspace", "delete", "arrow_up", "arrow_down", "arrow_left", "arrow_right",
+		"home", "end", "page_up", "page_down", "enter"}
+)
+
+// uses reports whether a reader uses key k itself: a key a text field
+// types, or one of its row of SPEC §10.2's first table.
+func uses(reader Reader, k myelinkey.Key) bool {
+	if readerField(reader) {
+		_, types := KeyText(string(k))
+		return types
+	}
+	mods, value, kind := myelinkey.Split(k)
+	if mods&^myelinkey.Shift != 0 {
+		return false
+	}
+	switch reader {
+	case ReaderButton:
+		return slices.Contains(buttonUses, value)
+	case ReaderSelect:
+		return kind == myelinkey.Character || slices.Contains(selectUses, value)
+	case ReaderDate:
+		return kind == myelinkey.Character || slices.Contains(dateUses, value)
+	}
+	return false
 }
 
 // bound is the action the keymap binds a key to, and the key, canonical:
@@ -756,20 +871,19 @@ func (m *Keymap) Binds(name string) bool {
 // Program reports whether the keymap gives a key to the program: binds it
 // to program or prefix, or, for a key with shift that is not a character
 // and that no binding names, binds it without shift (SPEC §10.2, keys for
-// the program). Tab is given only by a field's keymap, from Resolve;
-// shift+tab and escape keep their meaning. Default gives no key.
+// the program). Tab is given only by a field's keymap, from Resolve with
+// ReaderInput or ReaderMultiline; shift+tab and escape keep their meaning.
+// Default gives no key.
 //
-// Every focused element has a keymap, and outside a text field program and
-// the scroll actions are the only actions it gives. A host reads the
-// element's as a field's, from the data-keys values of the elements from
-// the root down to it, but with its scroll actions and no default keymap:
-// ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds
-// to program or prefix to the program before the element uses it, and
-// before the surface scrolls with it; a nearer binding of the key to
-// another action takes it back. In a field, Lookup says as much.
+// Every focused element has a keymap, which Resolve makes with the
+// element's reader, and with nothing focused the body's, with
+// ReaderElement. A host gives a key it gives the program to the program
+// before the element uses it, and before the surface scrolls with it; a
+// nearer binding of the key to another action the reader takes takes it
+// back. In a field, Lookup says as much.
 func (m *Keymap) Program(name string) bool {
 	k, a, bound, _ := m.bound(name)
-	if k == "tab" && !m.field {
+	if k == "tab" && !readerField(m.reader) {
 		return false
 	}
 	return bound && (a == Program || a == Prefix)
@@ -808,8 +922,18 @@ func (m *Keymap) Scroll(name string) Action {
 // an action; Insert for a key it types (KeyText); or "" when the key is not
 // the field's, and reaches the program (or, for tab, moves focus). A key
 // with shift that is not a character and that no binding names is looked up
-// without shift.
+// without shift. On a selection's keymap it is Copy for a key that copies
+// the selection, and "" for every other (SPEC §11).
 func (m *Keymap) Lookup(name string) Action {
+	a := m.lookup(name)
+	if m.reader == ReaderSelection && a != Copy {
+		return ""
+	}
+	return a
+}
+
+// lookup is Lookup on any reader's keymap.
+func (m *Keymap) lookup(name string) Action {
 	k, a, bound, ok := m.bound(name)
 	if !ok {
 		return ""
@@ -819,12 +943,12 @@ func (m *Keymap) Lookup(name string) Action {
 	}
 	if bound && a == Default {
 		if m.base != nil {
-			return m.base.Lookup(name)
+			return m.base.lookup(name)
 		}
 		bound = false
 	}
 	switch {
-	case bound && (a == Program || a == Prefix || a.Multiline() && !m.multiline):
+	case bound && (a == Program || a == Prefix || a.Multiline() && m.reader != ReaderMultiline):
 		return ""
 	case bound:
 		return a

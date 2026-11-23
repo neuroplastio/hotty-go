@@ -945,14 +945,14 @@ func TestKeymapProgram(t *testing.T) {
 		t.Error("prefix and program")
 	}
 	// In a field's keymap, Lookup says as much.
-	f := Resolve(Platform{}, false, "arrow_left=program")
+	f := Resolve(Platform{}, ReaderInput, "arrow_left=program")
 	if !f.Program("arrow_left") || f.Lookup("arrow_left") != "" || f.Program("arrow_right") {
 		t.Error("a field's keymap: arrow_left is not the program's, or arrow_right is")
 	}
-	if g := Resolve(Platform{}, false, "ctrl+k=prefix"); g.Lookup("ctrl+k") != "" || !g.Prefix("ctrl+k") {
+	if g := Resolve(Platform{}, ReaderInput, "ctrl+k=prefix"); g.Lookup("ctrl+k") != "" || !g.Prefix("ctrl+k") {
 		t.Error("a field does not use a key bound to prefix")
 	}
-	if !f.Binds("shift+arrow_left") || f.Binds("ctrl+key_w") || Resolve(Platform{}, false).Binds("shift+g") {
+	if !f.Binds("shift+arrow_left") || f.Binds("ctrl+key_w") || Resolve(Platform{}, ReaderInput, "").Binds("shift+g") {
 		t.Error("Binds")
 	}
 }
@@ -1306,4 +1306,13 @@ func TestMenuFind(t *testing.T) {
 	if it := MenuFind(m, "g"); it == nil || it.Label != "named group" {
 		t.Errorf("a group first: %+v", it)
 	}
+}
+
+func TestResolveRejectsUnknownReader(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("Resolve accepted an unknown reader")
+		}
+	}()
+	Resolve(Platform{}, Reader("unknown"), "")
 }

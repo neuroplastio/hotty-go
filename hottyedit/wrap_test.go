@@ -101,7 +101,7 @@ func TestWrapProperties(t *testing.T) {
 // The caret stays on a character boundary, in the field, and on a valid row,
 // whatever keys come, and a goal column survives short rows.
 func TestMovesProperties(t *testing.T) {
-	km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "", hotty.TerminalKeys)
 	keys := []string{"left", "right", "up", "down", "home", "end", "pageup", "pagedown", "shift+left", "shift+up", "shift+down", "shift+right", "ctrl+w", "backspace", "delete", "a", "space", "enter", "ctrl+z", "ctrl+y", "alt+left", "alt+right"}
 	r := rand.New(rand.NewSource(2))
 	for range 500 {

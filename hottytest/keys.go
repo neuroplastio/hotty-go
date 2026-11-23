@@ -29,8 +29,8 @@ import (
 // negative tabindex and those in an inert subtree left out (an element
 // focused with a negative tabindex is where they start from); past the
 // last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what
-// its keymap says (hotty.Resolve, with the data-keys of the elements from
-// the root to it): it edits its value at a caret and a selection this host
+// its keymap says (hotty.Resolve, with its data-keys and its ancestors'
+// data-keys-inner): it edits its value at a caret and a selection this host
 // keeps, as hottyedit.Field does, with an input event for each edit
 // (data-on~=input), each one more rev, and a caret event for each move and
 // each edit no input event reports (data-on~=caret); a move whose key has
@@ -58,8 +58,8 @@ import (
 //     and change at once. space and enter do nothing: this host shows no
 //     list.
 //
-// With no element focused there is no keymap: the data-keys of the
-// document are not read, and every key but tab is the program's.
+// With nothing focused, the body's keymap supplies program and prefix
+// bindings. Tab then starts at the first element, and Shift+Tab at the last.
 //
 // Every other key reaches the program, as typed (Type) when it has a
 // terminal encoding here: characters, enter, tab, escape, backspace, the
@@ -88,36 +88,23 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	}
 	mods, name, kind := myelinkey.Split(k)
 	shiftOnly := mods&^myelinkey.Shift == 0
-	if name == "tab" && kind == myelinkey.Physical && shiftOnly {
-		if mods == 0 && s.focused != nil && textField(s.focused) &&
-			hotty.Resolve(hotty.PlatformOf(h.caps), s.focused.DataAtom == atom.Textarea || editingHost(s.focused), keymaps(s.focused)...).Program(key) {
-			return false
-		}
-		h.tab(s, mods != 0)
-		return true
-	}
 	el := s.focused
-	if el == nil {
-		// No element focused, no keymap (SPEC §10.2).
-		return false
-	}
-	platform := hotty.PlatformOf(h.caps)
-	if textField(el) {
-		// A key bound to prefix is not the field's: it and every key after
-		// it reach the program (SPEC §10.2, §10.5).
-		if hotty.Resolve(platform, el.DataAtom == atom.Textarea || editingHost(el), keymaps(el)...).Prefix(key) {
-			h.prefix = s
-			return false
-		}
-		return h.fieldKey(s, el, key)
-	}
-	// Any other element's keymap gives keys to the program, and does
-	// nothing else.
-	if km := hotty.ParseKeymap(platform, strings.Join(keymaps(el), " ")); km.Program(key) {
+	km := h.keymap(s, el)
+	if km.Program(key) {
 		if km.Prefix(key) {
 			h.prefix = s
 		}
 		return false
+	}
+	if name == "tab" && kind == myelinkey.Physical && shiftOnly {
+		h.tab(s, mods != 0)
+		return true
+	}
+	if el == nil {
+		return false
+	}
+	if textField(el) {
+		return h.fieldKey(s, el, km, key)
 	}
 	if !shiftOnly {
 		return false
@@ -134,7 +121,7 @@ func (h *Host) useKey(s *Surface, key string) bool {
 		case "arrow_up", "arrow_down", "page_up", "page_down":
 			return true
 		}
-		return h.fieldKey(s, el, key)
+		return h.fieldKey(s, el, hotty.Resolve(hotty.PlatformOf(h.caps), hotty.ReaderInput, ""), key)
 	case el.DataAtom == atom.Select:
 		return h.selectKey(s, el, name, text, types)
 	case box(el):
@@ -185,16 +172,11 @@ func (h *Host) menuKey(key string) {
 
 // fieldKey gives a key to a text field, which does what its keymap says
 // (SPEC §10.2). A date or time input has the default keymap only.
-func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
-	multi := el.DataAtom == atom.Textarea || editingHost(el)
-	var values []string
-	if textField(el) {
-		values = keymaps(el)
-	}
+func (h *Host) fieldKey(s *Surface, el *html.Node, km *hotty.Keymap, key string) bool {
 	f := s.field(el)
 	was := s.sel(el)
 	saved := *f
-	a, changed := f.Key(hotty.Resolve(hotty.PlatformOf(h.caps), multi, values...), key)
+	a, changed := f.Key(km, key)
 	_, readonly := attr(el, "readonly")
 	switch {
 	case a == "":
@@ -232,17 +214,45 @@ func (h *Host) fieldKey(s *Surface, el *html.Node, key string) bool {
 	return true
 }
 
-// keymaps are the data-keys values of the elements from the root down to
-// el, el's last: its keymap, as SPEC §10.2 reads it.
-func keymaps(el *html.Node) []string {
-	var values []string
-	for n := el; n != nil; n = n.Parent {
-		if v, ok := attr(n, "data-keys"); ok {
-			values = append(values, v)
+// keymap resolves the focused element, or the body when focus is empty.
+func (h *Host) keymap(s *Surface, el *html.Node) *hotty.Keymap {
+	innerAttr := "data-keys-inner"
+	if h.version == "0.8" {
+		innerAttr = "data-keys"
+	}
+	reader := hotty.ReaderElement
+	var inner []string
+	if el == nil {
+		el = find(s.doc, func(n *html.Node) bool { return n.DataAtom == atom.Body })
+		if el == nil {
+			return hotty.Resolve(hotty.PlatformOf(h.caps), reader, "")
+		}
+		if v, ok := attr(el, innerAttr); ok {
+			inner = append(inner, v)
+		}
+	} else {
+		switch {
+		case textField(el):
+			reader = hotty.ReaderInput
+			if el.DataAtom == atom.Textarea || editingHost(el) {
+				reader = hotty.ReaderMultiline
+			}
+		case el.DataAtom == atom.Select:
+			reader = hotty.ReaderSelect
+		case textInput(el):
+			reader = hotty.ReaderDate
+		case box(el), button(el):
+			reader = hotty.ReaderButton
 		}
 	}
-	slices.Reverse(values)
-	return values
+	for n := el.Parent; n != nil; n = n.Parent {
+		if v, ok := attr(n, innerAttr); ok {
+			inner = append(inner, v)
+		}
+	}
+	slices.Reverse(inner)
+	own, _ := attr(el, "data-keys")
+	return hotty.Resolve(hotty.PlatformOf(h.caps), reader, own, inner...)
 }
 
 // textField reports whether an element edits text with a keymap (SPEC
@@ -265,7 +275,20 @@ func textField(n *html.Node) bool {
 // editingHost reports whether an element is contenteditable.
 func editingHost(n *html.Node) bool {
 	v, ok := attr(n, "contenteditable")
-	return ok && !strings.EqualFold(v, "false")
+	if !ok || (v != "" && !strings.EqualFold(v, "true") && !strings.EqualFold(v, "plaintext-only")) {
+		return false
+	}
+	for p := n.Parent; p != nil; p = p.Parent {
+		if v, ok := attr(p, "contenteditable"); ok {
+			if strings.EqualFold(v, "false") {
+				break
+			}
+			if v == "" || strings.EqualFold(v, "true") || strings.EqualFold(v, "plaintext-only") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // tab moves focus to the next focusable element, or the previous one,
@@ -280,7 +303,7 @@ func (h *Host) tab(s *Surface, back bool) {
 		if n == s.focused {
 			at = len(order)
 		}
-		if !focusable(n) || closest(n, func(p *html.Node) bool { _, ok := attr(p, "inert"); return ok }) != nil {
+		if !focusable(n) {
 			return
 		}
 		if t, ok := attr(n, "tabindex"); ok {

@@ -9,7 +9,7 @@ import (
 
 // A field in cells, edited with the keymap the program gives its surfaces.
 func ExampleField_Key() {
-	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderInput, "", hotty.TerminalKeys)
 	f := hottyedit.Field{Value: "hello wrld", Caret: 10}
 	f.Key(km, "alt+b")  // word-backward: hello |wrld
 	f.Key(km, "ctrl+f") // char-forward: hello w|rld
@@ -32,7 +32,7 @@ func ExampleField_Key() {
 // A multi-line field wrapped to a width: the caret's row and column, for the
 // terminal cursor, and the scroll offset of a view of two rows.
 func ExampleField_Cursor() {
-	km := hotty.Resolve(hotty.Platform{}, true, hotty.TerminalKeys)
+	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderMultiline, "", hotty.TerminalKeys)
 	f := hottyedit.Field{Value: "the quick brown fox", Multiline: true, Width: 10, Rows: 2}
 	f.Key(km, "ctrl+end") // input-end
 	row, col := f.Cursor()

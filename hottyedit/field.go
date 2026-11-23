@@ -2,11 +2,11 @@
 // §10.2), for a program that draws its fields in cells: the same actions,
 // the same words and lines, the same caret.
 //
-// A program gives its surfaces a keymap in data-keys (hotty.TerminalKeys,
+// A program gives its surfaces a keymap in the data-keys-inner of the element holding the fields (hotty.TerminalKeys,
 // say), and its cells rendition looks keys up in the same keymap, resolved
 // with hotty.Resolve, and does what they say to a Field:
 //
-//	km := hotty.Resolve(hotty.Platform{}, false, hotty.TerminalKeys)
+//	km := hotty.Resolve(hotty.Platform{}, hotty.ReaderInput, "", hotty.TerminalKeys)
 //	f := hottyedit.Field{Value: "foo bar"}
 //	switch a, changed := f.Key(km, "ctrl+w"); {
 //	case a == "":
@@ -30,9 +30,8 @@
 // Scroll say where a rendition draws the caret. A field keeps a history, for
 // Undo and Redo, one step to a run of typing.
 //
-// Undo and Redo are on where they were the program's before (hotty-go
-// 0.7.2). A program that wants ctrl+z for itself binds it to Program in its
-// keymap: Key then returns that action and the field leaves the key alone.
+// A program that handles ctrl+z itself binds it to Program. Key then
+// returns an empty action and leaves the field alone.
 // A Field is comparable; its zero value is an editor with no history, and a
 // copy of a Field shares the history of the one it was copied from.
 package hottyedit
@@ -279,7 +278,7 @@ func (f *Field) Key(m *hotty.Keymap, key string) (a hotty.Action, changed bool) 
 	case "":
 		// Shift and enter is a line break in a field that has lines,
 		// where enter is the program's (Submit).
-		if key == "shift+enter" && f.Multiline {
+		if key == "shift+enter" && f.Multiline && !m.Program(key) {
 			return hotty.Newline, f.Do(hotty.Newline)
 		}
 		return "", false
