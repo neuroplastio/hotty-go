@@ -6,26 +6,33 @@ called surfaces, on rectangles of cells, and hears what the user does in
 them. A surface can be a card left in the scrollback, a chart that streams,
 a form that asks, or the panels of a full-screen Bubble Tea program.
 
-It speaks hotty 0.8 and 0.7 (`hotty.Versions`, SPEC §4, §15): a host of
+It speaks hotty 0.9 and 0.8 (`hotty.Versions`, SPEC §4, §15): a host of
 either is a host to it, and `Caps.V` says which. Its query lists both
-(`a=q:n=1:v=0.7,0.8`, SPEC §4); a terminal of no version it lists is no host
+(`a=q:n=1:v=0.8,0.9`, SPEC §4); a terminal of no version it lists is no host
 to it, and the program draws in cells. A key is named as
 [myelin key names](https://github.com/neuroplastio/myelin/blob/myelinkey/v0.1.0/myelinkey/SPEC.md)
 names it (`ctrl+a`, `arrow_left`, `shift+g`; SPEC §10.4), and a host's
 replies and events carry msgpack bodies (SPEC §3.3).
 
-On a 0.8 host a program scrolls by the host's steps with `hotty.ScrollBy`
-and `hotty.OpScroll` (SPEC §6.1, §10.2), and asks which element a cell holds
-with `hotty.Hit`, whose reply carries `Reply.Hit` (SPEC §9.7). A text field
-may give Tab to the program with `tab=program`, and `default` in a keymap
-gives a key back to the host (SPEC §10.2). A program that meets a 0.7 host
-sends no scroll op or hit: that host refuses them with `EINVAL`, and
-ignores the new keymap bindings (SDK.md §3.8). It scrolls by focus and
-`hotty.Reveal` there, and keeps Tab for focus.
+A 0.9 document puts a focused element's bindings in `data-keys` and
+bindings for its descendants in `data-keys-inner`. For example, put
+`hotty.TerminalKeys` in the `data-keys-inner` of the element holding the
+fields and use `hotty.Resolve(platform, hotty.ReaderInput, "", hotty.TerminalKeys)`
+to edit a single-line field in cells. For an 0.8 session, put the
+descendant bindings in the wrapper's `data-keys` as well.
 
-`hottytest` takes scroll ops and hit queries, and the same keymaps, as a
-host does. It lays nothing out, so a scroll moves nothing and a hit names
-no element (SDK.md §4.4).
+For element menus, subscribe with `data-on="contextmenu"` and handle
+`hotty.EventContextMenu`. Place the menu at `Event.At` if present, or by
+`Event.Area` for the menu key. For an 0.8 session, add `secondary` to
+`data-on` and handle `hotty.EventPress` with `hotty.ButtonSecondary`.
+The `aux` opt-in reports other buttons as `hotty.EventAuxClick` at
+release. Use `rightbutton` to take the secondary button that way too.
+A drag handler for the primary button checks for `hotty.ButtonPrimary`
+on `hotty.EventDragStart`.
+
+`hottytest` speaks both versions. It applies focus fixup after document
+changes and can play clicks, context menus and drags. It has no layout,
+so a scroll moves nothing and a hit names no element (SDK.md §4.4).
 
 The SDK:
 
@@ -86,11 +93,11 @@ of what it imports:
 go get neuroplast.io/hotty-go neuroplast.io/hotty-go/hottyterm
 ```
 
-0.8.x speaks hotty 0.8, and 0.7 too; the patch number is this repository's own.
+0.9.x speaks hotty 0.9 and 0.8; the patch number is this repository's own.
 
 Up to v0.7.0 the modules were `github.com/neuroplastio/hotty-go/...`; from
 v0.7.1 they are `neuroplast.io/hotty-go/...`, so upgrading changes the import
-paths. The 0.8 additions above build on that API.
+paths.
 
 ## Packages
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -67,23 +68,26 @@ func oscs(stream string) []string {
 }
 
 type vectorStep struct {
-	Send    map[string]string `json:"send"`
-	Payload *string           `json:"payload"`
-	Base64  []byte            `json:"payload_b64"` // a payload that is not UTF-8
-	Body    json.RawMessage   `json:"body"`
-	Reply   json.RawMessage   `json:"reply"`
-	Inspect []string          `json:"inspect"`
-	Expect  json.RawMessage   `json:"expect"`
-	Pointer string            `json:"pointer"`
-	Touch   string            `json:"touch"`
-	Write   *string           `json:"write"`
-	Key     *string           `json:"key"`
-	Keys    []string          `json:"keys"`
-	Term    *bool             `json:"terminal"`
-	Events  []vectorEvent     `json:"events"`
-	Menu    string            `json:"menu"`
-	Name    string            `json:"name"`
-	HasEvs  bool              `json:"-"`
+	Send           map[string]string `json:"send"`
+	Payload        *string           `json:"payload"`
+	Base64         []byte            `json:"payload_b64"` // a payload that is not UTF-8
+	Body           json.RawMessage   `json:"body"`
+	Reply          json.RawMessage   `json:"reply"`
+	Inspect        []string          `json:"inspect"`
+	Expect         json.RawMessage   `json:"expect"`
+	Pointer        string            `json:"pointer"`
+	PointerAt      json.RawMessage   `json:"at"`
+	PointerSurface string            `json:"s"`
+	Button         int               `json:"button"`
+	Touch          string            `json:"touch"`
+	Write          *string           `json:"write"`
+	Key            *string           `json:"key"`
+	Keys           []string          `json:"keys"`
+	Term           *bool             `json:"terminal"`
+	Events         []vectorEvent     `json:"events"`
+	Menu           string            `json:"menu"`
+	Name           string            `json:"name"`
+	HasEvs         bool              `json:"-"`
 }
 
 type vectorEvent struct {
@@ -350,16 +354,13 @@ func (r *requirements) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, (*[]string)(r))
 }
 
-// implements is what a vector may require of this host (conformance/README.md,
-// SDK.md §4.4): the features it reports, whose pointer and key steps it
-// skips all the same, since it lays nothing out; and speaks-0.7, since it
-// speaks 0.7 as well as 0.8 (HOST.md §5). A vector that requires
-// anything else, scroll, steps, drop, view, touch, undo, passthrough,
-// backdrop, pressed or commands, is skipped.
-var implements = map[string]bool{"hover": true, "count": true, "menu": true, "speaks-0.7": true}
+// implements lists the requirements this host can exercise. The host
+// has no layout; pointer gestures that need hit testing are outside the
+// test host's send, inspect and key steps (SDK.md §4.4).
+var implements = map[string]bool{
+	"hover": true, "count": true, "menu": true, "speaks-0.8": true, "menu-key": true,
+}
 
-// The host passes the hotty conformance vectors, as hotty-blitz and
-// xterm-addon-hotty do.
 func TestConformanceVectors(t *testing.T) {
 	data, err := os.ReadFile("../testdata/conformance/vectors.json")
 	if err != nil {
@@ -387,12 +388,11 @@ func TestConformanceVectors(t *testing.T) {
 			}
 			h := New(t, Lenient())
 			steps := make([]vectorStep, len(vec.Steps))
-			// Keys are pressed only in vectors with no pointer, and that
-			// require nothing but menus: this host lays nothing out, so where a
-			// pointer is says nothing here, and it has no passthrough,
-			// hover or scroll.
-			keys := len(vec.Requires) == 0 || len(vec.Requires) == 1 && vec.Requires[0] == "menu"
+			// Menu-key vectors use clicks on named elements to set focus,
+			// which requires neither box measurements nor hit testing.
+			menuKeys := slices.Contains(vec.Requires, "menu-key")
 			pointer := false
+			var pointerSurface, pointerID string
 			for i, raw := range vec.Steps {
 				if err := json.Unmarshal(raw, &steps[i]); err != nil {
 					t.Fatal(err)
@@ -401,7 +401,7 @@ func TestConformanceVectors(t *testing.T) {
 				_ = json.Unmarshal(raw, &fields)
 				_, steps[i].HasEvs = fields["events"]
 				if steps[i].Pointer != "" || steps[i].Touch != "" {
-					keys, pointer = false, true
+					pointer = true
 				}
 			}
 			for i, st := range steps {
@@ -410,6 +410,26 @@ func TestConformanceVectors(t *testing.T) {
 					continue
 				}
 				if st.Pointer != "" || st.Touch != "" {
+					if menuKeys {
+						switch st.Pointer {
+						case "move":
+							pointerSurface = st.PointerSurface
+							if err := json.Unmarshal(st.PointerAt, &pointerID); err != nil {
+								t.Fatalf("step %d: expected a named pointer target: %v", i, err)
+							}
+						case "down":
+							if st.Button != hotty.ButtonPrimary {
+								t.Fatalf("step %d: unexpected pointer button %d", i, st.Button)
+							}
+							if err := h.Click(pointerSurface, pointerID, st.Keys...); err != nil && err != ErrNoReport {
+								t.Fatalf("step %d: click: %v", i, err)
+							}
+						case "up":
+						default:
+							t.Fatalf("step %d: unexpected pointer step %q", i, st.Pointer)
+						}
+						checkEvents(t, fmt.Sprintf("step %d", i), h.sentEvents(), st.Events)
+					}
 					continue
 				}
 				if st.Write != nil {
@@ -423,7 +443,7 @@ func TestConformanceVectors(t *testing.T) {
 					continue
 				}
 				if st.Key != nil {
-					if keys {
+					if !pointer || menuKeys {
 						checkKey(t, i, h, st)
 					}
 					continue
@@ -444,7 +464,7 @@ func TestConformanceVectors(t *testing.T) {
 				// whose events this host cannot make. The fit vectors size
 				// a document by the cell, which it does not lay out: it
 				// estimates the rows (AutoRows).
-				if st.HasEvs && !pointer && !fits(steps) {
+				if st.HasEvs && (!pointer || menuKeys) && !fits(steps) {
 					checkEvents(t, fmt.Sprintf("step %d", i), events, st.Events)
 				}
 				switch {

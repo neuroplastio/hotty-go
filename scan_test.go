@@ -137,7 +137,7 @@ func TestDetector(t *testing.T) {
 	if q := d.Start(at(0)); q != Query(1) || d.Deadline != at(1500) {
 		t.Fatalf("Start: %q, deadline %v", q, d.Deadline)
 	}
-	if !d.Reply(reply(`{"v":"0.7","host":"h","version":"0.0.10","features":["passthrough"]}`), at(10)) ||
+	if !d.Reply(reply(`{"v":"0.8","host":"h","version":"0.0.10","features":["passthrough"]}`), at(10)) ||
 		d.State != Native || !d.Decided || d.Done || d.Caps.Version != "0.0.10" || !HasFeature(d.Caps, FeaturePassthrough) {
 		t.Fatalf("the host's reply: %+v", d)
 	}
@@ -152,7 +152,7 @@ func TestDetector(t *testing.T) {
 	var late Detector
 	late.Start(at(0))
 	late.Tick(at(1500))
-	if !late.Reply(reply(`{"v":"0.7"}`), at(1600)) || late.State != Text {
+	if !late.Reply(reply(`{"v":"0.8"}`), at(1600)) || late.State != Text {
 		t.Errorf("a late reply: %+v", late)
 	}
 	other, _ := ReplyOf(host(Control{{"a", "ok"}, {"n", "2"}, {"re", "q"}}, `{}`))
@@ -160,9 +160,9 @@ func TestDetector(t *testing.T) {
 		t.Error("a reply to another query")
 	}
 
-	// A host that speaks 0.7 or 0.8 is a host, and Caps.V says which; one
+	// A host that speaks 0.8 or 0.9 is a host, and Caps.V says which; one
 	// that names a version the query did not list is not.
-	for v, host := range map[string]bool{"0.7": true, "0.8": true, "99.0": false, "0.5": false, "0.9": false, "0.6": false} {
+	for v, host := range map[string]bool{"0.8": true, "0.9": true, "99.0": false, "0.5": false, "0.7": false, "0.6": false} {
 		var vd Detector
 		vd.Start(at(0))
 		vd.Reply(reply(`{"v":"`+v+`"}`), at(5))
@@ -178,7 +178,7 @@ func TestDetector(t *testing.T) {
 		"another version":         reply(`{"v":"0.5"}`),
 		"no capabilities":         reply(``),
 		"EVERSION": func() Reply {
-			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.7,0.8"}`))
+			r, _ := ReplyOf(host(Control{{"a", "err"}, {"n", "1"}, {"re", "q"}}, `{"code":"EVERSION","detail":"0.8,0.9"}`))
 			return r
 		}(),
 	} {
@@ -193,7 +193,7 @@ func TestDetector(t *testing.T) {
 	}
 	var native Detector
 	native.Start(at(0))
-	native.Reply(reply(`{"v":"0.7"}`), at(5))
+	native.Reply(reply(`{"v":"0.8"}`), at(5))
 	native.End(at(6))
 	if !native.Done || native.State != Native {
 		t.Errorf("End after native: %+v", native)

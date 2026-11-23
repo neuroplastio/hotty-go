@@ -142,7 +142,7 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type KV`](#KV)
 - [`type Keymap`](#Keymap)
   - [`func ParseKeymap(p Platform, value string) *Keymap`](#ParseKeymap)
-  - [`func Resolve(p Platform, multiline bool, values ...string) *Keymap`](#Resolve)
+  - [`func Resolve(p Platform, reader Reader, own string, inner ...string) *Keymap`](#Resolve)
   - [`func (m *Keymap) Bind(name string, a Action) bool`](#Keymap.Bind)
   - [`func (m *Keymap) Binds(name string) bool`](#Keymap.Binds)
   - [`func (m *Keymap) Format() string`](#Keymap.Format)
@@ -195,6 +195,8 @@ A surface name is 1 to 64 of A–Z, a–z, 0–9, '\_' and '-' (SurfaceName make
 - [`type QueryOption`](#QueryOption)
   - [`func Late() QueryOption`](#Late)
 - [`type Quiet`](#Quiet)
+- [`type Reader`](#Reader)
+  - [`func Readers() []Reader`](#Readers)
 - [`type Reply`](#Reply)
   - [`func ReplyOf(m Message) (Reply, bool)`](#ReplyOf)
 - [`type ReplyOption`](#ReplyOption)
@@ -262,8 +264,8 @@ const (
 	MaxName = 64
 	// Version is the protocol version this package speaks first: the newest
 	// it speaks, and the one it writes in its capabilities (SPEC §4). It
-	// speaks 0.7 as well: Versions.
-	Version = "0.8"
+	// speaks 0.8 as well: Versions.
+	Version = "0.9"
 )
 ```
 
@@ -294,21 +296,23 @@ const (
 
 The optional features a host may have (SPEC §4), as its capabilities list them (HasFeature).
 
-<a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventCaret"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventCommand"></a><a id="EventCaps"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
+<a id="EventContextMenu"></a><a id="EventAuxClick"></a><a id="EventClick"></a><a id="EventChange"></a><a id="EventInput"></a><a id="EventCaret"></a><a id="EventSubmit"></a><a id="EventPress"></a><a id="EventFocus"></a><a id="EventBlur"></a><a id="EventFit"></a><a id="EventHover"></a><a id="EventView"></a><a id="EventCommand"></a><a id="EventCaps"></a><a id="EventDragStart"></a><a id="EventDrag"></a><a id="EventDragEnd"></a>
 
 ```go
 const (
-	EventClick  = "click"  // a button, link, summary or data-on~=click element was activated
-	EventChange = "change" // a control's value was committed, or a box toggled
-	EventInput  = "input"  // an edit of a control with data-on~=input
-	EventCaret  = "caret"  // the user moved a text field's selection, and no input says so, with data-on~=caret
-	EventSubmit = "submit" // a form was submitted; the detail is its fields
-	EventPress  = "press"  // a press anywhere in a placement made with Press
-	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
-	EventBlur   = "blur"   // the surface gave the keyboard back
-	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
-	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
-	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
+	EventContextMenu = "contextmenu" // a gesture on an element with data-on~=contextmenu
+	EventAuxClick    = "auxclick"    // another button released where it was pressed
+	EventClick       = "click"       // a button, link, summary or data-on~=click element was activated
+	EventChange      = "change"      // a control's value was committed, or a box toggled
+	EventInput       = "input"       // an edit of a control with data-on~=input
+	EventCaret       = "caret"       // the user moved a text field's selection, and no input says so, with data-on~=caret
+	EventSubmit      = "submit"      // a form was submitted; the detail is its fields
+	EventPress       = "press"       // a press anywhere in a placement made with Press
+	EventFocus       = "focus"       // the user focused an element; Target names it (SPEC §10.1)
+	EventBlur        = "blur"        // the surface gave the keyboard back
+	EventFit         = "fit"         // the rows the document needs changed, on a placement made with Fit
+	EventHover       = "hover"       // the element under the pointer changed, or the pointer left, on a placement made with Hover
+	EventView        = "view"        // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
 
 	// The terminal's events, which belong to no surface: Surface and
 	// Target are empty.
@@ -317,13 +321,27 @@ const (
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
-	EventDragStart = "dragstart" // the primary button pressed on the element
+	EventDragStart = "dragstart" // a drag began on the element
 	EventDrag      = "drag"      // the element under the pointer changed
 	EventDragEnd   = "dragend"   // the button released, or the drag cut short
 )
 ```
 
 Event kinds (SPEC §9). A program ignores kinds it does not know: later versions add some.
+
+<a id="ButtonPrimary"></a><a id="ButtonMiddle"></a><a id="ButtonSecondary"></a><a id="ButtonBack"></a><a id="ButtonForward"></a>
+
+```go
+const (
+	ButtonPrimary = iota
+	ButtonMiddle
+	ButtonSecondary
+	ButtonBack
+	ButtonForward
+)
+```
+
+Pointer buttons in DOM numbering (SPEC §9).
 
 <a id="EINVAL"></a><a id="ENOENT"></a><a id="ENOTARGET"></a><a id="EDETACHED"></a><a id="EQUOTA"></a><a id="EBUDGET"></a><a id="ENOTERM"></a><a id="ESTALE"></a><a id="EVERSION"></a>
 
@@ -386,7 +404,7 @@ const TerminalKeys = "arrow_left=char-backward ctrl+b=char-backward arrow_right=
 	"ctrl+m=newline"
 ```
 
-TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A program puts it in the data-keys of an element that holds its fields, and edits its fields in cells with Resolve(platform, multiline, TerminalKeys), so that they edit the same on a surface and in cells. It leaves enter to SPEC §10.2's default.
+TerminalKeys is the SDK's keymap (SDK.md §3.10), as a data-keys value: the keys of Bubble Tea's text input and text area (bubbles), but for mod+a, which selects all, as in a GUI field and SPEC §10.2's default keymap: ctrl+a on Linux, while on macOS ctrl+a stays the line's start. A program puts it in the data-keys-inner of an element that holds its fields, and edits its fields in cells with Resolve(platform, ReaderInput, "", TerminalKeys), or ReaderMultiline for a multi-line field, so that they edit the same on a surface and in cells. It leaves enter to SPEC §10.2's default.
 
 <a id="TouchMax"></a>
 
@@ -548,7 +566,7 @@ Has reports whether a control has a key.
 func HasFeature(c Caps, feature string) bool
 ```
 
-HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount, FeatureMenu or FeatureBackdrop. Everything else a 0.7 host does, it does.
+HasFeature reports whether the host has an optional feature (SPEC §4): FeaturePassthrough, FeatureHover, FeatureCount, FeatureMenu or FeatureBackdrop. Everything else a 0.8 host does, it does.
 
 ## <a id="Hide"></a>func Hide
 
@@ -660,7 +678,7 @@ PlaceAt places a surface with its window's top-left corner at cell (x, y), count
 func Query(n int, opts ...QueryOption) string
 ```
 
-Query asks whether the terminal is a hotty host that speaks a version in Versions, fenced by Primary Device Attributes (SPEC §4): it lists them, v=0.7,0.8, and a host replies to the query, numbered n, before the DA1 answer every terminal sends, in the highest version they share or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
+Query asks whether the terminal is a hotty host that speaks a version in Versions, fenced by Primary Device Attributes (SPEC §4): it lists them, v=0.8,0.9, and a host replies to the query, numbered n, before the DA1 answer every terminal sends, in the highest version they share or with EVERSION. A DA1 answer with no reply before it means there is no host. Late asks for a late answer as well.
 
 ## <a id="RemoveAttr"></a>func RemoveAttr
 
@@ -708,7 +726,7 @@ ReplyOK is a host's success reply (SPEC §3.6), as a host or a relay answering f
 func ReplyQuery(query Control, caps Caps) string
 ```
 
-ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks Versions: caps, as ReplyCaps writes them, with V the version SharedVersion finds, and an EVERSION error when the query lists none, its detail the versions spoken, comma-separated (0.7,0.8). caps.V is replaced, in caps.Raw too; the host speaks that version to the program from then on, which a host that keeps a session's version learns from SharedVersion.
+ReplyQuery is a host's answer to a query (SPEC §4), for a host that speaks Versions: caps, as ReplyCaps writes them, with V the version SharedVersion finds, and an EVERSION error when the query lists none, its detail the versions spoken, comma-separated (0.8,0.9). caps.V is replaced, in caps.Raw too; the host speaks that version to the program from then on, which a host that keeps a session's version learns from SharedVersion.
 
 ## <a id="Res"></a>func Res
 
@@ -782,7 +800,7 @@ SetVar sets the custom property --name on an element.
 func SharedVersion(query Control) (string, bool)
 ```
 
-SharedVersion is the highest version a query lists (v, SPEC §4) that is among Versions, the one a host that speaks them answers in; false when the query lists none. A host that speaks 0.7 as well answers v=0.7 in 0.7, and v=0.7,0.8 in 0.8.
+SharedVersion is the highest version a query lists (v, SPEC §4) that is among Versions, the one a host that speaks them answers in; false when the query lists none. A host that speaks 0.8 as well answers v=0.8 in 0.8, and v=0.8,0.9 in 0.9.
 
 ## <a id="Speaks"></a>func Speaks
 
@@ -832,7 +850,7 @@ ValidName reports whether s is a surface name a host accepts: 1 to 64 of A–Z, 
 func Versions() []string
 ```
 
-Versions are the protocol versions this package speaks, oldest first: 0.7 and 0.8 (SPEC §4, §15). Its query lists them, a Detector takes a host that answers in any of them, and ReplyQuery answers a program in the highest one the program and this package share. Version is the last.
+Versions are the protocol versions this package speaks, oldest first: 0.8 and 0.9 (SPEC §4, §15). Its query lists them, a Detector takes a host that answers in any of them, and ReplyQuery answers a program in the highest one the program and this package share. Version is the last.
 
 ## <a id="WithdrawLate"></a>func WithdrawLate
 
@@ -881,7 +899,8 @@ const (
 	// after it reaches the program too, until it sends a=focus or a=blur
 	// (SPEC §10.5).
 	Prefix Action = "prefix"
-	// Default gives a key back to the host as if no data-keys bound it.
+	// Default gives a key back to the host as if no keymap of the
+	// program's bound it. Only an element's own data-keys gives one.
 	Default Action = "default"
 	// Copy, Cut, Paste, Undo and Redo are the field's clipboard and
 	// history (SPEC §10.2). A hottyedit.Field keeps neither, and does
@@ -997,7 +1016,7 @@ The axes of Scroll.
 
 ```go
 type Caps struct {
-	// V is the protocol version the host implements, one of Versions: "0.8".
+	// V is the protocol version the host implements, one of Versions: "0.9".
 	V string `msg:"v"`
 	// CellCSS is a cell's size in CSS pixels (SPEC §5.3); the zero Size
 	// when the host did not say.
@@ -1215,7 +1234,7 @@ type Detector struct {
 
 Detector decides whether the terminal is a hotty host (SDK.md §3.8). It is a state machine with the time passed in, so it behaves the same however the program reads the terminal: the program sends what Start returns, gives it each DA1 answer and each reply it reads, calls Tick at Deadline, and End when the input ends or it gives up.
 
-The terminal is a host when it answers the query with capabilities that decode and name a version the query listed (Versions, SPEC §4): Caps.V is the one it met, 0.7 or 0.8, which the host speaks from then on and which the program reads when it must tell them apart. A 0.7 host has no scroll op or hit, and ignores tab=program and default (SDK.md §3.8). Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
+The terminal is a host when it answers the query with capabilities that decode and name a version the query listed (Versions, SPEC §4): Caps.V is the one it met, 0.8 or 0.9, which the host speaks from then on and which the program reads when it must tell them apart. An 0.8 host uses secondary press and reads only data-keys (SDK.md §3.8). Any other answer, an error (EVERSION, from a host that speaks other versions) or capabilities this package cannot read (a 0.1 host's JSON), makes the State Text at once: a host, but not one this program can use (SPEC §4).
 
 Every DA1 answer from the start until Done is detection's, and the program swallows it: it answers the query's fence, or a question asked before, and is no key. A reply that answers the query, ok or an error, is detection's whenever it comes.
 
@@ -1369,7 +1388,7 @@ type Event struct {
 	Target string
 
 	// Value is a control's value (change, input), or the value attribute
-	// of what was clicked (click).
+	// of what was clicked (click, auxclick).
 	Value string
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
@@ -1385,10 +1404,9 @@ type Event struct {
 	// and its value: two fields of one name are two pairs.
 	Fields []FormField
 	// Mods are the modifier keys held (ModShift, …), as bits: in a click,
-	// a press and a drag's events. 0 when none is, and for any other
-	// kind.
+	// a press, a contextmenu, an auxclick and a drag's events.
 	Mods int
-	// Link is a clicked link's.
+	// Link is a link's in a click or auxclick.
 	Link *Link
 	// FitRows is the rows a fit says the document needs now.
 	FitRows int
@@ -1398,19 +1416,15 @@ type Event struct {
 	Hover *Hover
 	// View is a view's (SPEC §9.5).
 	View *View
-	// Area is the cells of the element a click or a press reports, a
-	// keyboard click's too: what a program places something next to the
-	// element by, as a browser places a select's list or a menu by its
-	// control. A secondary press's is that of the element with
-	// data-on~=secondary.
+	// Area is the element's cells for click, press, contextmenu and auxclick.
 	Area *Area
-	// Button is the button of a press as the DOM numbers them: 2 for a
-	// secondary press (SPEC §9), on an element with data-on~=secondary,
-	// and 0 for the primary one. It is 0 for any other kind.
+	// Button is the DOM button number on auxclick, dragstart, or a secondary
+	// press from an 0.8 session. Zero is the primary button or an absent button.
 	Button int
-	// At is where the pointer was on a secondary press: its cell, which a
-	// program places a context menu at (SDK.md §4.7). It is nil when the
-	// detail has none, and for any other kind.
+	// C and R are the pointer's column and row on contextmenu, auxclick, or
+	// a secondary press from an 0.8 session. Each is nil when absent.
+	C, R *int
+	// At is the pointer's cell when both C and R are present.
 	At *Cell
 	// Count is a click's place in its run of clicks on its element, as
 	// the user's platform counts them (SPEC §9): 2 for the second click of
@@ -1596,7 +1610,7 @@ type Keymap struct {
 }
 ```
 
-Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap reads one from a data-keys value; Resolve makes the one a field uses, whose Lookup says what the field does with a key, and Selects whether it selects as it moves. Binds says whether it binds a key, Program whether any focused element's keymap gives a key to the program, and Scroll which scroll action it binds a key to.
+Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap reads one from a data-keys or a data-keys-inner value; Resolve makes the one a reader reads: a field's, whose Lookup says what the field does with a key and Selects whether it selects as it moves, another element's, or a selection's. Binds says whether it binds a key, Program whether it gives a key to the program, and Scroll which scroll action it binds a key to.
 
 ### <a id="ParseKeymap"></a>func ParseKeymap
 
@@ -1604,15 +1618,25 @@ Keymap binds keys to actions (SPEC §10.2), read on a Platform. ParseKeymap read
 func ParseKeymap(p Platform, value string) *Keymap
 ```
 
-ParseKeymap reads a data-keys value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, shift+tab and escape, and tab except when bound to program or default. Mod reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
+ParseKeymap reads a data-keys or a data-keys-inner value as SPEC §10.2 has hosts read it: bindings separated by ASCII white space, each key=action, split at its last '='. It drops the bindings a host ignores: a key that does not parse, an action it does not know, shift+tab and escape, and tab except when bound to program or default. Mod reads as the Platform's: on ctrl, mod+a and ctrl+a are one key.
 
 ### <a id="Resolve"></a>func Resolve
 
 ```go
-func Resolve(p Platform, multiline bool, values ...string) *Keymap
+func Resolve(p Platform, reader Reader, own string, inner ...string) *Keymap
 ```
 
-Resolve makes a field's keymap (SPEC §10.2): the default keymap for the Platform's Mod, with its edit shortcuts, for an input or for a multi-line field, then each data-keys value in turn, the root's first, each overriding the bindings before it key by key. It leaves out each binding to a scroll action where it stands, in its own value too: one neither acts nor overrides an earlier binding of its key. A binding to default gives the key back to the default keymap, or to typing.
+Resolve makes the keymap a reader reads (SPEC §10.2, Keymaps; SDK.md §3.10): for a text field and a selection, the default keymap for the Platform's Mod, with its edit shortcuts, for an input or a multi-line field; then each value of inner in turn, the data-keys-inner values of the focused element's ancestors from the document's root down to its parent; then own, the element's own data-keys. Each overrides the bindings before it key by key, less the bindings its reader does not take, which neither act nor override:
+
+  - a text field takes the editing actions, program and prefix, and no scroll action;
+  - any other element takes program, prefix and the scroll actions;
+  - a selection takes copy from own only, and program and prefix;
+  - no reader takes a binding in inner to program or prefix of a key it uses: one a field types (KeyText), or its row of SPEC §10.2's first table, unmodified or with shift only (a button's space and enter, a select's characters, space, enter and moves, a date input's characters and keys);
+  - each takes default from own only. A binding to default gives the key back: in a field, to the default keymap or to typing.
+
+With nothing focused the reader is ReaderElement, own is the body's data-keys, and inner the root's and the body's data-keys-inner, since the body stands for the document; a selection reads the same own and inner. In an 0.8 session each data-keys is both its element's own and its inner (HOST.md §5.1): a host passes the ancestors' data-keys as inner.
+
+Resolve panics on a reader outside Readers.
 
 ### <a id="Keymap.Bind"></a>func (*Keymap) Bind
 
@@ -1644,7 +1668,7 @@ Format writes the keymap as a data-keys value: each key once, where it was first
 func (m *Keymap) Lookup(name string) Action
 ```
 
-Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a key it types (KeyText); or "" when the key is not the field's, and reaches the program (or, for tab, moves focus). A key with shift that is not a character and that no binding names is looked up without shift.
+Lookup says what a field with this keymap does with a key (SPEC §10.2): an action; Insert for a key it types (KeyText); or "" when the key is not the field's, and reaches the program (or, for tab, moves focus). A key with shift that is not a character and that no binding names is looked up without shift. On a selection's keymap it is Copy for a key that copies the selection, and "" for every other (SPEC §11).
 
 ### <a id="Keymap.Prefix"></a>func (*Keymap) Prefix
 
@@ -1660,9 +1684,9 @@ Prefix reports whether the keymap binds a key to prefix, or, for a key with shif
 func (m *Keymap) Program(name string) bool
 ```
 
-Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift (SPEC §10.2, keys for the program). Tab is given only by a field's keymap, from Resolve; shift+tab and escape keep their meaning. Default gives no key.
+Program reports whether the keymap gives a key to the program: binds it to program or prefix, or, for a key with shift that is not a character and that no binding names, binds it without shift (SPEC §10.2, keys for the program). Tab is given only by a field's keymap, from Resolve with ReaderInput or ReaderMultiline; shift+tab and escape keep their meaning. Default gives no key.
 
-Every focused element has a keymap, and outside a text field program and the scroll actions are the only actions it gives. A host reads the element's as a field's, from the data-keys values of the elements from the root down to it, but with its scroll actions and no default keymap: ParseKeymap(platform, strings.Join(values, " ")). It gives a key the keymap binds to program or prefix to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action takes it back. In a field, Lookup says as much.
+Every focused element has a keymap, which Resolve makes with the element's reader, and with nothing focused the body's, with ReaderElement. A host gives a key it gives the program to the program before the element uses it, and before the surface scrolls with it; a nearer binding of the key to another action the reader takes takes it back. In a field, Lookup says as much.
 
 ### <a id="Keymap.Scroll"></a>func (*Keymap) Scroll
 
@@ -2133,6 +2157,50 @@ const (
 ```
 
 The quiet levels.
+
+## <a id="Reader"></a>type Reader
+
+```go
+type Reader string
+```
+
+Reader is what reads a keymap (SPEC §10.2, Keymaps): a text field, an element of another row of SPEC §10.2's first table, or a selection in the document. Each takes only the bindings it has a use for. The readers are a closed set, and Resolve panics on any other value.
+
+<a id="ReaderInput"></a><a id="ReaderMultiline"></a><a id="ReaderButton"></a><a id="ReaderSelect"></a><a id="ReaderDate"></a><a id="ReaderElement"></a><a id="ReaderSelection"></a>
+
+```go
+const (
+	// ReaderInput is a text input: an input of type text, search, url,
+	// tel, email, password or number, or of a type the host does not know.
+	ReaderInput Reader = "input"
+	// ReaderMultiline is a multi-line field: a textarea, or an editing
+	// host (contenteditable).
+	ReaderMultiline Reader = "multiline"
+	// ReaderButton is a button, an input of type button, submit or reset,
+	// a link, a summary, a checkbox or a radio button.
+	ReaderButton Reader = "button"
+	// ReaderSelect is a select.
+	ReaderSelect Reader = "select"
+	// ReaderDate is an input of a date or time type.
+	ReaderDate Reader = "date"
+	// ReaderElement is any other focused element, such as one with a
+	// tabindex, and the surface with nothing focused, where the body
+	// stands for the document.
+	ReaderElement Reader = "element"
+	// ReaderSelection is a selection in the document (SPEC §11).
+	ReaderSelection Reader = "selection"
+)
+```
+
+The readers (SDK.md §3.10).
+
+### <a id="Readers"></a>func Readers
+
+```go
+func Readers() []Reader
+```
+
+Readers returns every Reader in SDK.md §3.10's order.
 
 ## <a id="Reply"></a>type Reply
 

@@ -1268,7 +1268,7 @@ func TestReplies(t *testing.T) {
 
 func TestBody(t *testing.T) {
 	r, _ := hotty.ReplyOf(hotty.Message{Control: hotty.Control{{K: "a", V: "ok"}, {K: "re", V: "q"}},
-		Payload: Body(`{"v":"0.7","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
+		Payload: Body(`{"v":"0.8","scale":2.0,"cellcss":{"w":9.0,"h":18.0},"limits":{"surfaces":3}}`)})
 	if c := r.Caps; c == nil || c.Scale != 2 || c.CellCSS.W != 9 || c.Limits["surfaces"] != 3 {
 		t.Errorf("caps %+v", c)
 	}
@@ -1746,11 +1746,11 @@ func TestContextMenu(t *testing.T) {
 	}
 }
 
-// The host speaks 0.7 and 0.8 and answers a query in the highest version it
+// The host speaks 0.8 and 0.9 and answers a query in the highest version it
 // shares with the program (SPEC §4); the session goes on in that version.
 func TestQueryVersions(t *testing.T) {
 	for _, c := range []struct{ v, want string }{
-		{"0.7,0.8", "0.8"}, {"0.7", "0.7"}, {"0.8", "0.8"}, {"0.5", ""}, {"0.6", ""}, {"99.0", ""},
+		{"0.8,0.9", "0.9"}, {"0.8", "0.8"}, {"0.9", "0.9"}, {"0.7", ""}, {"0.5", ""}, {"0.6", ""}, {"99.0", ""},
 	} {
 		h := New(t)
 		send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "n", V: "1"}, {K: "v", V: c.v}}, nil))
@@ -1758,7 +1758,7 @@ func TestQueryVersions(t *testing.T) {
 		m, _ := d.Feed(oscs(h.drain())[0])
 		r, _ := hotty.ReplyOf(m)
 		switch {
-		case c.want == "" && (r.OK || r.Code != hotty.EVERSION || r.Detail != "0.7,0.8"):
+		case c.want == "" && (r.OK || r.Code != hotty.EVERSION || r.Detail != "0.8,0.9"):
 			t.Errorf("v=%s: %+v", c.v, r)
 		case c.want != "" && (!r.OK || r.Caps == nil || r.Caps.V != c.want || h.version != c.want):
 			t.Errorf("v=%s: %+v", c.v, r)

@@ -379,3 +379,17 @@ func TestReadonlyField(t *testing.T) {
 		t.Error("arrow_left was not taken by a readonly field")
 	}
 }
+
+func TestKeymapByVersion(t *testing.T) {
+	for _, tt := range []struct{ version, value string }{{"0.8", "xab"}, {"0.9", "abx"}} {
+		t.Run(tt.version, func(t *testing.T) {
+			h := shown(t, "s", `<div data-keys="ctrl+a=line-start" data-keys-inner="ctrl+a=line-end"><input id=f value=ab></div>`)
+			send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "v", V: tt.version}}, nil), hotty.Focus("s", "f"))
+			h.Key("ctrl+a")
+			h.Key("x")
+			if v, _ := h.Surface("s").Value("f"); v != tt.value {
+				t.Errorf("input value = %q, want %q", v, tt.value)
+			}
+		})
+	}
+}

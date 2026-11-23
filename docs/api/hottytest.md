@@ -22,7 +22,7 @@ h.Click("tool-card", "retry")                 // what the user does
 h.Key("Tab")                                  // keys, as SPEC §10.2 has a host take them
 ```
 
-The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the hotty conformance vectors that need no layout: it skips the ones marked scroll, steps, drop and view, and those for features it lacks (SDK.md §4.4). It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows), nothing in it scrolls, and a test says where in an element a pointer is (DragStartStep).
+The host keeps every surface's document as the program's commands leave it, with the delta operations and the morph of SPEC §6, and answers each command as SPEC §3.6 has hosts do. It passes the hotty conformance vectors' send, inspect and key steps that need no layout (SDK.md §4.4). It skips vectors that require scroll, steps, drop, view, layout or other features it lacks. It speaks 0.9 and 0.8 (HOST.md §5). It lays nothing out and draws no pixels: a placement with auto rows gets an estimate (AutoRows), nothing in it scrolls, and a test says where in an element a pointer is (ContextMenu, AuxClick, DragStartStep). A document change that invalidates the focused element keeps the surface keyboard on the body, committing a user edit if the control is still in the document.
 
 A placement made on the alternate screen goes with it, and so does its surface (SPEC §5.4). A full reset (RIS) deletes every surface.
 
@@ -48,6 +48,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
 - [`type Host`](#Host)
   - [`func New(tb testing.TB, opts ...Option) *Host`](#New)
   - [`func (h *Host) AttachTerminal()`](#Host.AttachTerminal)
+  - [`func (h *Host) AuxClick(surface, id string, button, c, r int, keys ...string) error`](#Host.AuxClick)
   - [`func (h *Host) BecomeHost()`](#Host.BecomeHost)
   - [`func (h *Host) Blur(surface string) error`](#Host.Blur)
   - [`func (h *Host) Buffered() int`](#Host.Buffered)
@@ -58,6 +59,7 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) ClickLink(surface, href string, keys ...string) error`](#Host.ClickLink)
   - [`func (h *Host) Close() error`](#Host.Close)
   - [`func (h *Host) Commands() []hotty.Message`](#Host.Commands)
+  - [`func (h *Host) ContextMenu(surface, id string, c, r int, keys ...string) error`](#Host.ContextMenu)
   - [`func (h *Host) Cursor() (col, row int, shown bool)`](#Host.Cursor)
   - [`func (h *Host) DetachTerminal()`](#Host.DetachTerminal)
   - [`func (h *Host) DoubleClick(surface, id string, keys ...string) error`](#Host.DoubleClick)
@@ -68,6 +70,8 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) DragMoveStep(id string, c, r, x, y int, keys ...string) error`](#Host.DragMoveStep)
   - [`func (h *Host) DragOver(id string, c, r, tx, ty int, keys ...string) error`](#Host.DragOver)
   - [`func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error`](#Host.DragStart)
+  - [`func (h *Host) DragStartButton(surface, id string, button, c, r int, keys ...string) error`](#Host.DragStartButton)
+  - [`func (h *Host) DragStartButtonStep(surface, id string, button, c, r, x, y int, keys ...string) error`](#Host.DragStartButtonStep)
   - [`func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error`](#Host.DragStartStep)
   - [`func (h *Host) Dragging() bool`](#Host.Dragging)
   - [`func (h *Host) Emit(surface, kind, target string, detail any) error`](#Host.Emit)
@@ -89,7 +93,6 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Replies() []hotty.Message`](#Host.Replies)
   - [`func (h *Host) Resource(id string) (mime string, data []byte, ok bool)`](#Host.Resource)
   - [`func (h *Host) Screen() string`](#Host.Screen)
-  - [`func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) error`](#Host.SecondaryPress)
   - [`func (h *Host) Shown() []hotty.MenuItem`](#Host.Shown)
   - [`func (h *Host) Submit(surface, id string) error`](#Host.Submit)
   - [`func (h *Host) Surface(name string) *Surface`](#Host.Surface)
@@ -219,6 +222,14 @@ func (h *Host) AttachTerminal()
 
 AttachTerminal attaches a terminal to the pane of a host made with NoTerminal, or one DetachTerminal left without. The terminal lays every surface out: a placement answered ENOTERM gets its rows, and one with f=1 hears them as fit, as it does any rows that differ from the ones it last heard (SPEC §5.2).
 
+### <a id="Host.AuxClick"></a>func (*Host) AuxClick
+
+```go
+func (h *Host) AuxClick(surface, id string, button, c, r int, keys ...string) error
+```
+
+AuxClick plays another button's press and release on the same element at cell c, r. Middle, back and forward use aux. The secondary button uses rightbutton, subject to the nearest contextmenu or rightbutton.
+
 ### <a id="Host.BecomeHost"></a>func (*Host) BecomeHost
 
 ```go
@@ -303,6 +314,14 @@ func (h *Host) Commands() []hotty.Message
 
 Commands are the hotty messages the program sent, in order.
 
+### <a id="Host.ContextMenu"></a>func (*Host) ContextMenu
+
+```go
+func (h *Host) ContextMenu(surface, id string, c, r int, keys ...string) error
+```
+
+ContextMenu plays a secondary-button gesture at cell c, r on the named element, or the body for an empty id. The nearest contextmenu or rightbutton opt-in decides. An 0.8 session uses secondary and reports a press with ButtonSecondary instead. Key can play the menu-key gesture.
+
 ### <a id="Host.Cursor"></a>func (*Host) Cursor
 
 ```go
@@ -384,6 +403,22 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error
 DragStart presses a mouse's primary button on the element with an id and starts a drag (SPEC §9.1), at the surface's cell c, r, with the modifier keys held ("shift", "ctrl", "alt", "super"). The press is a press like any other: press first, if the placement asks for presses; then dragstart, from the nearest element from it outward with drag in its data-on; then the keyboard, as a click moves it. ErrNoReport, and no drag, if no element opts in or the one that does has no id.
 
 The host lays nothing out, so a test names what is under the pointer: DragMove for each element or cell crossed, then DragEnd.
+
+### <a id="Host.DragStartButton"></a>func (*Host) DragStartButton
+
+```go
+func (h *Host) DragStartButton(surface, id string, button, c, r int, keys ...string) error
+```
+
+DragStartButton starts a drag with button at c, r. For an auxiliary button this plays the gesture after it crosses the slop threshold.
+
+### <a id="Host.DragStartButtonStep"></a>func (*Host) DragStartButtonStep
+
+```go
+func (h *Host) DragStartButtonStep(surface, id string, button, c, r, x, y int, keys ...string) error
+```
+
+DragStartButtonStep also supplies the starting steps in the dragged element.
 
 ### <a id="Host.DragStartStep"></a>func (*Host) DragStartStep
 
@@ -467,7 +502,7 @@ func (h *Host) Key(key string) (used bool)
 
 Key types a key as the user does, and does with it what SPEC §10.2 has a host do while a surface has the keyboard. The key is named as SPEC §10.4 names it, as myelin key names do: its modifiers, joined by "+", and a character, a physical key or a modifier key: "a", "shift+a", "space", "enter", "tab", "shift+tab", "backspace", "arrow\_down", "escape", "ctrl+s". A press has one name here, as the program would read it (SPEC §10.4): a binding of a physical key (ctrl+key\_w) holds only where the test gives that name. A name that does not parse is no key; the program gets nothing of it.
 
-tab, unless a text field gives it to the program with tab=program, and shift+tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with the data-keys of the elements from the root to it): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input), each one more rev, and a caret event for each move and each edit no input event reports (data-on~=caret); a move whose key has shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit, enter in a text input, commits the value as focus leaving the field does (change, if the user changed it), then submits its form, if it is in one (SPEC §9, §10.2).
+tab, unless a text field gives it to the program with tab=program, and shift+tab move focus from the focused element to the next or the previous of the surface's focusable elements in tree order, those with a negative tabindex and those in an inert subtree left out (an element focused with a negative tabindex is where they start from); past the last, or before the first, the surface loses the keyboard (blur). A text field (a text-like input, a textarea) does what its keymap says (hotty.Resolve, with its data-keys and its ancestors' data-keys-inner): it edits its value at a caret and a selection this host keeps, as hottyedit.Field does, with an input event for each edit (data-on~=input), each one more rev, and a caret event for each move and each edit no input event reports (data-on~=caret); a move whose key has shift selects (hotty.Keymap.Selects), select-all selects the value, characters type in place of the selection, and submit, enter in a text input, commits the value as focus leaving the field does (change, if the user changed it), then submits its form, if it is in one (SPEC §9, §10.2).
 
 Any other element has a keymap too, read the same way but with no default keymap (hotty.Keymap.Program): a key it binds to program reaches the program, and its other bindings do nothing. This host does not scroll, so a key bound to a scroll action goes on as if the keymap did not bind it (SPEC §10.2). The element takes the other keys of its row of the table, unmodified or with shift only:
 
@@ -476,7 +511,7 @@ Any other element has a keymap too, read the same way but with no default keymap
   - a date or time input: the keys a text input's default keymap binds, and characters; the arrows up and down and the page keys are used;
   - a select: the arrows, home and end pick an option, the page keys as far as home and end, a character the next option its label starts, past disabled ones; a pick sends input (with data-on~=input) and change at once. space and enter do nothing: this host shows no list.
 
-With no element focused there is no keymap: the data-keys of the document are not read, and every key but tab is the program's.
+With nothing focused, the body's keymap supplies program and prefix bindings. Tab then starts at the first element, and Shift+Tab at the last.
 
 Every other key reaches the program, as typed (Type) when it has a terminal encoding here: characters, enter, tab, escape, backspace, the arrows and the editing keys, and ctrl or alt with a character. So does every key while no surface has the keyboard. used reports whether a surface used the key.
 
@@ -567,18 +602,6 @@ func (h *Host) Screen() string
 ```
 
 Screen is the cells the program printed, a line a row, without colours: what is left after carriage returns, cursor moves, erases and scrolls. It is the main screen, its scrollback first, or the alternate screen while the program has it on. Surfaces are not drawn in it; the rows a placement covered are blank.
-
-### <a id="Host.SecondaryPress"></a>func (*Host) SecondaryPress
-
-```go
-func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) error
-```
-
-SecondaryPress presses the secondary button (a right click) at cell c, r of the surface, on the element with an id, or on the document's body for "" (SPEC §9): reported as a press with button 2, c, r and the modifier keys held (mods), by the nearest element from it outward with data-on~=secondary, as its id (t, absent when it has none). It needs no Placement.Press, and its detail has no area, since this host lays nothing out.
-
-With no such element nothing is reported: the press is the terminal's. So it is with Shift held, which gives the terminal's menu. With Alt it is the program's own gesture, as Press's is (SPEC §9.2): the pointer leaves the window, and the surface hears nothing more. Otherwise it makes no click, focus or blur, moves no keyboard, starts no drag and changes no hover. This host does no touch, and so makes no long press.
-
-It returns ErrDetached on a detached surface, and ErrNoSurface or ErrNoElement as Press does.
 
 ### <a id="Host.Shown"></a>func (*Host) Shown
 
