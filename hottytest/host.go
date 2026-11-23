@@ -740,9 +740,6 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			s = newSurface(&h.mu, name, string(m.Payload), h.created)
 			h.surfaces[name] = s
 		} else {
-			if h.keyboard == s {
-				h.keyboard = nil
-			}
 			if h.drag != nil && h.drag.s == s {
 				if hotty.Get(m.Control, "d") == "1" {
 					h.drag = nil // detached: it reports nothing more
@@ -753,6 +750,13 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			s.setDoc(string(m.Payload))
 		}
 		s.detached = hotty.Get(m.Control, "d") == "1"
+		if h.keyboard == s {
+			if s.detached {
+				h.keyboard = nil
+			} else {
+				s.keyb = true
+			}
+		}
 		return "", "", nil
 	}
 	if s == nil {
@@ -797,8 +801,9 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 				code, detail, h.faultOp = c, d, i
 			}
 		}
-		if h.keyboard == s && !s.keyb {
-			h.keyboard = nil // the focused element went
+		if h.keyboard == s && s.focused != nil && !canFocus(s.focused, true) {
+			h.commit(s)
+			s.focused = nil
 		}
 		return code, detail, nil
 	case "del":
@@ -825,6 +830,9 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if t := hotty.Get(m.Control, "t"); t != "" {
 			if el = s.byID(t); el == nil {
 				return hotty.ENOTARGET, t, nil
+			}
+			if !canFocus(el, true) {
+				el = s.focused
 			}
 		} else if s.focused != nil {
 			el = s.focused
@@ -1031,31 +1039,79 @@ func (h *Host) blur(s *Surface) {
 	h.event(s, hotty.EventBlur, "", nil)
 }
 
-func focusable(n *html.Node) bool {
-	if n.Type != html.ElementNode {
+func focusable(n *html.Node) bool { return canFocus(n, false) }
+
+func canFocus(n *html.Node, allowNegative bool) bool {
+	if n.Type != html.ElementNode || disabled(n) {
 		return false
 	}
-	if _, dis := attr(n, "disabled"); dis {
-		return false
-	}
-	switch n.DataAtom {
-	case atom.Input, atom.Select, atom.Textarea, atom.Button, atom.Summary:
-		if t, _ := attr(n, "type"); n.DataAtom == atom.Input && strings.EqualFold(t, "hidden") {
+	for p := n; p != nil; p = p.Parent {
+		_, hidden := attr(p, "hidden")
+		_, inert := attr(p, "inert")
+		if hidden || inert {
 			return false
 		}
+	}
+	switch n.DataAtom {
+	case atom.Input:
+		t, _ := attr(n, "type")
+		return !strings.EqualFold(t, "hidden")
+	case atom.Select, atom.Textarea, atom.Button:
 		return true
+	case atom.Summary:
+		if p := n.Parent; p != nil && p.DataAtom == atom.Details {
+			for c := p.FirstChild; c != nil; c = c.NextSibling {
+				if c.DataAtom == atom.Summary {
+					if c == n {
+						return true
+					}
+					break
+				}
+			}
+		}
 	case atom.A:
 		if hyperlink(n) {
-			return false // a hyperlink takes no focus, whatever its tabindex (SPEC §10.1)
+			return false
 		}
 		if _, href := attr(n, "href"); href {
 			return true
 		}
-		// HTML: an a without href takes focus by its tabindex, as any element.
 	}
-	if t, ok := attr(n, "tabindex"); ok {
-		v, err := strconv.Atoi(t)
-		return err == nil && v >= 0
+	if editingHost(n) {
+		return true
+	}
+	t, _ := attr(n, "tabindex")
+	v, err := strconv.Atoi(t)
+	return err == nil && (allowNegative || v >= 0)
+}
+
+// disabled includes a disabled fieldset's controls outside its first legend.
+func disabled(n *html.Node) bool {
+	if _, dis := attr(n, "disabled"); dis {
+		return true
+	}
+	switch n.DataAtom {
+	case atom.Button, atom.Input, atom.Select, atom.Textarea:
+	default:
+		return false
+	}
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p.DataAtom != atom.Fieldset {
+			continue
+		}
+		if _, dis := attr(p, "disabled"); !dis {
+			continue
+		}
+		var legend *html.Node
+		for child := p.FirstChild; child != nil; child = child.NextSibling {
+			if child.DataAtom == atom.Legend {
+				legend = child
+				break
+			}
+		}
+		if legend == nil || closest(n, func(a *html.Node) bool { return a == legend }) == nil {
+			return true
+		}
 	}
 	return false
 }

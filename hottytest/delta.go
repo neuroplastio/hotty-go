@@ -174,7 +174,7 @@ func (s *Surface) drop(n *html.Node) {
 		delete(s.fields, c)
 		delete(s.revs, c)
 		if c == s.focused {
-			s.focused, s.keyb = nil, false
+			s.focused = nil
 		}
 	})
 }
