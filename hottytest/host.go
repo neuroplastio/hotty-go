@@ -12,11 +12,14 @@
 // The host keeps every surface's document as the program's commands leave
 // it, with the delta operations and the morph of SPEC §6, and answers each
 // command as SPEC §3.6 has hosts do. It passes the hotty conformance
-// vectors that need no layout: it skips the ones marked scroll, steps, drop
-// and view, and those for features it lacks (SDK.md §4.4). It lays nothing
+// vectors' send, inspect and key steps that need no layout (SDK.md §4.4).
+// It skips vectors that require scroll, steps, drop, view, layout or other
+// features it lacks. It speaks 0.9 and 0.8 (HOST.md §5). It lays nothing
 // out and draws no pixels: a placement with auto rows gets an estimate
 // (AutoRows), nothing in it scrolls, and a test says where in an element a
-// pointer is (DragStartStep).
+// pointer is (ContextMenu, AuxClick, DragStartStep). A document change
+// that invalidates the focused element keeps the surface keyboard on the
+// body, committing a user edit if the control is still in the document.
 //
 // A placement made on the alternate screen goes with it, and so does its
 // surface (SPEC §5.4). A full reset (RIS) deletes every surface.
@@ -1335,16 +1338,17 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count, mods int) e
 // drag is a drag in progress: the pointer is its surface's until the
 // release.
 type drag struct {
-	s     *Surface
-	start *html.Node // the element that opted in, where it began
-	id    string     // its id
-	t     string     // the element under the pointer, as last reported
-	c, r  int        // the cell under the pointer, as last reported
-	n     [2]int     // the element's data-steps when the drag began: none is 0
-	x, y  int        // the step as last reported, along each counted axis
-	tn    [2]int     // t's data-steps as last reported: none is 0
-	tx    int        // the step in t as last reported, along each counted axis
-	ty    int
+	s      *Surface
+	button int
+	start  *html.Node // the element that opted in, where it began
+	id     string     // its id
+	t      string     // the element under the pointer, as last reported
+	c, r   int        // the cell under the pointer, as last reported
+	n      [2]int     // the element's data-steps when the drag began: none is 0
+	x, y   int        // the step as last reported, along each counted axis
+	tn     [2]int     // t's data-steps as last reported: none is 0
+	tx     int        // the step in t as last reported, along each counted axis
+	ty     int
 }
 
 // DragStart presses a mouse's primary button on the element with an id and
@@ -1358,7 +1362,7 @@ type drag struct {
 // The host lays nothing out, so a test names what is under the pointer:
 // DragMove for each element or cell crossed, then DragEnd.
 func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
-	return h.dragStart(surface, id, c, r, 0, 0, keys)
+	return h.dragStart(surface, id, hotty.ButtonPrimary, c, r, 0, 0, keys)
 }
 
 // DragStartStep is DragStart on an element with data-steps (SPEC §9.1),
@@ -1367,10 +1371,21 @@ func (h *Host) DragStart(surface, id string, c, r int, keys ...string) error {
 // element's count is clamped to it, and one along an axis it does not
 // count is ignored.
 func (h *Host) DragStartStep(surface, id string, c, r, x, y int, keys ...string) error {
-	return h.dragStart(surface, id, c, r, x, y, keys)
+	return h.dragStart(surface, id, hotty.ButtonPrimary, c, r, x, y, keys)
 }
 
-func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) error {
+// DragStartButton starts a drag with button at c, r. For an auxiliary
+// button this plays the gesture after it crosses the slop threshold.
+func (h *Host) DragStartButton(surface, id string, button, c, r int, keys ...string) error {
+	return h.dragStart(surface, id, button, c, r, 0, 0, keys)
+}
+
+// DragStartButtonStep also supplies the starting steps in the dragged element.
+func (h *Host) DragStartButtonStep(surface, id string, button, c, r, x, y int, keys ...string) error {
+	return h.dragStart(surface, id, button, c, r, x, y, keys)
+}
+
+func (h *Host) dragStart(surface, id string, button, c, r, x, y int, keys []string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s, err := h.target(surface)
@@ -1390,22 +1405,37 @@ func (h *Host) dragStart(surface, id string, c, r, x, y int, keys []string) erro
 	if h.alt1(s, keys) {
 		return nil
 	}
-	if s.press {
-		h.pressAt(s, el, modBits(keys))
+	var on *html.Node
+	if button == hotty.ButtonPrimary {
+		if s.press {
+			h.pressAt(s, el, modBits(keys))
+		}
+		on = closest(el, listens("drag"))
+	} else if modBits(keys)&hotty.ModShift == 0 {
+		on = h.auxTarget(el, button)
+		if on != nil && !listens("drag")(on) {
+			on = nil
+		}
 	}
-	if on := closest(el, listens("drag")); on != nil {
+	if on != nil {
 		if rid, ok := attr(on, "id"); ok {
-			d := &drag{s: s, start: on, id: rid, t: rid, c: c, r: r}
+			d := &drag{s: s, start: on, id: rid, t: rid, c: c, r: r, button: button}
 			d.n = steps(on)
 			d.x, d.y = d.clamp(x, y)
 			h.drag = d
-			h.event(s, hotty.EventDragStart, rid, d.detail(c, r, keys))
+			detail := d.detail(c, r, keys)
+			if button != hotty.ButtonPrimary {
+				detail["button"] = button
+			}
+			h.event(s, hotty.EventDragStart, rid, detail)
 		}
 	}
-	if f := closest(el, focusable); f != nil {
-		h.takeKeyboard(s, f, true)
-	} else if h.keyboard != nil {
-		h.blur(h.keyboard)
+	if button == hotty.ButtonPrimary {
+		if f := closest(el, focusable); f != nil {
+			h.takeKeyboard(s, f, true)
+		} else if h.keyboard != nil {
+			h.blur(h.keyboard)
+		}
 	}
 	if h.drag == nil {
 		return ErrNoReport
@@ -1520,7 +1550,7 @@ func (h *Host) dragEnd(id string, c, r, x, y, tx, ty int, keys []string) error {
 	d.tx, d.ty = clampSteps(d.tn, tx, ty)
 	h.drag = nil
 	h.event(d.s, hotty.EventDragEnd, t, d.detail(c, r, keys))
-	if own == d.id && reportsClick(d.start) {
+	if d.button == hotty.ButtonPrimary && own == d.id && reportsClick(d.start) {
 		detail := map[string]any{}
 		if m := modBits(keys); m != 0 {
 			detail["mods"] = m
@@ -1775,58 +1805,100 @@ func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 	h.event(s, hotty.EventPress, t, map[string]int{"mods": mods})
 }
 
-// SecondaryPress presses the secondary button (a right click) at cell c, r of
-// the surface, on the element with an id, or on the document's body for ""
-// (SPEC §9): reported as a press with button 2, c, r and the modifier keys
-// held (mods), by the nearest element from it outward with data-on~=secondary,
-// as its id (t, absent when it has none). It needs no Placement.Press, and
-// its detail has no area, since this host lays nothing out.
-//
-// With no such element nothing is reported: the press is the terminal's. So
-// it is with Shift held, which gives the terminal's menu. With Alt it is the
-// program's own gesture, as Press's is (SPEC §9.2): the pointer leaves the
-// window, and the surface hears nothing more. Otherwise it makes no click,
-// focus or blur, moves no keyboard, starts no drag and changes no hover. This
-// host does no touch, and so makes no long press.
-//
-// It returns ErrDetached on a detached surface, and ErrNoSurface or
-// ErrNoElement as Press does.
-func (h *Host) SecondaryPress(surface, id string, c, r int, keys ...string) error {
+// ContextMenu plays a secondary-button gesture at cell c, r on the named
+// element, or the body for an empty id. The nearest contextmenu or
+// rightbutton opt-in decides. An 0.8 session uses secondary and reports a
+// press with ButtonSecondary instead. Key can play the menu-key gesture.
+func (h *Host) ContextMenu(surface, id string, c, r int, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	s, err := h.target(surface)
+	s, el, err := h.pointerTarget(surface, id)
 	if err != nil {
 		return err
 	}
-	var el *html.Node
-	if id != "" {
-		if el, err = h.element(s, id); err != nil {
-			return err
-		}
+	if h.drag != nil || h.alt1(s, keys) || modBits(keys)&hotty.ModShift != 0 {
+		return nil
+	}
+	kind, button := hotty.EventContextMenu, hotty.ButtonPrimary
+	var n *html.Node
+	if h.version == "0.8" {
+		n = closest(el, listens("secondary"))
+		kind, button = hotty.EventPress, hotty.ButtonSecondary
 	} else {
-		el = find(s.doc, func(n *html.Node) bool { return n.DataAtom == atom.Body })
+		n = closest(el, secondaryTarget)
+		if n != nil && !hyperlink(n) && listens("rightbutton")(n) {
+			return nil
+		}
 	}
-	if s.detached {
-		return ErrDetached
-	}
-	if h.alt1(s, keys) {
-		return nil
-	}
-	mods := modBits(keys)
-	if mods&hotty.ModShift != 0 {
-		return nil
-	}
-	n := closest(el, listens("secondary"))
 	if n == nil {
 		return nil
 	}
-	t, _ := attr(n, "id")
-	d := map[string]int{"button": 2, "c": c, "r": r}
-	if mods != 0 {
-		d["mods"] = mods
-	}
-	h.event(s, hotty.EventPress, t, d)
+	id, _ = attr(n, "id")
+	h.send(hotty.EncodeEvent(hotty.Event{Surface: s.name, Target: id, Kind: kind, Button: button,
+		At: &hotty.Cell{Col: c, Row: r}, Mods: modBits(keys)}))
 	return nil
+}
+
+// AuxClick plays another button's press and release on the same element
+// at cell c, r. Middle, back and forward use aux. The secondary button
+// uses rightbutton, subject to the nearest contextmenu or rightbutton.
+func (h *Host) AuxClick(surface, id string, button, c, r int, keys ...string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, el, err := h.pointerTarget(surface, id)
+	if err != nil {
+		return err
+	}
+	if h.drag != nil || h.alt1(s, keys) || modBits(keys)&hotty.ModShift != 0 {
+		return nil
+	}
+	n := h.auxTarget(el, button)
+	if n == nil {
+		return nil
+	}
+	id, _ = attr(n, "id")
+	value, _ := attr(n, "value")
+	ev := hotty.Event{Surface: surface, Target: id, Kind: hotty.EventAuxClick, Button: button,
+		At: &hotty.Cell{Col: c, Row: r}, Mods: modBits(keys), Value: value}
+	if n.DataAtom == atom.A {
+		if href, ok := attr(n, "href"); ok {
+			ev.Link = &hotty.Link{Href: href, URL: s.resolve(n)}
+		}
+	}
+	h.send(hotty.EncodeEvent(ev))
+	return nil
+}
+
+func (h *Host) pointerTarget(surface, id string) (*Surface, *html.Node, error) {
+	s, err := h.target(surface)
+	if err != nil {
+		return nil, nil, err
+	}
+	if s.detached {
+		return nil, nil, ErrDetached
+	}
+	if id == "" {
+		return s, find(s.doc, func(n *html.Node) bool { return n.DataAtom == atom.Body }), nil
+	}
+	el, err := h.element(s, id)
+	return s, el, err
+}
+
+func secondaryTarget(n *html.Node) bool {
+	return listens("rightbutton")(n) || listens("contextmenu")(n)
+}
+
+func (h *Host) auxTarget(el *html.Node, button int) *html.Node {
+	if h.version == "0.8" || button <= hotty.ButtonPrimary || button == 5 {
+		return nil
+	}
+	if button == hotty.ButtonSecondary {
+		if n := closest(el, secondaryTarget); n != nil && !hyperlink(n) && listens("rightbutton")(n) {
+			return n
+		}
+		return nil
+	}
+	return closest(el, func(n *html.Node) bool { return !hyperlink(n) && listens("aux")(n) })
 }
 
 // Fill types text into a text control, as the user does: the surface takes

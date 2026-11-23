@@ -701,7 +701,7 @@ func TestEvents(t *testing.T) {
 
 // What a host writes is what a program reads.
 func TestEncodeEvent(t *testing.T) {
-	on, x := true, 3
+	on, x, y := true, 3, 1
 	for _, e := range []Event{
 		{Surface: "f", Kind: EventClick, Target: "go", Value: "yes", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Mods: ModShift | ModSuper, Count: 1},
 		{Surface: "f", Kind: EventClick, Target: "go", Area: &Area{Col: 1, Row: 2, W: 3, H: 1}, Count: 2},
@@ -712,6 +712,11 @@ func TestEncodeEvent(t *testing.T) {
 		{Surface: "f", Kind: EventPress},
 		{Surface: "f", Kind: EventPress, Target: "m", Area: &Area{Col: 1, Row: 1, W: 4, H: 2}, Button: 2, At: &Cell{Col: 3, Row: 1}},
 		{Surface: "f", Kind: EventPress, Target: "m", Button: 2, At: &Cell{Col: 0, Row: 0}, Mods: ModCtrl | ModSuper},
+		{Surface: "f", Kind: EventContextMenu, Target: "m", Area: &Area{Col: 1, Row: 1, W: 4, H: 2}, C: &x, R: &y},
+		{Surface: "f", Kind: EventContextMenu, Target: "keyboard"},
+		{Surface: "f", Kind: EventContextMenu, Target: "partial", R: &y},
+		{Surface: "f", Kind: EventAuxClick, Target: "link", Button: ButtonBack, At: &Cell{Col: 3, Row: 1}, Mods: ModShift, Value: "open", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}},
+		{Surface: "g", Kind: EventDragStart, Target: "item", Button: ButtonForward, Drag: &Drag{Col: 3, Row: 1, X: x, HasX: true}},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
 		{Surface: "f", Kind: EventInput, Target: "q", Value: "ab"},
@@ -731,6 +736,11 @@ func TestEncodeEvent(t *testing.T) {
 		m, _ := d.Feed(EncodeEvent(e))
 		got, ok := EventOf(m)
 		got.Detail = nil
+		if e.At != nil {
+			e.C, e.R = &e.At.Col, &e.At.Row
+		} else if e.C != nil && e.R != nil {
+			e.At = &Cell{Col: *e.C, Row: *e.R}
+		}
 		if !ok || !reflect.DeepEqual(got, e) {
 			t.Errorf("%s: wrote %+v, read %+v", e.Kind, e, got)
 		}
@@ -738,7 +748,7 @@ func TestEncodeEvent(t *testing.T) {
 	// A press with a c and no r has no cell.
 	var pd Decoder
 	pm, _ := pd.Feed(EncodePlain(Control{{"a", "ev"}, {"s", "f"}, {"e", "press"}}, body(`{"button":2,"c":4}`)))
-	if pe, _ := EventOf(pm); pe.Button != 2 || pe.At != nil {
+	if pe, _ := EventOf(pm); pe.Button != ButtonSecondary || pe.At != nil || pe.C == nil || *pe.C != 4 || pe.R != nil {
 		t.Errorf("a press with c and no r: %+v", pe)
 	}
 	// A relay's detail goes on as it came.

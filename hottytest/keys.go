@@ -103,6 +103,13 @@ func (h *Host) useKey(s *Surface, key string) bool {
 	if el == nil {
 		return false
 	}
+	if h.version != "0.8" && (k == "context_menu" || k == "shift+f10") {
+		if n := closest(el, listens("contextmenu")); n != nil {
+			t, _ := attr(n, "id")
+			h.event(s, hotty.EventContextMenu, t, nil)
+			return true
+		}
+	}
 	if textField(el) {
 		return h.fieldKey(s, el, km, key)
 	}

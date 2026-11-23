@@ -159,6 +159,24 @@ type pressDetail struct {
 	R      *int  `msg:"r,omitempty"`
 }
 
+type contextMenuDetail struct {
+	Area *Area `msg:"area,omitempty"`
+	Mods int   `msg:"mods,omitempty"`
+	C    *int  `msg:"c,omitempty"`
+	R    *int  `msg:"r,omitempty"`
+}
+
+type auxClickDetail struct {
+	Area   *Area   `msg:"area,omitempty"`
+	Mods   int     `msg:"mods,omitempty"`
+	Button int     `msg:"button,omitempty"`
+	C      *int    `msg:"c,omitempty"`
+	R      *int    `msg:"r,omitempty"`
+	Href   *string `msg:"href,omitempty"`
+	URL    string  `msg:"url,omitempty"`
+	Value  string  `msg:"value,omitempty"`
+}
+
 type changeDetail struct {
 	Checked *bool  `msg:"checked,omitempty"`
 	Value   string `msg:"value"`
@@ -188,6 +206,17 @@ type dragDetail struct {
 	Y    *int `msg:"y,omitempty"`
 	TX   *int `msg:"tx,omitempty"`
 	TY   *int `msg:"ty,omitempty"`
+}
+
+type dragStartDetail struct {
+	C      int  `msg:"c"`
+	R      int  `msg:"r"`
+	Mods   int  `msg:"mods,omitempty"`
+	X      *int `msg:"x,omitempty"`
+	Y      *int `msg:"y,omitempty"`
+	TX     *int `msg:"tx,omitempty"`
+	TY     *int `msg:"ty,omitempty"`
+	Button int  `msg:"button,omitempty"`
 }
 
 type hoverDetail struct {

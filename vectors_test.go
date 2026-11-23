@@ -601,8 +601,11 @@ func eventView(e Event) map[string]any {
 		view["count"] = e.Count
 	}
 	view["button"] = e.Button
-	if a := e.At; a != nil {
-		view["c"], view["r"] = a.Col, a.Row
+	if e.C != nil {
+		view["c"] = *e.C
+	}
+	if e.R != nil {
+		view["r"] = *e.R
 	}
 	view["rev"] = e.Rev
 	if e.Sel != nil {

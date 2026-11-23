@@ -1671,6 +1671,339 @@ func (z *TouchArea) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *auxClickDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "area":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+				z.Area = nil
+			} else {
+				if z.Area == nil {
+					z.Area = new(Area)
+				}
+				err = z.Area.DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+			}
+		case "mods":
+			z.Mods, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		case "button":
+			z.Button, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		case "c":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+				z.C = nil
+			} else {
+				if z.C == nil {
+					z.C = new(int)
+				}
+				*z.C, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		case "r":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+				z.R = nil
+			} else {
+				if z.R == nil {
+					z.R = new(int)
+				}
+				*z.R, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		case "href":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Href")
+					return
+				}
+				z.Href = nil
+			} else {
+				if z.Href == nil {
+					z.Href = new(string)
+				}
+				*z.Href, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Href")
+					return
+				}
+			}
+		case "url":
+			z.URL, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "URL")
+				return
+			}
+		case "value":
+			z.Value, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Value")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *auxClickDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(8)
+	var zb0001Mask uint8 /* 8 bits */
+	_ = zb0001Mask
+	if z.Area == nil {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	if z.Mods == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.Button == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.C == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	if z.R == nil {
+		zb0001Len--
+		zb0001Mask |= 0x10
+	}
+	if z.Href == nil {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	if z.URL == "" {
+		zb0001Len--
+		zb0001Mask |= 0x40
+	}
+	if z.Value == "" {
+		zb0001Len--
+		zb0001Mask |= 0x80
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "area"
+			err = en.Append(0xa4, 0x61, 0x72, 0x65, 0x61)
+			if err != nil {
+				return
+			}
+			if z.Area == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = z.Area.EncodeMsg(en)
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "mods"
+			err = en.Append(0xa4, 0x6d, 0x6f, 0x64, 0x73)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Mods)
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "button"
+			err = en.Append(0xa6, 0x62, 0x75, 0x74, 0x74, 0x6f, 0x6e)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Button)
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "c"
+			err = en.Append(0xa1, 0x63)
+			if err != nil {
+				return
+			}
+			if z.C == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.C)
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x10) == 0 { // if not omitted
+			// write "r"
+			err = en.Append(0xa1, 0x72)
+			if err != nil {
+				return
+			}
+			if z.R == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.R)
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x20) == 0 { // if not omitted
+			// write "href"
+			err = en.Append(0xa4, 0x68, 0x72, 0x65, 0x66)
+			if err != nil {
+				return
+			}
+			if z.Href == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteString(*z.Href)
+				if err != nil {
+					err = msgp.WrapError(err, "Href")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x40) == 0 { // if not omitted
+			// write "url"
+			err = en.Append(0xa3, 0x75, 0x72, 0x6c)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.URL)
+			if err != nil {
+				err = msgp.WrapError(err, "URL")
+				return
+			}
+		}
+		if (zb0001Mask & 0x80) == 0 { // if not omitted
+			// write "value"
+			err = en.Append(0xa5, 0x76, 0x61, 0x6c, 0x75, 0x65)
+			if err != nil {
+				return
+			}
+			err = en.WriteString(z.Value)
+			if err != nil {
+				err = msgp.WrapError(err, "Value")
+				return
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *auxClickDetail) Msgsize() (s int) {
+	s = 1 + 5
+	if z.Area == nil {
+		s += msgp.NilSize
+	} else {
+		s += z.Area.Msgsize()
+	}
+	s += 5 + msgp.IntSize + 7 + msgp.IntSize + 2
+	if z.C == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.R == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 5
+	if z.Href == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.StringPrefixSize + len(*z.Href)
+	}
+	s += 4 + msgp.StringPrefixSize + len(z.URL) + 6 + msgp.StringPrefixSize + len(z.Value)
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *caretDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -2306,6 +2639,225 @@ func (z *commandDetail) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *contextMenuDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "area":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+				z.Area = nil
+			} else {
+				if z.Area == nil {
+					z.Area = new(Area)
+				}
+				err = z.Area.DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+			}
+		case "mods":
+			z.Mods, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		case "c":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+				z.C = nil
+			} else {
+				if z.C == nil {
+					z.C = new(int)
+				}
+				*z.C, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		case "r":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+				z.R = nil
+			} else {
+				if z.R == nil {
+					z.R = new(int)
+				}
+				*z.R, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *contextMenuDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(4)
+	var zb0001Mask uint8 /* 4 bits */
+	_ = zb0001Mask
+	if z.Area == nil {
+		zb0001Len--
+		zb0001Mask |= 0x1
+	}
+	if z.Mods == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x2
+	}
+	if z.C == nil {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.R == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		if (zb0001Mask & 0x1) == 0 { // if not omitted
+			// write "area"
+			err = en.Append(0xa4, 0x61, 0x72, 0x65, 0x61)
+			if err != nil {
+				return
+			}
+			if z.Area == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = z.Area.EncodeMsg(en)
+				if err != nil {
+					err = msgp.WrapError(err, "Area")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x2) == 0 { // if not omitted
+			// write "mods"
+			err = en.Append(0xa4, 0x6d, 0x6f, 0x64, 0x73)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Mods)
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "c"
+			err = en.Append(0xa1, 0x63)
+			if err != nil {
+				return
+			}
+			if z.C == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.C)
+				if err != nil {
+					err = msgp.WrapError(err, "C")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "r"
+			err = en.Append(0xa1, 0x72)
+			if err != nil {
+				return
+			}
+			if z.R == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.R)
+				if err != nil {
+					err = msgp.WrapError(err, "R")
+					return
+				}
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *contextMenuDetail) Msgsize() (s int) {
+	s = 1 + 5
+	if z.Area == nil {
+		s += msgp.NilSize
+	} else {
+		s += z.Area.Msgsize()
+	}
+	s += 5 + msgp.IntSize + 2
+	if z.C == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.R == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *deltaBody) DecodeMsg(dc *msgp.Reader) (err error) {
 	var field []byte
 	_ = field
@@ -2688,6 +3240,327 @@ func (z *dragDetail) Msgsize() (s int) {
 	} else {
 		s += msgp.IntSize
 	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
+func (z *dragStartDetail) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if zb0001 > z5817a858limitMaps {
+		err = msgp.ErrLimitExceeded
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "c":
+			z.C, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "C")
+				return
+			}
+		case "r":
+			z.R, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "R")
+				return
+			}
+		case "mods":
+			z.Mods, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		case "x":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "X")
+					return
+				}
+				z.X = nil
+			} else {
+				if z.X == nil {
+					z.X = new(int)
+				}
+				*z.X, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "X")
+					return
+				}
+			}
+		case "y":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Y")
+					return
+				}
+				z.Y = nil
+			} else {
+				if z.Y == nil {
+					z.Y = new(int)
+				}
+				*z.Y, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "Y")
+					return
+				}
+			}
+		case "tx":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+				z.TX = nil
+			} else {
+				if z.TX == nil {
+					z.TX = new(int)
+				}
+				*z.TX, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		case "ty":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+				z.TY = nil
+			} else {
+				if z.TY == nil {
+					z.TY = new(int)
+				}
+				*z.TY, err = dc.ReadInt()
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
+		case "button":
+			z.Button, err = dc.ReadInt()
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *dragStartDetail) EncodeMsg(en *msgp.Writer) (err error) {
+	// check for omitted fields
+	zb0001Len := uint32(8)
+	var zb0001Mask uint8 /* 8 bits */
+	_ = zb0001Mask
+	if z.Mods == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x4
+	}
+	if z.X == nil {
+		zb0001Len--
+		zb0001Mask |= 0x8
+	}
+	if z.Y == nil {
+		zb0001Len--
+		zb0001Mask |= 0x10
+	}
+	if z.TX == nil {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	if z.TY == nil {
+		zb0001Len--
+		zb0001Mask |= 0x40
+	}
+	if z.Button == 0 {
+		zb0001Len--
+		zb0001Mask |= 0x80
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+
+	// skip if no fields are to be emitted
+	if zb0001Len != 0 {
+		// write "c"
+		err = en.Append(0xa1, 0x63)
+		if err != nil {
+			return
+		}
+		err = en.WriteInt(z.C)
+		if err != nil {
+			err = msgp.WrapError(err, "C")
+			return
+		}
+		// write "r"
+		err = en.Append(0xa1, 0x72)
+		if err != nil {
+			return
+		}
+		err = en.WriteInt(z.R)
+		if err != nil {
+			err = msgp.WrapError(err, "R")
+			return
+		}
+		if (zb0001Mask & 0x4) == 0 { // if not omitted
+			// write "mods"
+			err = en.Append(0xa4, 0x6d, 0x6f, 0x64, 0x73)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Mods)
+			if err != nil {
+				err = msgp.WrapError(err, "Mods")
+				return
+			}
+		}
+		if (zb0001Mask & 0x8) == 0 { // if not omitted
+			// write "x"
+			err = en.Append(0xa1, 0x78)
+			if err != nil {
+				return
+			}
+			if z.X == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.X)
+				if err != nil {
+					err = msgp.WrapError(err, "X")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x10) == 0 { // if not omitted
+			// write "y"
+			err = en.Append(0xa1, 0x79)
+			if err != nil {
+				return
+			}
+			if z.Y == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.Y)
+				if err != nil {
+					err = msgp.WrapError(err, "Y")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x20) == 0 { // if not omitted
+			// write "tx"
+			err = en.Append(0xa2, 0x74, 0x78)
+			if err != nil {
+				return
+			}
+			if z.TX == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TX)
+				if err != nil {
+					err = msgp.WrapError(err, "TX")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x40) == 0 { // if not omitted
+			// write "ty"
+			err = en.Append(0xa2, 0x74, 0x79)
+			if err != nil {
+				return
+			}
+			if z.TY == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteInt(*z.TY)
+				if err != nil {
+					err = msgp.WrapError(err, "TY")
+					return
+				}
+			}
+		}
+		if (zb0001Mask & 0x80) == 0 { // if not omitted
+			// write "button"
+			err = en.Append(0xa6, 0x62, 0x75, 0x74, 0x74, 0x6f, 0x6e)
+			if err != nil {
+				return
+			}
+			err = en.WriteInt(z.Button)
+			if err != nil {
+				err = msgp.WrapError(err, "Button")
+				return
+			}
+		}
+	}
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *dragStartDetail) Msgsize() (s int) {
+	s = 1 + 2 + msgp.IntSize + 2 + msgp.IntSize + 5 + msgp.IntSize + 2
+	if z.X == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 2
+	if z.Y == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.TX == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 3
+	if z.TY == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.IntSize
+	}
+	s += 7 + msgp.IntSize
 	return
 }
 

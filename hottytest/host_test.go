@@ -1707,41 +1707,41 @@ func TestWithoutFeatures(t *testing.T) {
 	}
 }
 
-func TestSecondaryPress(t *testing.T) {
+func TestContextMenu(t *testing.T) {
 	h := New(t)
-	send(h, hotty.Doc("p", `<div id=outer data-on="secondary"><div id=inner data-on="click secondary"><b id=b>x</b></div><b id=c>y</b></div>
-<div data-on=secondary><i id=anon>z</i></div><p id=plain>plain</p><input id=f type=text>`),
+	send(h, hotty.Doc("p", `<div id=outer data-on="contextmenu"><div id=inner data-on="click contextmenu"><b id=b>x</b></div><b id=c>y</b></div>
+<div data-on=contextmenu><i id=anon>z</i></div><p id=plain>plain</p><input id=f type=text>`),
 		hotty.Place("p", hotty.Placement{Cols: 20, Rows: 5}))
 	sent(h)
 	// The innermost opt-in wins, and the press needs no Placement.Press.
-	_ = h.SecondaryPress("p", "b", 3, 1)
-	_ = h.SecondaryPress("p", "c", 4, 2, "ctrl", "super")
-	_ = h.SecondaryPress("p", "anon", 0, 0)
+	_ = h.ContextMenu("p", "b", 3, 1)
+	_ = h.ContextMenu("p", "c", 4, 2, "ctrl", "super")
+	_ = h.ContextMenu("p", "anon", 0, 0)
 	expect(t, sent(h),
-		`ev press t=inner {"button":2,"c":3,"r":1}`,
-		`ev press t=outer {"button":2,"c":4,"mods":12,"r":2}`,
-		`ev press t= {"button":2,"c":0,"r":0}`)
+		`ev contextmenu t=inner {"c":3,"r":1}`,
+		`ev contextmenu t=outer {"c":4,"mods":12,"r":2}`,
+		`ev contextmenu t= {"c":0,"r":0}`)
 	// No opt-in, Shift, and Alt report nothing; the body is "".
-	_ = h.SecondaryPress("p", "plain", 1, 1)
-	_ = h.SecondaryPress("p", "b", 1, 1, "shift")
-	_ = h.SecondaryPress("p", "b", 1, 1, "alt")
-	_ = h.SecondaryPress("p", "", 1, 1)
+	_ = h.ContextMenu("p", "plain", 1, 1)
+	_ = h.ContextMenu("p", "b", 1, 1, "shift")
+	_ = h.ContextMenu("p", "b", 1, 1, "alt")
+	_ = h.ContextMenu("p", "", 1, 1)
 	expect(t, sent(h))
 	// A focused field keeps focus: no blur, no focus, no click.
 	if err := h.Fill("p", "f", "ab"); err != nil {
 		t.Fatal(err)
 	}
 	sent(h)
-	_ = h.SecondaryPress("p", "b", 2, 2)
-	expect(t, sent(h), `ev press t=inner {"button":2,"c":2,"r":2}`)
-	if err := h.SecondaryPress("nope", "b", 0, 0); !errors.Is(err, ErrNoSurface) {
+	_ = h.ContextMenu("p", "b", 2, 2)
+	expect(t, sent(h), `ev contextmenu t=inner {"c":2,"r":2}`)
+	if err := h.ContextMenu("nope", "b", 0, 0); !errors.Is(err, ErrNoSurface) {
 		t.Errorf("no surface: %v", err)
 	}
-	if err := h.SecondaryPress("p", "nope", 0, 0); !errors.Is(err, ErrNoElement) {
+	if err := h.ContextMenu("p", "nope", 0, 0); !errors.Is(err, ErrNoElement) {
 		t.Errorf("no element: %v", err)
 	}
 	send(h, hotty.Detach("p"))
-	if err := h.SecondaryPress("p", "b", 0, 0); !errors.Is(err, ErrDetached) {
+	if err := h.ContextMenu("p", "b", 0, 0); !errors.Is(err, ErrDetached) {
 		t.Errorf("detached: %v", err)
 	}
 }
@@ -1766,35 +1766,37 @@ func TestQueryVersions(t *testing.T) {
 	}
 }
 
-// A secondary press with Alt held is the program's in both 0.7 and 0.8,
+// A secondary press with Alt held is the program's in both 0.8 and 0.9,
 // and the pointer leaves the window (SPEC §9.2).
-func TestSecondaryPressAltByVersion(t *testing.T) {
+func TestContextMenuAltByVersion(t *testing.T) {
 	for _, c := range []struct {
 		v    string
 		want []string
 	}{
-		{"0.7,0.8", []string{`ev hover t= {"out":true}`}},
+		{"0.8,0.9", []string{`ev hover t= {"out":true}`}},
 		{"0.8", []string{`ev hover t= {"out":true}`}},
-		{"0.7", []string{`ev hover t= {"out":true}`}},
+		{"0.9", []string{`ev hover t= {"out":true}`}},
 	} {
 		h := New(t)
 		send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "n", V: "1"}, {K: "v", V: c.v}}, nil),
-			hotty.Doc("l", `<div id=l data-on=secondary><p id=a>a</p></div>`),
+			hotty.Doc("l", `<div id=l data-on="secondary contextmenu"><p id=a>a</p></div>`),
 			hotty.Place("l", hotty.Placement{Cols: 10, Rows: 2, Hover: hotty.On}))
 		sent(h)
 		if err := h.Hover("l", "a", 1, 0); err != nil {
 			t.Fatal(err)
 		}
 		sent(h)
-		_ = h.SecondaryPress("l", "a", 1, 0, "alt")
+		_ = h.ContextMenu("l", "a", 1, 0, "alt")
 		if got := sent(h); !slices.Equal(got, c.want) {
 			t.Errorf("v=%s: %q, want %q", c.v, got, c.want)
 		}
-		// Without Alt a secondary press is reported in both.
-		_ = h.SecondaryPress("l", "a", 1, 0)
-		if got := sent(h); len(got) != 1 {
-			t.Errorf("v=%s, no Alt: %q", c.v, got)
+		// Without Alt the session reports its context-menu event.
+		_ = h.ContextMenu("l", "a", 1, 0)
+		want := `ev contextmenu t=l {"c":1,"r":0}`
+		if c.v == "0.8" {
+			want = `ev press t=l {"button":2,"c":1,"r":0}`
 		}
+		expect(t, sent(h), want)
 	}
 }
 
@@ -1830,4 +1832,59 @@ func TestHit(t *testing.T) {
 	if r := h.sentR(); len(r) != 0 {
 		t.Fatalf("hit was kept: %+v", r)
 	}
+}
+
+func TestAuxButtonsAndMenuKey(t *testing.T) {
+	h := shown(t, "s", `<div id=right data-on="rightbutton drag"><button id=menu data-on=contextmenu>Menu</button></div>
+<a id=aux href=/docs value=open data-on="aux drag">Docs</a><button id=plain>Plain</button>
+<button id=forward data-on=contextmenu data-keys="shift+f10=program">Forward</button>`)
+	send(h, hotty.Focus("s", "menu"))
+	h.drain()
+
+	_ = h.ContextMenu("s", "right", 0, 0)
+	_ = h.AuxClick("s", "menu", hotty.ButtonSecondary, 1, 0)
+	_ = h.ContextMenu("s", "menu", 1, 0)
+	expect(t, sent(h), `ev contextmenu t=menu {"c":1,"r":0}`)
+	if !h.Key("context_menu") || !h.Key("shift+f10") {
+		t.Error("menu keys went to the program")
+	}
+	expect(t, sent(h), "ev contextmenu t=menu", "ev contextmenu t=menu")
+
+	_ = h.AuxClick("s", "right", hotty.ButtonSecondary, 0, 0, "ctrl")
+	_ = h.AuxClick("s", "aux", hotty.ButtonMiddle, 2, 1)
+	_ = h.AuxClick("s", "aux", hotty.ButtonBack, 2, 1, "shift")
+	_ = h.AuxClick("s", "plain", hotty.ButtonBack, 4, 1)
+	expect(t, sent(h), `ev auxclick t=right {"button":2,"c":0,"mods":4,"r":0}`,
+		`ev auxclick t=aux {"button":1,"c":2,"href":"/docs","r":1,"value":"open"}`)
+	if err := h.DragStartButton("s", "aux", hotty.ButtonForward, 2, 1); err != nil {
+		t.Fatal(err)
+	}
+	_ = h.DragEnd("aux", 2, 1)
+	if err := h.DragStartButtonStep("s", "right", hotty.ButtonSecondary, 0, 0, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	_ = h.DragEnd("right", 0, 0)
+	expect(t, sent(h),
+		`ev dragstart t=aux {"button":4,"c":2,"r":1}`, `ev dragend t=aux {"c":2,"r":1}`,
+		`ev dragstart t=right {"button":2,"c":0,"r":0}`, `ev dragend t=right {"c":0,"r":0}`)
+	if got := h.Surface("s").Focused(); got != "menu" {
+		t.Errorf("focus = %q, want menu", got)
+	}
+	send(h, hotty.Focus("s", "forward"))
+	if h.Key("shift+f10") {
+		t.Error("own keymap did not give Shift+F10 to the program")
+	}
+
+	send(h, hotty.Encode(hotty.Control{{K: "a", V: "q"}, {K: "v", V: "0.8"}}, nil))
+	send(h, hotty.Focus("s", "menu"))
+	h.drain()
+	_ = h.AuxClick("s", "aux", hotty.ButtonMiddle, 2, 1)
+	_ = h.ContextMenu("s", "menu", 1, 0)
+	if err := h.DragStartButton("s", "aux", hotty.ButtonForward, 2, 1); !errors.Is(err, ErrNoReport) {
+		t.Errorf("0.8 auxiliary drag: %v", err)
+	}
+	if h.Key("context_menu") {
+		t.Error("0.8 menu key did not reach the program")
+	}
+	expect(t, sent(h), `"\x1b[29~"`)
 }

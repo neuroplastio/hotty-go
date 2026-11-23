@@ -11,17 +11,19 @@ import (
 // Event kinds (SPEC §9). A program ignores kinds it does not know: later
 // versions add some.
 const (
-	EventClick  = "click"  // a button, link, summary or data-on~=click element was activated
-	EventChange = "change" // a control's value was committed, or a box toggled
-	EventInput  = "input"  // an edit of a control with data-on~=input
-	EventCaret  = "caret"  // the user moved a text field's selection, and no input says so, with data-on~=caret
-	EventSubmit = "submit" // a form was submitted; the detail is its fields
-	EventPress  = "press"  // a press anywhere in a placement made with Press
-	EventFocus  = "focus"  // the user focused an element; Target names it (SPEC §10.1)
-	EventBlur   = "blur"   // the surface gave the keyboard back
-	EventFit    = "fit"    // the rows the document needs changed, on a placement made with Fit
-	EventHover  = "hover"  // the element under the pointer changed, or the pointer left, on a placement made with Hover
-	EventView   = "view"   // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
+	EventContextMenu = "contextmenu" // a gesture on an element with data-on~=contextmenu
+	EventAuxClick    = "auxclick"    // another button released where it was pressed
+	EventClick       = "click"       // a button, link, summary or data-on~=click element was activated
+	EventChange      = "change"      // a control's value was committed, or a box toggled
+	EventInput       = "input"       // an edit of a control with data-on~=input
+	EventCaret       = "caret"       // the user moved a text field's selection, and no input says so, with data-on~=caret
+	EventSubmit      = "submit"      // a form was submitted; the detail is its fields
+	EventPress       = "press"       // a press anywhere in a placement made with Press
+	EventFocus       = "focus"       // the user focused an element; Target names it (SPEC §10.1)
+	EventBlur        = "blur"        // the surface gave the keyboard back
+	EventFit         = "fit"         // the rows the document needs changed, on a placement made with Fit
+	EventHover       = "hover"       // the element under the pointer changed, or the pointer left, on a placement made with Hover
+	EventView        = "view"        // which elements with data-on~=view are in view, or where, changed (SPEC §9.5)
 
 	// The terminal's events, which belong to no surface: Surface and
 	// Target are empty.
@@ -30,9 +32,18 @@ const (
 
 	// A drag (SPEC §9.1), on an element with data-on~=drag. In the host's
 	// events (Drags), EventDrag stands for all three.
-	EventDragStart = "dragstart" // the primary button pressed on the element
+	EventDragStart = "dragstart" // a drag began on the element
 	EventDrag      = "drag"      // the element under the pointer changed
 	EventDragEnd   = "dragend"   // the button released, or the drag cut short
+)
+
+// Pointer buttons in DOM numbering (SPEC §9).
+const (
+	ButtonPrimary = iota
+	ButtonMiddle
+	ButtonSecondary
+	ButtonBack
+	ButtonForward
 )
 
 // Event is what the user did in a surface (SPEC §9).
@@ -51,7 +62,7 @@ type Event struct {
 	// detail does not decode.
 
 	// Value is a control's value (change, input), or the value attribute
-	// of what was clicked (click).
+	// of what was clicked (click, auxclick).
 	Value string
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
@@ -67,10 +78,9 @@ type Event struct {
 	// and its value: two fields of one name are two pairs.
 	Fields []FormField
 	// Mods are the modifier keys held (ModShift, …), as bits: in a click,
-	// a press and a drag's events. 0 when none is, and for any other
-	// kind.
+	// a press, a contextmenu, an auxclick and a drag's events.
 	Mods int
-	// Link is a clicked link's.
+	// Link is a link's in a click or auxclick.
 	Link *Link
 	// FitRows is the rows a fit says the document needs now.
 	FitRows int
@@ -80,19 +90,15 @@ type Event struct {
 	Hover *Hover
 	// View is a view's (SPEC §9.5).
 	View *View
-	// Area is the cells of the element a click or a press reports, a
-	// keyboard click's too: what a program places something next to the
-	// element by, as a browser places a select's list or a menu by its
-	// control. A secondary press's is that of the element with
-	// data-on~=secondary.
+	// Area is the element's cells for click, press, contextmenu and auxclick.
 	Area *Area
-	// Button is the button of a press as the DOM numbers them: 2 for a
-	// secondary press (SPEC §9), on an element with data-on~=secondary,
-	// and 0 for the primary one. It is 0 for any other kind.
+	// Button is the DOM button number on auxclick, dragstart, or a secondary
+	// press from an 0.8 session. Zero is the primary button or an absent button.
 	Button int
-	// At is where the pointer was on a secondary press: its cell, which a
-	// program places a context menu at (SDK.md §4.7). It is nil when the
-	// detail has none, and for any other kind.
+	// C and R are the pointer's column and row on contextmenu, auxclick, or
+	// a secondary press from an 0.8 session. Each is nil when absent.
+	C, R *int
+	// At is the pointer's cell when both C and R are present.
 	At *Cell
 	// Count is a click's place in its run of clicks on its element, as
 	// the user's platform counts them (SPEC §9): 2 for the second click of
@@ -216,8 +222,21 @@ func readDetail(e *Event) {
 		var d pressDetail
 		if decodeBody(b, &d) {
 			e.Area, e.Mods, e.Button = d.Area, d.Mods, d.Button
-			if d.C != nil && d.R != nil {
-				e.At = &Cell{Col: *d.C, Row: *d.R}
+			readPointerCell(e, d.C, d.R)
+		}
+	case EventContextMenu:
+		var d contextMenuDetail
+		if decodeBody(b, &d) {
+			e.Area, e.Mods = d.Area, d.Mods
+			readPointerCell(e, d.C, d.R)
+		}
+	case EventAuxClick:
+		var d auxClickDetail
+		if decodeBody(b, &d) {
+			e.Area, e.Mods, e.Button, e.Value = d.Area, d.Mods, d.Button, d.Value
+			readPointerCell(e, d.C, d.R)
+			if d.Href != nil {
+				e.Link = &Link{Href: *d.Href, URL: d.URL}
 			}
 		}
 	case EventChange:
@@ -245,22 +264,16 @@ func readDetail(e *Event) {
 		if decodeBody(b, &d) {
 			e.FitRows = d.R
 		}
-	case EventDragStart, EventDrag, EventDragEnd:
+	case EventDragStart:
+		var d dragStartDetail
+		if decodeBody(b, &d) {
+			e.Button = d.Button
+			readDrag(e, dragDetail{C: d.C, R: d.R, Mods: d.Mods, X: d.X, Y: d.Y, TX: d.TX, TY: d.TY})
+		}
+	case EventDrag, EventDragEnd:
 		var d dragDetail
 		if decodeBody(b, &d) {
-			e.Drag, e.Mods = &Drag{Col: d.C, Row: d.R}, d.Mods
-			if d.X != nil {
-				e.Drag.X, e.Drag.HasX = *d.X, true
-			}
-			if d.Y != nil {
-				e.Drag.Y, e.Drag.HasY = *d.Y, true
-			}
-			if d.TX != nil {
-				e.Drag.TX, e.Drag.HasTX = *d.TX, true
-			}
-			if d.TY != nil {
-				e.Drag.TY, e.Drag.HasTY = *d.TY, true
-			}
+			readDrag(e, d)
 		}
 	case EventView:
 		var d viewDetail
@@ -293,6 +306,29 @@ func readDetail(e *Event) {
 		case d.C != nil && d.R != nil:
 			e.Hover = &Hover{Col: *d.C, Row: *d.R}
 		}
+	}
+}
+
+func readPointerCell(e *Event, c, r *int) {
+	e.C, e.R = c, r
+	if c != nil && r != nil {
+		e.At = &Cell{Col: *c, Row: *r}
+	}
+}
+
+func readDrag(e *Event, d dragDetail) {
+	e.Drag, e.Mods = &Drag{Col: d.C, Row: d.R}, d.Mods
+	if d.X != nil {
+		e.Drag.X, e.Drag.HasX = *d.X, true
+	}
+	if d.Y != nil {
+		e.Drag.Y, e.Drag.HasY = *d.Y, true
+	}
+	if d.TX != nil {
+		e.Drag.TX, e.Drag.HasTX = *d.TX, true
+	}
+	if d.TY != nil {
+		e.Drag.TY, e.Drag.HasTY = *d.TY, true
 	}
 }
 
@@ -332,15 +368,34 @@ func detailOf(e Event) []byte {
 			return nil
 		}
 		d = &c
-	case EventPress:
-		if e.Area == nil && e.Mods == 0 && e.Button == 0 && e.At == nil {
-			return nil
-		}
-		p := pressDetail{Area: e.Area, Mods: e.Mods, Button: e.Button}
+	case EventPress, EventContextMenu, EventAuxClick:
+		c, r := e.C, e.R
 		if e.At != nil {
-			p.C, p.R = &e.At.Col, &e.At.Row
+			c, r = &e.At.Col, &e.At.Row
 		}
-		d = &p
+		switch e.Kind {
+		case EventPress:
+			p := pressDetail{Area: e.Area, Mods: e.Mods, Button: e.Button, C: c, R: r}
+			if p == (pressDetail{}) {
+				return nil
+			}
+			d = &p
+		case EventContextMenu:
+			m := contextMenuDetail{Area: e.Area, Mods: e.Mods, C: c, R: r}
+			if m == (contextMenuDetail{}) {
+				return nil
+			}
+			d = &m
+		case EventAuxClick:
+			a := auxClickDetail{Area: e.Area, Mods: e.Mods, Button: e.Button, C: c, R: r, Value: e.Value}
+			if e.Link != nil {
+				a.Href, a.URL = &e.Link.Href, e.Link.URL
+			}
+			if a == (auxClickDetail{}) {
+				return nil
+			}
+			d = &a
+		}
 	case EventChange:
 		d = &changeDetail{Checked: e.Checked, Value: e.Value, Rev: e.Rev}
 	case EventInput:
@@ -378,7 +433,11 @@ func detailOf(e Event) []byte {
 		if g.HasTY {
 			dd.TY = &g.TY
 		}
-		d = &dd
+		if e.Kind == EventDragStart {
+			d = &dragStartDetail{C: dd.C, R: dd.R, Mods: dd.Mods, X: dd.X, Y: dd.Y, TX: dd.TX, TY: dd.TY, Button: e.Button}
+		} else {
+			d = &dd
+		}
 	case EventHover:
 		switch h := e.Hover; {
 		case h == nil:
