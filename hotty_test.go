@@ -716,6 +716,8 @@ func TestEncodeEvent(t *testing.T) {
 		{Surface: "f", Kind: EventContextMenu, Target: "keyboard"},
 		{Surface: "f", Kind: EventContextMenu, Target: "partial", R: &y},
 		{Surface: "f", Kind: EventAuxClick, Target: "link", Button: ButtonBack, At: &Cell{Col: 3, Row: 1}, Mods: ModShift, Value: "open", Link: &Link{Href: "/docs", URL: "https://example.com/docs"}},
+		{Surface: "f", Kind: EventAuxClick, Target: "empty", Button: ButtonMiddle, HasValue: true},
+		{Surface: "f", Kind: EventAuxClick, Target: "absent", Button: ButtonMiddle},
 		{Surface: "g", Kind: EventDragStart, Target: "item", Button: ButtonForward, Drag: &Drag{Col: 3, Row: 1, X: x, HasX: true}},
 		{Surface: "f", Kind: EventChange, Target: "box", Checked: &on, Value: "on"},
 		{Surface: "f", Kind: EventChange, Target: "name", Value: ""},
@@ -736,6 +738,9 @@ func TestEncodeEvent(t *testing.T) {
 		m, _ := d.Feed(EncodeEvent(e))
 		got, ok := EventOf(m)
 		got.Detail = nil
+		if e.Kind == EventAuxClick && e.Value != "" {
+			e.HasValue = true
+		}
 		if e.At != nil {
 			e.C, e.R = &e.At.Col, &e.At.Row
 		} else if e.C != nil && e.R != nil {

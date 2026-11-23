@@ -1680,9 +1680,9 @@ func TestMods(t *testing.T) {
 	_ = h.Click("m", "b", "shift", "super")
 	_ = h.Press("m", "", "ctrl")
 	_ = h.Click("m", "b", "alt")
-	expect(t, sent(h), `ev press t=b {"mods":9}`, "ev focus t=b", `ev click t=b {"mods":9}`, `ev press t= {"mods":4}`)
+	expect(t, sent(h), `ev press t=b {"mods":9}`, "ev focus t=b", `ev click t=b {"mods":9}`, `ev press t= {"mods":4}`, "ev blur t=")
 	h.Key("shift+enter")
-	expect(t, sent(h), `ev click t=b {"mods":1}`)
+	expect(t, sent(h), `"\r"`)
 }
 
 // Without the features hover and count, the host says neither.

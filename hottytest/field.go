@@ -170,9 +170,12 @@ func listening(n *html.Node) (input, caret bool) {
 // one more (SPEC §6.4): input, with data-on~=input, and with data-on~=caret
 // the selection after it; caret instead in a text field with data-on~=caret
 // alone (SPEC §9).
-func (h *Host) edited(s *Surface, el *html.Node) {
+func (h *Host) edited(s *Surface, el *html.Node, value string) {
+	if _, ok := s.edited[el]; !ok {
+		s.edited[el] = s.valueOf(el)
+	}
+	s.values[el] = value
 	rev := s.bump(el)
-	s.dirty()[el] = true
 	id, ok := attr(el, "id")
 	if !ok {
 		return

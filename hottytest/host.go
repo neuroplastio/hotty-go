@@ -255,7 +255,8 @@ type Host struct {
 	surfaces map[string]*Surface
 	created  int
 	res      map[string]resource
-	keyboard *Surface           // the surface that has the keyboard
+	keyboard *Surface // the surface that has the keyboard
+	pointer  pointerGesture
 	drag     *drag              // the drag in progress, if any (SPEC §9.1)
 	hovered  *Surface           // the surface the pointer is on (Hover), if any
 	menus    [2]*hotty.MenuTree // the program's menu (a=menu) on the main and the alternate screen, if any
@@ -484,6 +485,7 @@ func (h *Host) altScreen(on bool) {
 				if h.keyboard == s {
 					h.keyboard = nil
 				}
+				h.cancelPointer(s, false)
 				delete(h.surfaces, name)
 			}
 		}
@@ -504,7 +506,8 @@ func (h *Host) altScreen(on bool) {
 func (h *Host) reset() {
 	h.surfaces = map[string]*Surface{}
 	h.res = map[string]resource{}
-	h.keyboard = nil
+	h.keyboard, h.hovered, h.drag, h.prefix = nil, nil, nil, nil
+	h.pointer = pointerGesture{}
 	h.held = nil
 	h.menus, h.shown = [2]*hotty.MenuTree{}, false
 	h.touch = [2][]hotty.TouchArea{}
@@ -743,13 +746,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 			s = newSurface(&h.mu, name, string(m.Payload), h.created)
 			h.surfaces[name] = s
 		} else {
-			if h.drag != nil && h.drag.s == s {
-				if hotty.Get(m.Control, "d") == "1" {
-					h.drag = nil // detached: it reports nothing more
-				} else {
-					h.cutDrag() // a new document ends it
-				}
-			}
+			h.cancelPointer(s, hotty.Get(m.Control, "d") != "1")
 			s.setDoc(string(m.Payload))
 		}
 		s.detached = hotty.Get(m.Control, "d") == "1"
@@ -782,9 +779,7 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 	case "place":
 		return h.place(s, m)
 	case "hide":
-		if h.drag != nil && h.drag.s == s {
-			h.cutDrag()
-		}
+		h.cancelPointer(s, true)
 		if s.placed && h.keyboard == s {
 			h.blur(s)
 		}
@@ -813,17 +808,13 @@ func (h *Host) do(a string, m hotty.Message) (code, detail string, extra hotty.C
 		if h.keyboard == s {
 			h.keyboard = nil
 		}
-		if h.drag != nil && h.drag.s == s {
-			h.drag = nil // it reports nothing more
-		}
+		h.cancelPointer(s, false)
 		delete(h.surfaces, name)
 	case "detach":
 		if h.keyboard == s {
 			h.keyboard = nil // back to the terminal, with no blur
 		}
-		if h.drag != nil && h.drag.s == s {
-			h.drag = nil
-		}
+		h.cancelPointer(s, false)
 		s.detached, s.keyb = true, false
 	case "focus":
 		if s.detached {
@@ -1019,12 +1010,14 @@ func (h *Host) takeKeyboard(s *Surface, el *html.Node, report bool) {
 // it since its last commit.
 func (h *Host) commit(s *Surface) {
 	el := s.focused
-	if el == nil || !s.dirty()[el] {
+	before, edited := s.edited[el]
+	if !edited {
 		return
 	}
-	delete(s.dirty(), el)
-	if id, ok := attr(el, "id"); ok && !s.detached {
-		h.event(s, hotty.EventChange, id, map[string]any{"value": s.valueOf(el), "rev": s.rev(el)})
+	delete(s.edited, el)
+	value := s.valueOf(el)
+	if id, ok := attr(el, "id"); ok && !s.detached && value != before {
+		h.event(s, hotty.EventChange, id, map[string]any{"value": value, "rev": s.rev(el)})
 	}
 }
 
@@ -1165,6 +1158,9 @@ func (h *Host) element(s *Surface, id string) (*html.Node, error) {
 func (h *Host) Click(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.pointerHeld() {
+		return nil
+	}
 	s, err := h.target(surface)
 	if err != nil {
 		return err
@@ -1173,7 +1169,7 @@ func (h *Host) Click(surface, id string, keys ...string) error {
 	if err != nil {
 		return err
 	}
-	if h.alt1(s, keys) {
+	if h.alt1(keys) {
 		return nil
 	}
 	return h.click(s, el, true, 1, modBits(keys))
@@ -1185,6 +1181,9 @@ func (h *Host) Click(surface, id string, keys ...string) error {
 func (h *Host) DoubleClick(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.pointerHeld() {
+		return nil
+	}
 	s, err := h.target(surface)
 	if err != nil {
 		return err
@@ -1193,7 +1192,7 @@ func (h *Host) DoubleClick(surface, id string, keys ...string) error {
 	if err != nil {
 		return err
 	}
-	if h.alt1(s, keys) {
+	if h.alt1(keys) {
 		return nil
 	}
 	if err := h.click(s, el, true, 1, modBits(keys)); err != nil {
@@ -1208,6 +1207,9 @@ func (h *Host) DoubleClick(surface, id string, keys ...string) error {
 func (h *Host) ClickLink(surface, href string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.pointerHeld() {
+		return nil
+	}
 	s, err := h.target(surface)
 	if err != nil {
 		return err
@@ -1219,7 +1221,7 @@ func (h *Host) ClickLink(surface, href string, keys ...string) error {
 	if el == nil {
 		return fmt.Errorf("%w: a link to %s in %s", ErrNoElement, href, s.name)
 	}
-	if h.alt1(s, keys) {
+	if h.alt1(keys) {
 		return nil
 	}
 	return h.click(s, el, true, 1, modBits(keys))
@@ -1247,11 +1249,17 @@ func modBits(keys []string) int {
 // alt1 reports whether a press is made with Alt held, which is the
 // program's gesture and not the surface's (SPEC §9.2): the pointer is then
 // out of the window (SPEC §9.4), and the surface hears nothing more.
-func (h *Host) alt1(s *Surface, keys []string) bool {
+func (h *Host) alt1(keys []string) bool {
 	if modBits(keys)&hotty.ModAlt == 0 {
 		return false
 	}
-	h.leave(s)
+	if h.hovered != nil {
+		h.leave(h.hovered)
+		h.hovered = nil
+	}
+	if h.keyboard != nil {
+		h.blur(h.keyboard)
+	}
 	return true
 }
 
@@ -1271,12 +1279,14 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count, mods int) e
 	if s.detached {
 		return ErrDetached
 	}
-	if !h.hears(hotty.FeatureCount) {
-		count = 1
-	}
 	if pointer && s.press {
 		h.pressAt(s, el, mods)
 	}
+	h.pointerFocus(s, el)
+	return h.reportClick(s, closest(el, reportsClick), count, mods)
+}
+
+func (h *Host) pointerFocus(s *Surface, el *html.Node) {
 	if f := closest(el, focusable); f != nil {
 		h.takeKeyboard(s, f, true)
 	} else if h.keyboard != nil {
@@ -1284,7 +1294,12 @@ func (h *Host) click(s *Surface, el *html.Node, pointer bool, count, mods int) e
 		// terminal (SPEC §10.1).
 		h.blur(h.keyboard)
 	}
-	rep := closest(el, reportsClick)
+}
+
+func (h *Host) reportClick(s *Surface, rep *html.Node, count, mods int) error {
+	if !h.hears(hotty.FeatureCount) {
+		count = 1
+	}
 	if rep == nil {
 		return ErrNoReport
 	}
@@ -1399,48 +1414,43 @@ func (h *Host) dragStart(surface, id string, button, c, r, x, y int, keys []stri
 	if s.detached {
 		return ErrDetached
 	}
-	if h.drag != nil {
+	if h.pointerHeld() {
 		return ErrDragging
 	}
-	if h.alt1(s, keys) {
+	if h.alt1(keys) {
 		return nil
 	}
-	var on *html.Node
 	if button == hotty.ButtonPrimary {
 		if s.press {
 			h.pressAt(s, el, modBits(keys))
 		}
-		on = closest(el, listens("drag"))
+		h.startDrag(s, closest(el, listens("drag")), button, c, r, x, y, modBits(keys))
+		h.pointerFocus(s, el)
 	} else if modBits(keys)&hotty.ModShift == 0 {
-		on = h.auxTarget(el, button)
-		if on != nil && !listens("drag")(on) {
-			on = nil
-		}
-	}
-	if on != nil {
-		if rid, ok := attr(on, "id"); ok {
-			d := &drag{s: s, start: on, id: rid, t: rid, c: c, r: r, button: button}
-			d.n = steps(on)
-			d.x, d.y = d.clamp(x, y)
-			h.drag = d
-			detail := d.detail(c, r, keys)
-			if button != hotty.ButtonPrimary {
-				detail["button"] = button
-			}
-			h.event(s, hotty.EventDragStart, rid, detail)
-		}
-	}
-	if button == hotty.ButtonPrimary {
-		if f := closest(el, focusable); f != nil {
-			h.takeKeyboard(s, f, true)
-		} else if h.keyboard != nil {
-			h.blur(h.keyboard)
+		on := h.auxTarget(el, button)
+		if on != nil && listens("drag")(on) {
+			h.startDrag(s, on, button, c, r, x, y, modBits(keys))
 		}
 	}
 	if h.drag == nil {
 		return ErrNoReport
 	}
 	return nil
+}
+
+func (h *Host) startDrag(s *Surface, on *html.Node, button, c, r, x, y, mods int) {
+	if on == nil {
+		return
+	}
+	id, ok := attr(on, "id")
+	if !ok || id == "" {
+		return
+	}
+	d := &drag{s: s, start: on, id: id, t: id, c: c, r: r, n: steps(on), button: button}
+	d.x, d.y = d.clamp(x, y)
+	h.drag = d
+	h.send(hotty.EncodeEvent(hotty.Event{Surface: s.name, Target: id, Kind: hotty.EventDragStart, Button: button, Mods: mods,
+		Drag: &hotty.Drag{Col: c, Row: r, X: d.x, Y: d.y, HasX: d.n[0] > 0, HasY: d.n[1] > 0}}))
 }
 
 // DragMove moves the pointer of the drag in progress onto the element with
@@ -1496,6 +1506,7 @@ func (h *Host) dragMove(id string, c, r, x, y, tx, ty int, keys []string) error 
 	tn := h.targetSteps(d, t)
 	tx, ty = clampSteps(tn, tx, ty)
 	if t == d.t && (t != "" || (c == d.c && r == d.r)) && x == d.x && y == d.y && tx == d.tx && ty == d.ty {
+		d.c, d.r = c, r
 		return nil
 	}
 	d.t, d.c, d.r, d.x, d.y, d.tn, d.tx, d.ty = t, c, r, x, y, tn, tx, ty
@@ -1541,6 +1552,10 @@ func (h *Host) DragEndOver(id string, c, r, tx, ty int, keys ...string) error {
 }
 
 func (h *Host) dragEnd(id string, c, r, x, y, tx, ty int, keys []string) error {
+	return h.finishDrag(id, c, r, x, y, tx, ty, 1, keys)
+}
+
+func (h *Host) finishDrag(id string, c, r, x, y, tx, ty, count int, keys []string) error {
 	d, t, own, err := h.dragOver(id)
 	if err != nil {
 		return err
@@ -1551,18 +1566,7 @@ func (h *Host) dragEnd(id string, c, r, x, y, tx, ty int, keys []string) error {
 	h.drag = nil
 	h.event(d.s, hotty.EventDragEnd, t, d.detail(c, r, keys))
 	if d.button == hotty.ButtonPrimary && own == d.id && reportsClick(d.start) {
-		detail := map[string]any{}
-		if m := modBits(keys); m != 0 {
-			detail["mods"] = m
-		}
-		if v, ok := attr(d.start, "value"); ok {
-			detail["value"] = v
-		}
-		if len(detail) == 0 {
-			h.event(d.s, hotty.EventClick, d.id, nil)
-		} else {
-			h.event(d.s, hotty.EventClick, d.id, detail)
-		}
+		_ = h.reportClick(d.s, d.start, count, modBits(keys))
 	}
 	return nil
 }
@@ -1768,6 +1772,9 @@ func (h *Host) Opened() []string {
 func (h *Host) Press(surface, id string, keys ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.pointerHeld() {
+		return nil
+	}
 	s, err := h.target(surface)
 	if err != nil {
 		return err
@@ -1781,11 +1788,11 @@ func (h *Host) Press(surface, id string, keys ...string) error {
 	if s.detached {
 		return ErrDetached
 	}
+	if h.alt1(keys) {
+		return nil
+	}
 	if !s.press {
 		return ErrNoPress
-	}
-	if h.alt1(s, keys) {
-		return nil
 	}
 	h.pressAt(s, el, modBits(keys))
 	return nil
@@ -1803,102 +1810,6 @@ func (h *Host) pressAt(s *Surface, el *html.Node, mods int) {
 		return
 	}
 	h.event(s, hotty.EventPress, t, map[string]int{"mods": mods})
-}
-
-// ContextMenu plays a secondary-button gesture at cell c, r on the named
-// element, or the body for an empty id. The nearest contextmenu or
-// rightbutton opt-in decides. An 0.8 session uses secondary and reports a
-// press with ButtonSecondary instead. Key can play the menu-key gesture.
-func (h *Host) ContextMenu(surface, id string, c, r int, keys ...string) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	s, el, err := h.pointerTarget(surface, id)
-	if err != nil {
-		return err
-	}
-	if h.drag != nil || h.alt1(s, keys) || modBits(keys)&hotty.ModShift != 0 {
-		return nil
-	}
-	kind, button := hotty.EventContextMenu, hotty.ButtonPrimary
-	var n *html.Node
-	if h.version == "0.8" {
-		n = closest(el, listens("secondary"))
-		kind, button = hotty.EventPress, hotty.ButtonSecondary
-	} else {
-		n = closest(el, secondaryTarget)
-		if n != nil && !hyperlink(n) && listens("rightbutton")(n) {
-			return nil
-		}
-	}
-	if n == nil {
-		return nil
-	}
-	id, _ = attr(n, "id")
-	h.send(hotty.EncodeEvent(hotty.Event{Surface: s.name, Target: id, Kind: kind, Button: button,
-		At: &hotty.Cell{Col: c, Row: r}, Mods: modBits(keys)}))
-	return nil
-}
-
-// AuxClick plays another button's press and release on the same element
-// at cell c, r. Middle, back and forward use aux. The secondary button
-// uses rightbutton, subject to the nearest contextmenu or rightbutton.
-func (h *Host) AuxClick(surface, id string, button, c, r int, keys ...string) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	s, el, err := h.pointerTarget(surface, id)
-	if err != nil {
-		return err
-	}
-	if h.drag != nil || h.alt1(s, keys) || modBits(keys)&hotty.ModShift != 0 {
-		return nil
-	}
-	n := h.auxTarget(el, button)
-	if n == nil {
-		return nil
-	}
-	id, _ = attr(n, "id")
-	value, _ := attr(n, "value")
-	ev := hotty.Event{Surface: surface, Target: id, Kind: hotty.EventAuxClick, Button: button,
-		At: &hotty.Cell{Col: c, Row: r}, Mods: modBits(keys), Value: value}
-	if n.DataAtom == atom.A {
-		if href, ok := attr(n, "href"); ok {
-			ev.Link = &hotty.Link{Href: href, URL: s.resolve(n)}
-		}
-	}
-	h.send(hotty.EncodeEvent(ev))
-	return nil
-}
-
-func (h *Host) pointerTarget(surface, id string) (*Surface, *html.Node, error) {
-	s, err := h.target(surface)
-	if err != nil {
-		return nil, nil, err
-	}
-	if s.detached {
-		return nil, nil, ErrDetached
-	}
-	if id == "" {
-		return s, find(s.doc, func(n *html.Node) bool { return n.DataAtom == atom.Body }), nil
-	}
-	el, err := h.element(s, id)
-	return s, el, err
-}
-
-func secondaryTarget(n *html.Node) bool {
-	return listens("rightbutton")(n) || listens("contextmenu")(n)
-}
-
-func (h *Host) auxTarget(el *html.Node, button int) *html.Node {
-	if h.version == "0.8" || button <= hotty.ButtonPrimary || button == 5 {
-		return nil
-	}
-	if button == hotty.ButtonSecondary {
-		if n := closest(el, secondaryTarget); n != nil && !hyperlink(n) && listens("rightbutton")(n) {
-			return n
-		}
-		return nil
-	}
-	return closest(el, func(n *html.Node) bool { return !hyperlink(n) && listens("aux")(n) })
 }
 
 // Fill types text into a text control, as the user does: the surface takes
@@ -1924,9 +1835,8 @@ func (h *Host) Fill(surface, id, text string) error {
 		return ErrNotControl
 	}
 	h.takeKeyboard(s, el, true)
-	s.values[el] = text
 	delete(s.fields, el) // the caret at the end, nothing selected
-	h.edited(s, el)
+	h.edited(s, el, text)
 	return nil
 }
 
@@ -2104,15 +2014,21 @@ func (h *Host) Hover(surface, id string, c, r int) error {
 			return err
 		}
 	}
+	if !h.pointerHeld() {
+		h.hoverAt(s, id, c, r)
+	}
+	return nil
+}
+
+func (h *Host) hoverAt(s *Surface, id string, c, r int) {
 	if h.hovered != nil && h.hovered != s {
 		h.leave(h.hovered)
 	}
 	h.hovered = s
-	if s.hover && s.placed && !s.detached && h.hears(hotty.FeatureHover) && (s.heard == nil || *s.heard != id) {
+	if s != nil && s.hover && s.placed && !s.detached && h.hears(hotty.FeatureHover) && (s.heard == nil || *s.heard != id) {
 		s.heard = &id
 		h.event(s, hotty.EventHover, id, map[string]int{"c": c, "r": r})
 	}
-	return nil
 }
 
 // Unhover takes the pointer off the surface it is on: onto the cells, or
@@ -2121,9 +2037,8 @@ func (h *Host) Hover(surface, id string, c, r int) error {
 func (h *Host) Unhover() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.hovered != nil {
-		h.leave(h.hovered)
-		h.hovered = nil
+	if !h.pointerHeld() {
+		h.hoverAt(nil, "", 0, 0)
 	}
 }
 
@@ -2415,6 +2330,7 @@ func (h *Host) Forget() {
 	h.surfaces = map[string]*Surface{}
 	h.res = map[string]resource{}
 	h.keyboard, h.hovered, h.prefix, h.drag = nil, nil, nil, nil
+	h.pointer = pointerGesture{}
 }
 
 // --- inspection ---------------------------------------------------------------

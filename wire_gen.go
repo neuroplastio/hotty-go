@@ -1783,10 +1783,22 @@ func (z *auxClickDetail) DecodeMsg(dc *msgp.Reader) (err error) {
 				return
 			}
 		case "value":
-			z.Value, err = dc.ReadString()
-			if err != nil {
-				err = msgp.WrapError(err, "Value")
-				return
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
+				z.Value = nil
+			} else {
+				if z.Value == nil {
+					z.Value = new(string)
+				}
+				*z.Value, err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
 			}
 		default:
 			err = dc.Skip()
@@ -1833,7 +1845,7 @@ func (z *auxClickDetail) EncodeMsg(en *msgp.Writer) (err error) {
 		zb0001Len--
 		zb0001Mask |= 0x40
 	}
-	if z.Value == "" {
+	if z.Value == nil {
 		zb0001Len--
 		zb0001Mask |= 0x80
 	}
@@ -1963,10 +1975,17 @@ func (z *auxClickDetail) EncodeMsg(en *msgp.Writer) (err error) {
 			if err != nil {
 				return
 			}
-			err = en.WriteString(z.Value)
-			if err != nil {
-				err = msgp.WrapError(err, "Value")
-				return
+			if z.Value == nil {
+				err = en.WriteNil()
+				if err != nil {
+					return
+				}
+			} else {
+				err = en.WriteString(*z.Value)
+				if err != nil {
+					err = msgp.WrapError(err, "Value")
+					return
+				}
 			}
 		}
 	}
@@ -1999,7 +2018,12 @@ func (z *auxClickDetail) Msgsize() (s int) {
 	} else {
 		s += msgp.StringPrefixSize + len(*z.Href)
 	}
-	s += 4 + msgp.StringPrefixSize + len(z.URL) + 6 + msgp.StringPrefixSize + len(z.Value)
+	s += 4 + msgp.StringPrefixSize + len(z.URL) + 6
+	if z.Value == nil {
+		s += msgp.NilSize
+	} else {
+		s += msgp.StringPrefixSize + len(*z.Value)
+	}
 	return
 }
 

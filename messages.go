@@ -64,6 +64,8 @@ type Event struct {
 	// Value is a control's value (change, input), or the value attribute
 	// of what was clicked (click, auxclick).
 	Value string
+	// HasValue distinguishes an empty auxclick value attribute from an absent one.
+	HasValue bool
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
 	// Rev is the control's revision (SPEC §6.4), in a change, an input and
@@ -233,7 +235,10 @@ func readDetail(e *Event) {
 	case EventAuxClick:
 		var d auxClickDetail
 		if decodeBody(b, &d) {
-			e.Area, e.Mods, e.Button, e.Value = d.Area, d.Mods, d.Button, d.Value
+			e.Area, e.Mods, e.Button = d.Area, d.Mods, d.Button
+			if d.Value != nil {
+				e.Value, e.HasValue = *d.Value, true
+			}
 			readPointerCell(e, d.C, d.R)
 			if d.Href != nil {
 				e.Link = &Link{Href: *d.Href, URL: d.URL}
@@ -387,7 +392,10 @@ func detailOf(e Event) []byte {
 			}
 			d = &m
 		case EventAuxClick:
-			a := auxClickDetail{Area: e.Area, Mods: e.Mods, Button: e.Button, C: c, R: r, Value: e.Value}
+			a := auxClickDetail{Area: e.Area, Mods: e.Mods, Button: e.Button, C: c, R: r}
+			if e.HasValue || e.Value != "" {
+				a.Value = &e.Value
+			}
 			if e.Link != nil {
 				a.Href, a.URL = &e.Link.Href, e.Link.URL
 			}

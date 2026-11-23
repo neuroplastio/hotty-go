@@ -34,7 +34,7 @@ type Surface struct {
 	// attributes set (SPEC §6.2): a control's value, a box's checked.
 	values  map[*html.Node]string
 	checked map[*html.Node]bool
-	edited  map[*html.Node]bool             // text controls edited since their last commit
+	edited  map[*html.Node]string           // value before the first user edit since commit
 	fields  map[*html.Node]*hottyedit.Field // text fields' carets and selections, once used
 	revs    map[*html.Node]int              // the controls' revisions, once the user changed them (SPEC §6.4)
 	focused *html.Node
@@ -55,14 +55,11 @@ func (s *Surface) setDoc(markup string) {
 	s.doc = doc
 	s.values = map[*html.Node]string{}
 	s.checked = map[*html.Node]bool{}
-	s.edited = map[*html.Node]bool{}
+	s.edited = map[*html.Node]string{}
 	s.fields = map[*html.Node]*hottyedit.Field{}
 	s.revs = map[*html.Node]int{}
 	s.focused, s.keyb = nil, false
 }
-
-// dirty are the text controls edited since their last commit.
-func (s *Surface) dirty() map[*html.Node]bool { return s.edited }
 
 // Name is the surface's name.
 func (s *Surface) Name() string { return s.name }

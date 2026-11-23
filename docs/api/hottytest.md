@@ -87,6 +87,9 @@ Unless Lenient, a program that breaks the protocol fails the test: a malformed c
   - [`func (h *Host) Opened() []string`](#Host.Opened)
   - [`func (h *Host) Output() string`](#Host.Output)
   - [`func (h *Host) Pick(name string) bool`](#Host.Pick)
+  - [`func (h *Host) PointerDown(surface, id string, button, c, r int, keys ...string) error`](#Host.PointerDown)
+  - [`func (h *Host) PointerMove(surface, id string, c, r int, pastSlop bool, keys ...string) error`](#Host.PointerMove)
+  - [`func (h *Host) PointerUp(surface, id string, button, c, r int, keys ...string) error`](#Host.PointerUp)
   - [`func (h *Host) Prefix() string`](#Host.Prefix)
   - [`func (h *Host) Press(surface, id string, keys ...string) error`](#Host.Press)
   - [`func (h *Host) Read(p []byte) (int, error)`](#Host.Read)
@@ -228,7 +231,7 @@ AttachTerminal attaches a terminal to the pane of a host made with NoTerminal, o
 func (h *Host) AuxClick(surface, id string, button, c, r int, keys ...string) error
 ```
 
-AuxClick plays another button's press and release on the same element at cell c, r. Middle, back and forward use aux. The secondary button uses rightbutton, subject to the nearest contextmenu or rightbutton.
+AuxClick plays another button's press and release at the same location. Use PointerDown and PointerUp when the location or modifiers change.
 
 ### <a id="Host.BecomeHost"></a>func (*Host) BecomeHost
 
@@ -320,7 +323,7 @@ Commands are the hotty messages the program sent, in order.
 func (h *Host) ContextMenu(surface, id string, c, r int, keys ...string) error
 ```
 
-ContextMenu plays a secondary-button gesture at cell c, r on the named element, or the body for an empty id. The nearest contextmenu or rightbutton opt-in decides. An 0.8 session uses secondary and reports a press with ButtonSecondary instead. Key can play the menu-key gesture.
+ContextMenu plays a secondary-button menu gesture at cell c, r. An 0.8 session reports a press with ButtonSecondary. Key plays the menu-key gesture.
 
 ### <a id="Host.Cursor"></a>func (*Host) Cursor
 
@@ -554,6 +557,30 @@ func (h *Host) Pick(name string) bool
 ```
 
 Pick picks the item of the program's menu named name, as a multiplexer's palette or an agent would (SPEC §10.7): the program hears a command event with that name. The first item so named, depth first, is the one. It sends nothing, and reports false, for an item that is not enabled, a name no item has, or no menu.
+
+### <a id="Host.PointerDown"></a>func (*Host) PointerDown
+
+```go
+func (h *Host) PointerDown(surface, id string, button, c, r int, keys ...string) error
+```
+
+PointerDown presses a button on the named element at a surface cell. An empty id points to the body. PointerUp releases the same button, possibly over another element or with different modifiers.
+
+### <a id="Host.PointerMove"></a>func (*Host) PointerMove
+
+```go
+func (h *Host) PointerMove(surface, id string, c, r int, pastSlop bool, keys ...string) error
+```
+
+PointerMove moves the pointer onto a named element at a cell. Use an empty surface to move onto the terminal. For an auxiliary press, the test supplies pastSlop once the movement exceeds the drag threshold.
+
+### <a id="Host.PointerUp"></a>func (*Host) PointerUp
+
+```go
+func (h *Host) PointerUp(surface, id string, button, c, r int, keys ...string) error
+```
+
+PointerUp releases a button at the supplied location. Use an empty surface if the release is over the terminal.
 
 ### <a id="Host.Prefix"></a>func (*Host) Prefix
 

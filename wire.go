@@ -174,7 +174,7 @@ type auxClickDetail struct {
 	R      *int    `msg:"r,omitempty"`
 	Href   *string `msg:"href,omitempty"`
 	URL    string  `msg:"url,omitempty"`
-	Value  string  `msg:"value,omitempty"`
+	Value  *string `msg:"value,omitempty"`
 }
 
 type changeDetail struct {

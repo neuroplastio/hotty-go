@@ -342,8 +342,7 @@ func (h *Host) tab(s *Surface, back bool) {
 // typeInto sets a text control's value as typing does: one edit of the
 // user's (SPEC §6.4, §9).
 func (h *Host) typeInto(s *Surface, el *html.Node, v string) {
-	s.values[el] = v
-	h.edited(s, el)
+	h.edited(s, el, v)
 }
 
 // toggle is Space on a box: a checkbox flips, a radio button is chosen.

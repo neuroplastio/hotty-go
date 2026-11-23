@@ -79,6 +79,7 @@ type vectorStep struct {
 	PointerAt      json.RawMessage   `json:"at"`
 	PointerSurface string            `json:"s"`
 	Button         int               `json:"button"`
+	Count          int               `json:"count"`
 	Touch          string            `json:"touch"`
 	Write          *string           `json:"write"`
 	Key            *string           `json:"key"`
@@ -179,7 +180,7 @@ func checkKey(t *testing.T, i int, h *Host, st vectorStep) {
 // checkEvents compares the events the host sent with a step's: kind,
 // surface, target (absent: none) and detail, each value of its type
 // (conformance/README.md, Numbers).
-func checkEvents(t *testing.T, at string, got []hotty.Event, want []vectorEvent) {
+func checkEvents(t *testing.T, at string, got []hotty.Event, want []vectorEvent, named ...bool) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Errorf("%s: %d events %v, want %d", at, len(got), got, len(want))
@@ -198,6 +199,18 @@ func checkEvents(t *testing.T, at string, got []hotty.Event, want []vectorEvent)
 		// This host lays nothing out, so it knows no element's area.
 		if m, ok := wd.(map[string]any); ok {
 			delete(m, "area")
+			// The runner supplies actual cell inputs for coordinate moves.
+			// Named moves supply an element, but have no box centre.
+			if len(named) > 0 && named[0] {
+				if g, ok := gd.(map[string]any); ok {
+					for _, field := range []string{"c", "r"} {
+						if _, present := m[field]; present {
+							delete(m, field)
+							delete(g, field)
+						}
+					}
+				}
+			}
 			if len(m) == 0 && gd == nil {
 				continue
 			}
@@ -379,7 +392,7 @@ func TestConformanceVectors(t *testing.T) {
 	if len(v.Vectors) == 0 {
 		t.Fatal("no vectors")
 	}
-	for _, vec := range v.Vectors {
+	for index, vec := range v.Vectors {
 		t.Run(vec.Name, func(t *testing.T) {
 			for _, r := range vec.Requires {
 				if !implements[r] {
@@ -388,11 +401,7 @@ func TestConformanceVectors(t *testing.T) {
 			}
 			h := New(t, Lenient())
 			steps := make([]vectorStep, len(vec.Steps))
-			// Menu-key vectors use clicks on named elements to set focus,
-			// which requires neither box measurements nor hit testing.
-			menuKeys := slices.Contains(vec.Requires, "menu-key")
-			pointer := false
-			var pointerSurface, pointerID string
+			pointer := vectorPointer{fixture: index + 1}
 			for i, raw := range vec.Steps {
 				if err := json.Unmarshal(raw, &steps[i]); err != nil {
 					t.Fatal(err)
@@ -400,37 +409,19 @@ func TestConformanceVectors(t *testing.T) {
 				var fields map[string]json.RawMessage
 				_ = json.Unmarshal(raw, &fields)
 				_, steps[i].HasEvs = fields["events"]
-				if steps[i].Pointer != "" || steps[i].Touch != "" {
-					pointer = true
-				}
 			}
+			layoutFit := fits(steps)
 			for i, st := range steps {
 				if st.Inspect != nil {
 					checkInspect(t, i, h, st)
 					continue
 				}
-				if st.Pointer != "" || st.Touch != "" {
-					if menuKeys {
-						switch st.Pointer {
-						case "move":
-							pointerSurface = st.PointerSurface
-							if err := json.Unmarshal(st.PointerAt, &pointerID); err != nil {
-								t.Fatalf("step %d: expected a named pointer target: %v", i, err)
-							}
-						case "down":
-							if st.Button != hotty.ButtonPrimary {
-								t.Fatalf("step %d: unexpected pointer button %d", i, st.Button)
-							}
-							if err := h.Click(pointerSurface, pointerID, st.Keys...); err != nil && err != ErrNoReport {
-								t.Fatalf("step %d: click: %v", i, err)
-							}
-						case "up":
-						default:
-							t.Fatalf("step %d: unexpected pointer step %q", i, st.Pointer)
-						}
-						checkEvents(t, fmt.Sprintf("step %d", i), h.sentEvents(), st.Events)
-					}
+				if st.Pointer != "" {
+					pointer.step(t, i, h, st)
 					continue
+				}
+				if st.Touch != "" {
+					t.Fatalf("step %d: touch requires an unsupported capability", i)
 				}
 				if st.Write != nil {
 					// What the program writes that is not hotty's: this
@@ -443,9 +434,7 @@ func TestConformanceVectors(t *testing.T) {
 					continue
 				}
 				if st.Key != nil {
-					if !pointer || menuKeys {
-						checkKey(t, i, h, st)
-					}
+					checkKey(t, i, h, st)
 					continue
 				}
 				payload := ""
@@ -460,12 +449,13 @@ func TestConformanceVectors(t *testing.T) {
 				}
 				_, _ = h.Write([]byte(hotty.Encode(vectorControl(st.Send), []byte(payload))))
 				replies, events := h.sentBoth()
-				// The events a command makes, in a vector with no pointer,
-				// whose events this host cannot make. The fit vectors size
-				// a document by the cell, which it does not lay out: it
-				// estimates the rows (AutoRows).
-				if st.HasEvs && (!pointer || menuKeys) && !fits(steps) {
-					checkEvents(t, fmt.Sprintf("step %d", i), events, st.Events)
+				if st.HasEvs {
+					want := st.Events
+					if layoutFit {
+						events = slices.DeleteFunc(events, func(e hotty.Event) bool { return e.Kind == hotty.EventFit })
+						want = slices.DeleteFunc(want, func(e vectorEvent) bool { return e.E == hotty.EventFit })
+					}
+					checkEvents(t, fmt.Sprintf("step %d", i), events, want, pointer.named)
 				}
 				switch {
 				case st.Reply == nil:

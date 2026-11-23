@@ -1390,6 +1390,8 @@ type Event struct {
 	// Value is a control's value (change, input), or the value attribute
 	// of what was clicked (click, auxclick).
 	Value string
+	// HasValue distinguishes an empty auxclick value attribute from an absent one.
+	HasValue bool
 	// Checked is a checkbox's or a radio button's state, in a change.
 	Checked *bool
 	// Rev is the control's revision (SPEC §6.4), in a change, an input and
